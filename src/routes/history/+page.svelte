@@ -38,7 +38,7 @@
                 <Card.Description>{matchRecord.betSize} {matchRecord.trumpSuit.toUpperCase()} | {matchRecord.botDifficulty.toUpperCase()}</Card.Description>
             </Card.Header>
             
-            <Card.Content class="flex flex-col sm:w-1/2 w-auto h-full">
+            <Card.Content class="flex flex-col sm:w-1/2 w-3/4 h-full">
                 <ScoreDisplay matchRecord={matchRecord} />
                 <div class="flex pl-4 mt-6">
                     {#each parseHand(matchRecord.player1Hand)  as card, index}

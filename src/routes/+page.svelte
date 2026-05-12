@@ -170,7 +170,7 @@
         </div>
     
         {#if game.PreviousMoves.length !== 0} 
-        <div class="absolute right-1/6 bottom-1/4 flex pl-4">
+        <div class="absolute right-2 bottom-2 sm:right-1/6 sm:bottom-1/4 flex pl-4">
             {#each game.PreviousMoves as move, index}
                 <HandDisplay index={index}>
                     <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
@@ -189,7 +189,7 @@
         {#each hiddenMode ? [game.Players[0]] : game.Players as player}
         <div>
             <div class="flex gap-2">
-                <p><span class="text-{playerIDToColor.get(player.ID)}">Player {player.ID}</span> ({player.Sets} sets) </p>
+                <p class="text-{playerIDToColor.get(player.ID)}">Player {player.ID} ({player.Sets} sets) </p>
                 {#if !hiddenMode && player.Partner !== null}
                 <p>| Partner is Player {player.Partner?.ID}</p>
                 {/if}
