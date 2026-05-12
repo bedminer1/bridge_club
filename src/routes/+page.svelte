@@ -178,7 +178,7 @@
                     {#each player.PlayedCards as card, index}
                      <button 
                         disabled={true}>
-                        <div class="relative ml-[-1rem] z-{index} brightness-95 hover:brightness-125 hover:shadow-amber-300 hover:shadow-xl/15 hover:z-40 hover:-translate-y-1 disabled:opacity-50">
+                        <div class="relative ml-[-1rem] z-{index} transition-transform brightness-95 hover:brightness-125 hover:shadow-amber-300 hover:shadow-xl/15 hover:z-40 hover:-translate-y-1 disabled:opacity-50">
                             <PokerCard card={card} isIllegal={true}/>
                         </div>
                     </button>
@@ -209,7 +209,7 @@
 
         <div class="flex flex-col justify-center gap-2">
             <div class="flex gap-2">
-                <Input bind:value={betSize} class="w-[60px] text-center" type="number" placeholder="1-7"/>
+                <Input bind:value={betSize} class="w-[60px] text-center numberInput" type="number" placeholder="1-7"/>
         
                 <Select.Root type="single" bind:value={bettedSuit}>
                 <Select.Trigger class="w-[70px]">
@@ -258,4 +258,3 @@
         </Dialog.Header>
     </Dialog.Content>
 </Dialog.Root>
-
