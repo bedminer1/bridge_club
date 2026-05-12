@@ -43,6 +43,13 @@
         [3, "Spades"],
     ])
 
+    const suitSortOrder = new Map<string, number>([
+        ['Spades', 0],
+        ['Heart', 1],
+        ['Club', 2],
+        ['Diamond', 3],
+    ])
+
     function initGame(): Game {
         let cards: Card[] = []
         // generate cards
@@ -68,6 +75,16 @@
             hands.push(cards.slice(i * 13, (i + 1) * 13))
         }
 
+        // arrange cards
+        for (const hand of hands) {
+            hand.sort((a, b) => {
+                const suitA = suitSortOrder.get(a.Suit)!
+                const suitB = suitSortOrder.get(b.Suit)!
+                if (suitA !== suitB) return suitA - suitB
+                return a.Value - b.Value
+            })
+        }
+
         let players: Player[] = []
         for (let i = 1; i <= 4; i++) {
             players.push({
@@ -87,6 +104,10 @@
     }
 
     let game = initGame()
+
+    function RaiseBet(betSize: number, suit: string) {
+
+    }
 </script>
 
 <div class="flex gap-2">
