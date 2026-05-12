@@ -2,24 +2,21 @@
     import * as Select from "$lib/components/ui/select/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import { Switch } from "$lib/components/ui/switch/index.js";
-    import { Label } from "$lib/components/ui/label/index.js";
-    import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
-    import * as Popover from "$lib/components/ui/popover/index.js";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as Form from "$lib/components/ui/form/index.js";
 
     import { enhance } from "$app/forms";
-    import { toggleMode, mode } from "mode-watcher"
-    import { Info, Settings, LogIn, LogOut } from "@lucide/svelte"
-    import PokerCard from "$lib/components/PokerCard.svelte";
-    import HandDisplay from "$lib/components/HandDisplay.svelte";
+    import PokerCard from "$lib/components/poker-card.svelte";
+    import HandDisplay from "$lib/components/hand-display.svelte";
     
     import { suitToSymbol } from "$lib/utils"
-    import { initGame } from "$lib/game/init";
+    import { initGame } from "$lib/game/deck";
     import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
-    import { isCardIllegal, playCard } from "$lib/game/main";
+    import { playCard, selectPartner } from "$lib/game/play";
+    import { isCardIllegal } from "$lib/game/legality";
     import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
+    import { headerState } from "$lib/game/header-state.svelte";
 
     let { data } = $props()
     let { username, userID } = $state(data)
@@ -30,10 +27,22 @@
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
     let openSaveDialog: boolean = $state(false)
 
-    function logout() {
+    function onlogout() {
         loggedIn = false
-
     }
+
+    // Sync reactive game state to shared header state
+    $effect(() => { headerState.game = game })
+    $effect(() => { headerState.difficulty = difficulty })
+    $effect(() => { headerState.botSpeed = botSpeed })
+    $effect(() => { headerState.hiddenMode = hiddenMode })
+
+    let isLightMode = $state(false)
+    $effect(() => { headerState.isLightMode = isLightMode })
+
+    // Sync user info to header
+    $effect(() => { headerState.username = username })
+    $effect(() => { headerState.loggedIn = loggedIn })
 
     let userTeam = $derived(game.Team1.some(p => p.ID === 1) ? game.Team1 : game.Team2)
 	let wonMatch = $derived(game.Winner === "Team 1" && userTeam === game.Team1 ||
@@ -46,7 +55,17 @@
     let hiddenMode = $state(true)
     let difficulty = $state("Medium")
     let botSpeed = $state(2)
-    let isLightMode = $state(mode.current === "light")
+
+    const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
+    let remainingDeck = $derived(
+        game.FullDeck
+            .filter(fc => !game.Players[0].Cards.some(pc => pc.Suit === fc.Suit && pc.Value === fc.Value))
+            .sort((a, b) => {
+                const suitDiff = (suitOrder[a.Suit] ?? 0) - (suitOrder[b.Suit] ?? 0)
+                if (suitDiff !== 0) return suitDiff
+                return a.Value - b.Value
+            })
+    )
 
     const playerIDToColor = new Map<number, string>([
         [1, "[var(--red)]"],
@@ -79,85 +98,26 @@
 </script>
 
 
-<div class="flex flex-col gap-10 w-full h-screen  items-center overflow-auto">
-    <div class="flex justify-end w-full p-3 gap-4">
-        <Popover.Root>
-            <Popover.Trigger><Info /></Popover.Trigger>
-            <Popover.Content class="w-auto mr-2 mt-1">
-                <div>
-                    <p>Trump Suit {game.Trump}</p>
-                    <p>Bet Size {game.BetSize}</p>
-                     {#if !game.IsBettingPhase}
-                     <Separator />
-                    <p>Bet Winner Player {game.BetWinner.ID}</p>
-                    <p>Partner Card {game.PartnerCard.Rank} {game.PartnerCard.Suit}</p>
-                    <Separator />
-                    <p>Team 1 needs {6 + game.BetSize}</p>
-                    <p>Team 2 needs {8 - game.BetSize}</p>
-                    {/if}
-                </div>
-            </Popover.Content>
-        </Popover.Root>
-        <Popover.Root>
-            <Popover.Trigger><Settings /></Popover.Trigger>
-            <Popover.Content class="border-2 w-auto mr-1 mt-1">
-                <div class="flex flex-col gap-4">
-                    <div class="flex justify-between gap-3">
-                        <Label for="difficulty">Difficulty</Label>
-                        <Select.Root type="single" bind:value={difficulty} disabled={!game.IsBettingPhase}>
-                            <Select.Trigger class="w-[100px]">
-                                {difficulty}
-                            </Select.Trigger>
-                            <Select.Content>
-                                <Select.Item value="Easy">Easy</Select.Item>
-                                <Select.Item value="Medium">Medium</Select.Item>
-                                <Select.Item value="Hard" disabled={true}>Hard</Select.Item>
-                            </Select.Content>
-                        </Select.Root>
-                    </div>
-                    <div class="flex justify-between gap-3">
-                        <Label for="bot-speed">Bot Time per Move</Label>
-                        <Input type="number" bind:value={botSpeed} class="w-[100px]"/>
-                    </div>
-                    <div class="flex justify-between gap-3">
-                        <Label for="hidden-mode">Hidden Mode </Label>
-                        <div class="w-25">
-                            <Switch id="hidden-mode" bind:checked={hiddenMode}/>
-                        </div>
-                    </div>
-                    <div class="flex justify-between gap-3">
-                        <Label for="hidden-mode">Bots </Label>
-                        <div class="w-25">
-                            <Switch id="bots" bind:checked={game.TurnOnBots}/>
-                        </div>
-                    </div>
+<div class="flex flex-col gap-6 w-full min-h-screen items-center px-4 pt-20 pb-8">
 
-                    <Separator />
-                    <div class="flex justify-between gap-3">
-                        <Label for="hidden-mode">Light Mode </Label>
-                        <div class="w-25">
-                            <Switch id="bots" bind:checked={isLightMode} onclick={toggleMode}/>
-                        </div>
-                    </div>
-                </div>
-            </Popover.Content>
-        </Popover.Root>
-
-        {#if !loggedIn}
-        <a href="/login"><LogIn /></a>
-        {:else}
-        <form action="?/logout" method="POST" use:enhance={logout}>
-            <input type="hidden" name="userID" bind:value={userID}>
-            <button>
-                <LogOut/>
-            </button>
-        </form>
-        {/if}
-    </div>
-    <div class="text-3xl">
+    <div class="text-2xl text-muted-foreground">
         <p>Player {game.WhoseTurn}'s turn</p>
     </div>
 
+{#if game.IsPartnerSelectionPhase}
+    <div class="flex flex-col gap-4 items-center">
+        <p class="text-xl">Select a partner card</p>
+        <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
+        <div class="flex flex-wrap gap-1 justify-center max-w-3xl">
+            {#each remainingDeck as card}
+                <button onclick={() => selectPartner(game, card)}
+                    class="transition-transform brightness-105 dark:brightness-95 hover:brightness-130 dark:hover:brightness-120 hover:shadow-accent hover:shadow-xl/30 hover:-translate-y-1 active:brightness-125 active:shadow-accent rounded-sm">
+                    <PokerCard card={card} isIllegal={false} minify={true} />
+                </button>
+            {/each}
+        </div>
+    </div>
+{:else}
     {#if game.IsBettingPhase}
     <div>
         {#each game.Moves as move}
@@ -194,6 +154,26 @@
 
 
     {#if !game.IsBettingPhase}
+    <!-- Game info cards -->
+    <div class="flex gap-4 text-sm">
+        <div class="rounded-md border border-border bg-card px-3 py-1.5">
+            <span class="text-muted-foreground text-xs">Trump</span>
+            <p class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</p>
+        </div>
+        <div class="rounded-md border border-border bg-card px-3 py-1.5">
+            <span class="text-muted-foreground text-xs">Bet</span>
+            <p class="text-accent font-medium">{game.BetSize}</p>
+        </div>
+        <div class="rounded-md border border-border bg-card px-3 py-1.5">
+            <span class="text-muted-foreground text-xs">Team 1</span>
+            <p class="text-foreground font-medium">{6 + game.BetSize} sets</p>
+        </div>
+        <div class="rounded-md border border-border bg-card px-3 py-1.5">
+            <span class="text-muted-foreground text-xs">Team 2</span>
+            <p class="text-foreground font-medium">{8 - game.BetSize} sets</p>
+        </div>
+    </div>
+
     <!-- MAIN PHASE -->
     <div class="flex flex-col gap-10">
         {#each hiddenMode ? [game.Players[0]] : game.Players as player}
@@ -288,6 +268,7 @@
             </div>
         </div>
     {/if}
+{/if}
 </div>
 
 <Dialog.Root onOpenChange={()=>openSaveDialog = true} open={openSaveDialog}>

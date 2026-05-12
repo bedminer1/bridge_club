@@ -38,6 +38,7 @@ export async function load({ cookies }) {
     
     return {
         matchRecords : matchRecords.reverse(),
-        message: "success"
+        message: "success",
+        username: user.username
     }
 }

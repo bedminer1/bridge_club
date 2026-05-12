@@ -1,8 +1,8 @@
 <script lang="ts">
     import * as Card from "$lib/components/ui/card/index.js"
     import ScoreDisplay from "../ScoreDisplay.svelte";
-    import PokerCard from "$lib/components/PokerCard.svelte";
-    import HandDisplay from "$lib/components/HandDisplay.svelte";
+    import PokerCard from "$lib/components/poker-card.svelte";
+    import HandDisplay from "$lib/components/hand-display.svelte";
     import { formatDate } from "$lib/utils";
 
     let { data } = $props()
