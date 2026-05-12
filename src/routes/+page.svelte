@@ -193,7 +193,7 @@
     {#if !game.IsBettingPhase}
     <!-- MAIN PHASE -->
     <div class="flex flex-col gap-10">
-        {#each game.Players as player}
+        {#each hiddenMode ? [game.Players[0]] : game.Players as player}
         <div>
             <div class="flex gap-2">
                 <p>Player {player.ID} ({player.Sets} sets) </p>
@@ -203,7 +203,7 @@
             </div>
             
             <div class="flex h-[100px]">
-                {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
+                {#each player.Cards  as card, index}
                 <button
                     disabled={isCardIllegal(game, player, card)}
                     onclick={()=>playCard(game, card, player)}>
@@ -226,6 +226,20 @@
             </div>
         </div>
         {/each}
+
+        {#if hiddenMode}
+        <div class="flex gap-4">
+            {#each game.Players.slice(1, 4) as player, index}
+                <div class="flex gap-2">
+                <p>Player {player.ID} ({player.Sets} sets) </p>
+                </div>
+
+                {#if index < 2}
+                <Separator orientation="vertical" />
+                {/if}
+            {/each}
+        </div>
+        {/if}
     </div>
 
 
