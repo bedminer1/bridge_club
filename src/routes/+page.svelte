@@ -7,13 +7,14 @@
     // cards
     interface Game {
         Players: Player[]
-        Team1: number[] // winner of bet
-        Team2: number[]
+        Team1: Player[] // winner of bet
+        Team2: Player[]
         Trump: string // trump suit
         BetSize: number
         IsBettingPhase: boolean
         Moves: Move[]
         WhoseTurn: number
+        TrumpPlayed: boolean
     }
 
     interface Card {
@@ -109,13 +110,14 @@
 
         return {
             Players: players,
-            Team1: [0, 1],
-            Team2: [2, 3],
+            Team1: [],
+            Team2: [],
             Trump: "Club",
             BetSize: 1,
             IsBettingPhase: true,
             Moves: [],
-            WhoseTurn: 1
+            WhoseTurn: 1,
+            TrumpPlayed: false
         }
     }
 
@@ -127,7 +129,34 @@
     function raiseBet() {
         game.BetSize = betSize
         game.Trump = bettedSuit
-        game.IsBettingPhase = false // for now
+        game.IsBettingPhase = false // for now, todo: implement passing and turns
+
+        const betWinner = game.Players[game.WhoseTurn-1]
+        const partner = findPartner(betWinner)
+        const opponents = game.Players.filter(p => p !== betWinner && p !== partner)
+        game.Team1 = [betWinner, partner]
+        game.Team2 = opponents
+    }
+
+    // defaults to finding person holding highest value 
+    // trump suit card the betWinner doesn't have
+    function findPartner(betWinner: Player) {
+        let highestCard: Card | null = null
+        let partner
+        
+        for (const player of game.Players) {
+            if (player === betWinner) continue
+            for (const card of player.Cards) {
+                if (card.Suit === game.Trump) {
+                    if (!highestCard || card.Value > highestCard.Value) {
+                        highestCard = card
+                        partner = player
+                    }
+                }
+            }
+        }
+
+        return partner!
     }
 
     function playCard(card: Card, playerID: number) {
@@ -156,36 +185,38 @@
         game.WhoseTurn = game.WhoseTurn === 4 ? 1 : game.WhoseTurn + 1 
 
         // check for end of stack
-        if (game.Moves.length === 4) {
-            // scan for highest value card
-            let stackSuit = game.Moves[0].CardPlayed.Suit
-            game.Moves.sort((a,b) => {
-                const aSuit = a.CardPlayed.Suit
-                const bSuit = b.CardPlayed.Suit
-                const aValue = a.CardPlayed.Value
-                const bValue = b.CardPlayed.Value
+        if (game.Moves.length !== 4) { return }
 
-                const aIsTrump = aSuit === game.Trump
-                const bIsTrump = bSuit === game.Trump
+        // scan for highest value card
+        let stackSuit = game.Moves[0].CardPlayed.Suit
+        game.Moves.sort((a,b) => {
+            const aSuit = a.CardPlayed.Suit
+            const bSuit = b.CardPlayed.Suit
+            const aValue = a.CardPlayed.Value
+            const bValue = b.CardPlayed.Value
 
-                if (aIsTrump && !bIsTrump) return -1
-                if (!aIsTrump && bIsTrump) return 1 // swap a and b
+            const aIsTrump = aSuit === game.Trump
+            const bIsTrump = bSuit === game.Trump
 
-                const aIsStack = aSuit === stackSuit
-                const bIsStack = bSuit === stackSuit
-                if (aIsStack && !bIsStack) return -1
-                if (!aIsStack && bIsStack) return 1
+            if (aIsTrump && !bIsTrump) return -1
+            if (!aIsTrump && bIsTrump) return 1 // swap a and b
 
-                if (aSuit === bSuit) return bValue - aValue
-                return 0
-            })
+            const aIsStack = aSuit === stackSuit
+            const bIsStack = bSuit === stackSuit
+            if (aIsStack && !bIsStack) return -1
+            if (!aIsStack && bIsStack) return 1
 
-            let winnerID = game.Moves[0].PlayerID
-            let winner = game.Players.find(player => player.ID = winnerID)!
-            winner.Sets++
-            game.WhoseTurn = winner.ID
-            game.Moves = []
-        }
+            if (aSuit === bSuit) return bValue - aValue
+            return 0
+        })
+
+        let winnerID = game.Moves[0].PlayerID
+        let winner = game.Players[winnerID-1]
+        winner.Sets++
+        game.WhoseTurn = winner.ID
+        game.Moves = []
+
+        // check for win
     }
 </script>
 
@@ -193,6 +224,14 @@
     <div>
         <p>Trump Suit: {game.Trump}</p>
         <p>Bet Size: {game.BetSize}</p>
+        <p>Who's Turn: Player {game.WhoseTurn}</p>
+    </div>
+
+    <div>
+        {#if !game.IsBettingPhase}
+        <p>Team 1: {game.Team1[0].ID}, {game.Team1[1].ID}</p>
+        <p>Team 2: {game.Team2[0].ID}, {game.Team2[1].ID}</p>
+        {/if}
     </div>
     <div>
         {#each game.Moves as move}
@@ -203,6 +242,7 @@
         {#each game.Players as player}
         <div>
             <p>P{player.ID}:</p>
+            <p>Sets: {player.Sets}</p>
             <div class="flex flex-col gap-2">
                 {#each player.Cards as card}
                 <Button onclick={()=>playCard(card, player.ID)}>
