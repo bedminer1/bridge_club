@@ -6,11 +6,20 @@
     import { formatDate } from "$lib/utils";
 
     let { data } = $props()
-    let { matchRecords } = $state(data)
+    let { matchRecords, message } = $state(data)
 </script>
+
+{#if message !== "success"}
+<p class="pt-12 pl-4 text-xl w-full text-center h-screen flex justify-center items-center underline italic font-light">
+    <a href="/login">
+        {message}
+    </a>
+</p>
+{/if}
 
 <div class="flex flex-col w-full h-screen items-center pt-10">
     <div class="w-full p-4 flex flex-col gap-4 justify-center items-center">
+        {#if matchRecords.length > 0}
         {#each matchRecords as matchRecord}
         <a href="/history/{matchRecord.id}" class="w-full">
             <Card.Root class="w-full rounded-none flex-row gap-1 h-auto pb-3 pt-2">
@@ -38,5 +47,8 @@
             </Card.Root>
         </a>
         {/each}
+        {:else}
+        <p>No records yet..</p>
+        {/if}
     </div>
 </div>

@@ -5,10 +5,12 @@ import { eq } from "drizzle-orm"
 
 export async function load({ cookies }) {
     const token = cookies.get("session")
+    const message = ""
     if (token === undefined) {
             console.log("error: Cookie not found")
             return {
-                matchRecords: []
+                matchRecords: [],
+                message: "Log in to view stats"
             }
         }
         
@@ -16,13 +18,15 @@ export async function load({ cookies }) {
     if (!session) {
         console.log("Session invalid")
         return {
-            matchRecords: []
+            matchRecords: [],
+            message: "Log in to view stats"
         } 
     }
     if (!user) {
         console.log("User not found")
         return {
-            matchRecords: []
+            matchRecords: [],
+            message: "User not found"
         }
     }
 
@@ -31,7 +35,9 @@ export async function load({ cookies }) {
         .from(matches)
         .where(eq(matches.userID, user.id))
     
+    
     return {
-        matchRecords : matchRecords.reverse()
+        matchRecords : matchRecords.reverse(),
+        message: "success"
     }
 }

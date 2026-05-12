@@ -33,7 +33,7 @@ export const actions = {
             .where(eq(users.username, username))
 
         if (existingUsers.length > 0) {
-            form.errors.username = ["Username already used"]
+            form.errors.username = ["Already exists :/"]
             console.log(form)
             return fail(400, {
                 form
