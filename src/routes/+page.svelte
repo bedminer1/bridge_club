@@ -14,19 +14,32 @@
     let bettedSuit: string = $state("Club")
     let desiredCard: Card | undefined = $state()
 
+    function isCardIllegal(game: Game, player: Player, card: Card): boolean {
+        if (game.WhoseTurn !== player.ID) {
+            return true
+        }
+
+        if (game.TurnSuit !== "" && game.TurnSuit !== card.Suit) {
+            const hasTurnSuit = player.Cards.some(c => c.Suit === game.TurnSuit)
+            if (hasTurnSuit) {
+                return true // Player must follow suit if possible
+            } else {
+                return false
+            }
+        }
+         if (!game.TrumpPlayed && card.Suit === game.Trump) {
+            return true
+        }
+
+        return false
+    }
+
     function playCard(card: Card, playerID: number) {
-        if (game.IsBettingPhase) {
-            console.log("Can't bet during betting phase")
-            return
-        }
-
-        if (game.WhoseTurn !== playerID) {
-            console.log("Can't play when not your turn")
-            return
-        }
-
         if (game.Moves.length === 0) {
             game.TurnSuit = card.Suit
+        }
+        if (card.Suit === game.Trump) {
+            game.TrumpPlayed = true
         }
 
         game.Moves.push({
@@ -106,9 +119,7 @@
             <div class="flex flex-col gap-2">
                 {#each player.Cards as card}
                 <Button 
-                    disabled={game.WhoseTurn !== player.ID 
-                    || (game.TurnSuit !== "" && game.TurnSuit !== card.Suit)
-                    || (!game.TrumpPlayed && card.Suit === game.Trump)}
+                    disabled={isCardIllegal(game, player, card)}
                     onclick={()=>playCard(card, player.ID)}>
                     {card.Rank} {card.Suit}
                 </Button>
