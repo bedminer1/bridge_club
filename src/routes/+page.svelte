@@ -23,7 +23,7 @@
     let { data } = $props()
     let { username, userID } = $state(data)
 
-    let game = $state(initGame())
+    let game = $state(initGame(username))
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -189,7 +189,7 @@
         {#each hiddenMode ? [game.Players[0]] : game.Players as player}
         <div>
             <div class="flex gap-2">
-                <p class="text-{playerIDToColor.get(player.ID)}">Player {player.ID} ({player.Sets} sets) </p>
+                <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
                 {#if !hiddenMode && player.Partner !== null}
                 <p>| Partner is Player {player.Partner?.ID}</p>
                 {/if}
@@ -241,7 +241,7 @@
         <div class="flex flex-col gap-10">
             {#each hiddenMode ? [game.Players[0]] : game.Players as player}
             <div class="flex flex-col h-[100px]">
-                <p class="mb-2 text-{playerIDToColor.get(player.ID)}">Player {player.ID}</p>
+                <p class="mb-2 text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
                 <div class="flex pl-4">
                     {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
                         <HandDisplay index={index}>

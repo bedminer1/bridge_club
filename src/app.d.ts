@@ -42,6 +42,9 @@ interface Player {
 	PlayedCards: Card[]
 	Partner: Player | null
 	Sets: number
+	IsBot: boolean
+	Username: string
+	ShortUsername: string
 }
 
 interface Move {

@@ -10,7 +10,8 @@ export async function load({ cookies }) {
     if (token === undefined) {
         console.log("error: Cookie not found")
         return {
-            userID: 0
+            userID: 0,
+            username: ""
         }
     }
     
@@ -19,13 +20,15 @@ export async function load({ cookies }) {
     if (!session) {
         console.log("Session invalid")
         return {
-            userID: 0
+            userID: 0,
+            username: ""
         } 
     }
     if (!user) {
         console.log("User not found")
         return {
-            userID: 0
+            userID: 0,
+            username: ""
         }
     }
 

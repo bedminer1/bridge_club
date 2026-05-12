@@ -1,4 +1,4 @@
-export function initGame(): Game {
+export function initGame(username: string): Game {
     let cards: Card[] = []
     // generate cards
     for (let i = 0; i < 4; i++) { // suits
@@ -41,7 +41,10 @@ export function initGame(): Game {
             Cards: hands[i-1],
             PlayedCards: [],
             Partner: null,
-            Sets: 0
+            Sets: 0,
+            IsBot: i === 1,
+            Username: i === 1 ? username : "Player " + i,
+            ShortUsername: i === 1 ? username[0] : "P" + i
         })
     }
 
