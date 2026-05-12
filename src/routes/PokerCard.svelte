@@ -26,3 +26,7 @@
     <p>{card.Rank} {symbol}</p>
   </Card.Content>
 </Card.Root>
+
+<!-- for safelist -->
+<span class="text-red-500"></span>
+<span class="text-black"></span>
