@@ -1,21 +1,8 @@
 <script lang="ts">
     import * as Card from "$lib/components/ui/card/index.js";
-
+    import { suitToColor, suitToSymbol } from "$lib/utils";
     let { card, isIllegal }: { card: Card, isIllegal: boolean } = $props()
 
-    const suitToSymbol = new Map<string, string>([
-         ["Club", "♣"],
-        ["Diamond", "♦"],
-        ["Heart", "♥"],
-        ["Spades", "♠"],
-    ])
-
-    const suitToColor = new Map<string, string>([
-        ["Club", "black"],
-        ["Diamond", "red-500"],
-        ["Heart", "red-500"],
-        ["Spades", "black"],
-    ])
 
     const symbol = $derived(suitToSymbol.get(card.Suit))
     const color = $derived(suitToColor.get(card.Suit))

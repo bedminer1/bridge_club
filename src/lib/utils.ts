@@ -11,3 +11,17 @@ export type WithoutChild<T> = T extends { child?: any } ? Omit<T, "child"> : T;
 export type WithoutChildren<T> = T extends { children?: any } ? Omit<T, "children"> : T;
 export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>;
 export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & { ref?: U | null };
+
+export const suitToSymbol = new Map<string, string>([
+		["Club", "♣"],
+	["Diamond", "♦"],
+	["Heart", "♥"],
+	["Spades", "♠"],
+])
+
+export const suitToColor = new Map<string, string>([
+	["Club", "black"],
+	["Diamond", "red-500"],
+	["Heart", "red-500"],
+	["Spades", "black"],
+])

@@ -10,6 +10,7 @@
 
     import { Info, Settings } from "@lucide/svelte"
     import PokerCard from "./PokerCard.svelte";
+    import { suitToSymbol } from "$lib/utils"
 
     import { initGame } from "$lib/game/init";
     import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
@@ -49,11 +50,13 @@
             <Popover.Trigger><Info /></Popover.Trigger>
             <Popover.Content class="w-auto mr-2 mt-1">
                 <div>
-                    <p>The trump suit is {game.Trump}</p>
-                    <p>The bet size is {game.BetSize}</p>
+                    <p>Trump Suit {game.Trump}</p>
+                    <p>Bet Size {game.BetSize}</p>
                      {#if !game.IsBettingPhase}
-                    <p>Player {game.BetWinner.ID} won the betting phase</p>
-                    <p>{game.PartnerCard.Rank} {game.PartnerCard.Suit} has been selected as the partner</p>
+                     <Separator />
+                    <p>Bet Winner Player {game.BetWinner.ID}</p>
+                    <p>Partner Card {game.PartnerCard.Rank} {game.PartnerCard.Suit}</p>
+                    <Separator />
                     <p>Team 1 needs {6 + game.BetSize}</p>
                     <p>Team 2 needs {8 - game.BetSize}</p>
                     {/if}
@@ -109,6 +112,7 @@
     {/if}
 
     {#if !game.IsBettingPhase}
+    <!-- MAIN PHASE -->
     <div class="flex flex-col gap-10">
         {#each game.Players as player}
         <div>
@@ -144,7 +148,10 @@
         </div>
         {/each}
     </div>
-    {:else}
+
+
+    {:else} 
+    <!-- BETTING PHASE -->
         <div class="flex flex-col gap-10">
             {#each hiddenMode ? [game.Players[0]] : game.Players as player}
             <div class="flex flex-col h-[100px]">
@@ -160,13 +167,13 @@
             {/each}
         </div>
 
-        <div class="flex flex-col justify-center items-center gap-2">
+        <div class="flex flex-col justify-center gap-2">
             <div class="flex gap-2">
-                <Input bind:value={betSize} type="number" placeholder="1 to 7"/>
+                <Input bind:value={betSize} class="w-[60px] text-center" type="numeric" placeholder="1-7"/>
         
                 <Select.Root type="single" bind:value={bettedSuit}>
-                <Select.Trigger class="w-[180px]">
-                    {bettedSuit}
+                <Select.Trigger class="w-[70px]">
+                    <p class="text-xl">{suitToSymbol.get(bettedSuit)}</p>
                 </Select.Trigger>
                 <Select.Content>
                     <Select.Item value="Club">Club</Select.Item>
@@ -179,6 +186,7 @@
             <div class="flex gap-2">
                 <Button onclick={()=>passBet(game)}>Pass</Button>
                 <Button 
+                variant="destructive"
                 onclick={()=>raiseBet(game, betSize, bettedSuit)}
                 disabled={!isLegalRaise(game, betSize, bettedSuit)}>Raise</Button>
             </div>
