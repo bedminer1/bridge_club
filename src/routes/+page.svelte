@@ -14,6 +14,12 @@
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
     let desiredCard: Card | undefined = $state()
+
+    $effect(() => {
+        setInterval(() => {
+            if (game.WhoseTurn !== 1) autoPlayCard(game)
+        }, 5000);
+    })
 </script>
 
 <div class="flex flex-col gap-10 w-full h-screen justify-center items-center">

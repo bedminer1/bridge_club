@@ -28,10 +28,11 @@ export function autoPlayCard(game: Game) {
     }, 1000);
     const player = game.Players[game.WhoseTurn-1]
     const moves = game.Moves
+    const playableCards = player.Cards.filter(card => !isCardIllegal(game, player, card))
 
     // First to play: play strongest card
     if (moves.length === 0) {
-        let strongestCard: Card = player.Cards[0]
+        let strongestCard: Card = playableCards[0]
 
         for (let card of player.Cards) {
             if (!isCardIllegal(game, player, card) && doesCard1Beat(game, card, strongestCard)) {
@@ -42,8 +43,6 @@ export function autoPlayCard(game: Game) {
         return
     } 
 
-    const turnSuit = game.TurnSuit
-    const playableCards = player.Cards.filter(card => !isCardIllegal(game, player, card))
     let currentWinningMove: Move = moves[0]
     for (let move of moves.slice(1)) {
         if (doesCard1Beat(game, move.CardPlayed, currentWinningMove.CardPlayed)) {
