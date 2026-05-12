@@ -35,7 +35,9 @@
         <Card.Root class="w-full rounded-none flex-row gap-1 h-auto pb-3 pt-2">
             <Card.Header class="w-1/5 flex flex-col items-start pl-2 sm:pl-4 sm:w-1/4">
                 <Card.Title class="text-2xl {matchRecord.wonMatch ? "text-blue-300" : "text-red-400"}">{matchRecord.wonMatch ? "Victory" : "Defeat"}</Card.Title>
-                <Card.Description> <span>{matchRecord.betSize} {matchRecord.trumpSuit.toUpperCase()} |</span> {matchRecord.botDifficulty.toUpperCase()}</Card.Description>
+                <Card.Description> 
+                    <span class="text-nowrap text-xs sm:text-md">{matchRecord.betSize} {matchRecord.trumpSuit.toUpperCase()} </span>
+                    <span class="text-nowrap text-xs sm:text-md">| {matchRecord.botDifficulty.toUpperCase()}</span></Card.Description>
             </Card.Header>
             
             <Card.Content class="flex flex-col w-full sm:w-3/4 h-full sm:text-md text-xs pr-0">
