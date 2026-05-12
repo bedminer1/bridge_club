@@ -32,11 +32,13 @@
     let bettedSuit: string = $state("Club")
     let hiddenMode = $state(true)
     let difficulty = $state("Medium")
-    let botSpeed = $state(4)
+    let botSpeedInput = $state(3)
+    let botSpeed = $derived(botSpeedInput * 1000)
 
     $effect(() => {
-        if (game)
-        setInterval(() => {
+        if (!game) return
+
+        const interval = setInterval(() => {
             if (game.WhoseTurn !== 1 && game.Winner === "") {
                 if (game.IsBettingPhase) {
                     autoBet(game)
@@ -48,7 +50,9 @@
                     }
                 }
             }
-        }, botSpeed * 1000);
+        }, botSpeed);
+
+        return () => clearInterval(interval)
     })
 
    
@@ -123,12 +127,14 @@
                         </Select.Root>
                     </div>
                     <div class="flex justify-between gap-3">
-                        <Label for="hidden-mode">Hidden Mode </Label>
-                        <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+                        <Label for="bot-speed">Bot Time per Move</Label>
+                        <Input type="number" disabled={!game.IsBettingPhase} class="w-[100px]"/>
                     </div>
                     <div class="flex justify-between gap-3">
-                        <Label for="bot-speed">Bot Time per Move</Label>
-                        <Input type="number" class="w-[100px]" bind:value={botSpeed}/>
+                        <Label for="hidden-mode">Hidden Mode </Label>
+                        <div class="w-25">
+                            <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+                        </div>
                     </div>
                 </div>
             </Popover.Content>
