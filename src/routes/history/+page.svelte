@@ -32,13 +32,13 @@
 <div class="flex flex-col w-full h-screen items-center pt-7">
     <div class="w-full p-4 flex flex-col gap-4 justify-center items-center">
         {#each matchRecords as matchRecord}
-        <Card.Root class="w-full rounded-none flex-row h-auto pb-3 pt-2">
-            <Card.Header class="w-1/4">
+        <Card.Root class="w-full rounded-none flex-row gap-1 h-auto pb-3 pt-2">
+            <Card.Header class="w-1/5 flex flex-col items-start pl-2 sm:pl-4 sm:w-1/4">
                 <Card.Title class="text-2xl {matchRecord.wonMatch ? "text-blue-300" : "text-red-400"}">{matchRecord.wonMatch ? "Victory" : "Defeat"}</Card.Title>
-                <Card.Description>{matchRecord.betSize} {matchRecord.trumpSuit.toUpperCase()} | {matchRecord.botDifficulty.toUpperCase()}</Card.Description>
+                <Card.Description> <span>{matchRecord.betSize} {matchRecord.trumpSuit.toUpperCase()} |</span> {matchRecord.botDifficulty.toUpperCase()}</Card.Description>
             </Card.Header>
             
-            <Card.Content class="flex flex-col sm:w-1/2 w-3/4 h-full">
+            <Card.Content class="flex flex-col w-full sm:w-3/4 h-full sm:text-md text-xs pr-0">
                 <ScoreDisplay matchRecord={matchRecord} />
                 <div class="flex pl-4 mt-6">
                     {#each parseHand(matchRecord.player1Hand)  as card, index}
