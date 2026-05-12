@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
 @import "tw-animate-css";
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
 
 @custom-variant dark (&:is(.dark *));
+
+@config "../tailwind.config.js";
 
 :root {
   --radius: 0.625rem;

@@ -22,7 +22,7 @@
 </script>
 
 <Card.Root class="w-[50px] h-[60px] rounded-sm p-0 {isIllegal ? "bg-zinc-50 cursor-not-allowed brightness-70" : "bg-zinc-50 cursor-grab"}">
-  <Card.Content class={`p-0 text-lg text-black text-${color}`}>
+  <Card.Content class={`p-0 text-lg text-${color}`}>
     <p>{card.Rank} {symbol}</p>
   </Card.Content>
 </Card.Root>
