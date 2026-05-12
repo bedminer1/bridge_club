@@ -59,7 +59,8 @@ export function initGame(): Game {
         CardsPlayed: [],
         TrumpPlayed: false,
         TurnSuit: "",
-        Winner: ""
+        Winner: "",
+        TurnOnBots: true
     }
 }
 

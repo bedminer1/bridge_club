@@ -103,4 +103,5 @@ export function playCard(game: Game, card: Card, player: Player) {
             game.Winner = "Team 2"
         }
     }
+    game.TurnOnBots = false
 }

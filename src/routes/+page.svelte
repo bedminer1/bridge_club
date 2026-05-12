@@ -32,25 +32,22 @@
     let bettedSuit: string = $state("Club")
     let hiddenMode = $state(true)
     let difficulty = $state("Medium")
-    let botSpeedInput = $state(3)
-    let botSpeed = $derived(botSpeedInput * 1000)
+    let botSpeed = $state(3)
 
     $effect(() => {
-        if (!game) return
+        if (!game || botSpeed == undefined || game.WhoseTurn === 1 || !game.TurnOnBots) return
 
         const interval = setInterval(() => {
-            if (game.WhoseTurn !== 1 && game.Winner === "") {
-                if (game.IsBettingPhase) {
-                    autoBet(game)
-                } else {
-                    if (difficulty === "Easy") {
-                        autoPlayCard(game)
-                    } else if (difficulty === "Medium") {
-                        autoPlayCardV2(game)
-                    }
+            if (game.IsBettingPhase) {
+                autoBet(game)
+            } else {
+                if (difficulty === "Easy") {
+                    autoPlayCard(game)
+                } else if (difficulty === "Medium") {
+                    autoPlayCardV2(game)
                 }
             }
-        }, botSpeed);
+        }, botSpeed * 1000);
 
         return () => clearInterval(interval)
     })
@@ -128,12 +125,18 @@
                     </div>
                     <div class="flex justify-between gap-3">
                         <Label for="bot-speed">Bot Time per Move</Label>
-                        <Input type="number" disabled={!game.IsBettingPhase} class="w-[100px]"/>
+                        <Input type="number" bind:value={botSpeed} class="w-[100px]"/>
                     </div>
                     <div class="flex justify-between gap-3">
                         <Label for="hidden-mode">Hidden Mode </Label>
                         <div class="w-25">
                             <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+                        </div>
+                    </div>
+                    <div class="flex justify-between gap-3">
+                        <Label for="hidden-mode">Bots </Label>
+                        <div class="w-25">
+                            <Switch id="bots" bind:checked={game.TurnOnBots}/>
                         </div>
                     </div>
                 </div>

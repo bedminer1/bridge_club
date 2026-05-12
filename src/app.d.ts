@@ -25,6 +25,7 @@ interface Game {
 	CardsPlayed: Card[]
 	TurnSuit: string
 	Winner: string
+	TurnOnBots: boolean
 }
 
 interface Card {
