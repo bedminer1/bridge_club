@@ -57,6 +57,7 @@ export function playCard(game: Game, card: Card, player: Player) {
         opponents[0].Partner = opponents[1]
         opponents[1].Partner = opponents[0]
     }
+    if (player.Cards.length === 0) return
 
     game.Moves.push({
         PlayerID: player.ID,
