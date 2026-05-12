@@ -13,6 +13,7 @@ declare global {
 interface Game {
 	Players: Player[]
 	Team1: Player[] // winner of bet
+	BetWinner: Player
 	PartnerCard: Card
 	Team2: Player[]
 	Trump: string // trump suit

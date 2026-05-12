@@ -47,7 +47,14 @@ export function autoBet(game: Game) {
         }
     }
 
-    if (betSize > game.BetSize) {
+    const suitPriority = new Map<string, number>([
+        ["Club", 0],
+        ["Diamond", 1],
+        ["Heart", 2],
+        ["Spades", 3]
+    ])
+
+    if (betSize > game.BetSize || betSize === game.BetSize && suitPriority.get(bettedSuit)! > suitPriority.get(game.Trump)!) {
         raiseBet(game, betSize, bettedSuit)
     } else {
         passBet(game) // pass

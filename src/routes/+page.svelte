@@ -44,16 +44,21 @@
         </Dialog.Header>
     </Dialog.Content>
     </Dialog.Root>
+    <div class="flex justify-end w-full">
+        <div class="flex items-center space-x-2">
+            <Label for="hidden-mode">Hidden Mode</Label>
+            <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+        </div>
+    </div>
     <div class="grid grid-cols-2 gap-2">
         <p>Trump Suit: {game.Trump}</p>
         <p>Bet Size: {game.BetSize}</p>
         <p>Who's Turn: Player {game.WhoseTurn}</p>
         <p>Current Suit: {game.TurnSuit}</p>
+        {#if !game.IsBettingPhase}
+        <p>Bet Winner: Player {game.BetWinner.ID}</p>
         <p>Partner Card: {game.PartnerCard.Rank} {game.PartnerCard.Suit}</p>
-        <div class="flex items-center space-x-2">
-            <Label for="hidden-mode">Hidden Mode</Label>
-            <Switch id="hidden-mode" bind:checked={hiddenMode}/>
-        </div>
+        {/if}
     </div>
 
     {#if game.IsBettingPhase}
@@ -62,7 +67,7 @@
         {#if move.CardPlayed.Value === 0}
         <p>Player {move.PlayerID} passed</p>
         {:else}
-        <p>Player {move.PlayerID} raised {move.CardPlayed.Rank} {move.CardPlayed.Suit}</p>
+        <p>Player {move.PlayerID} raised {move.CardPlayed.Value} {move.CardPlayed.Suit}</p>
         {/if}
         {/each}
     </div>

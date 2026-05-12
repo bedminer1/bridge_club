@@ -32,6 +32,7 @@ export function passBet(game: Game) {
     if (game.Moves.length === 4) {
         game.IsBettingPhase = false
         const betWinner = game.Players[game.Moves[0].PlayerID-1]
+        game.BetWinner = betWinner
         const partner = autoFindPartner(game, betWinner) // option for manual
         const opponents = game.Players.filter(p => p !== betWinner && p !== partner)
         
