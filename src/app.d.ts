@@ -31,6 +31,7 @@ interface Card {
 	Rank: string // 2 to Ace
 	Value: number // 2-14
 	Suit: string
+	WonSet: boolean
 }
 
 interface Player {

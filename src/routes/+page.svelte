@@ -28,7 +28,7 @@
     $effect(() => {
         if (game)
         setInterval(() => {
-            if (game.WhoseTurn !== 1) {
+            if (game.WhoseTurn !== 1 && game.Winner === "") {
                 if (game.IsBettingPhase) {
                     autoBet(game)
                 } else {

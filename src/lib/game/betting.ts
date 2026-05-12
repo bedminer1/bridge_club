@@ -20,7 +20,8 @@ export function raiseBet(game: Game, betSize: number, bettedSuit: string) {
         CardPlayed: {
             Rank: "",
             Value: betSize,
-            Suit: bettedSuit
+            Suit: bettedSuit,
+            WonSet: false
         },
         PlayerID: player.ID
     }]
@@ -35,6 +36,7 @@ export function passBet(game: Game) {
             Rank: "",
             Value: 0,
             Suit: "",
+            WonSet: false
         },
         PlayerID: player.ID
     })

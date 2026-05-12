@@ -6,7 +6,8 @@ export function initGame(): Game {
             cards.push({
                 Rank: valueToRank.get(val)!,
                 Value: val,
-                Suit: suitEnum.get(i)!
+                Suit: suitEnum.get(i)!,
+                WonSet: false
             })
         }
     }

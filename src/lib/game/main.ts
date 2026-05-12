@@ -78,6 +78,7 @@ export function playCard(game: Game, card: Card, player: Player) {
     // scan for highest value card
     const cards = game.Moves.map(move => move.CardPlayed)
     const strongestCard = findStrongestCard(game, cards)
+    strongestCard.WonSet = true
 
     let winnerID = game.Moves.find(move => move.CardPlayed === strongestCard)!.PlayerID
     let winner = game.Players[winnerID-1]
