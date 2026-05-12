@@ -115,7 +115,7 @@
     <!-- Play area table -->
     <div class="flex flex-col gap-4 w-full max-w-3xl">
         <!-- Game info strip -->
-        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground px-1">
+        <div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-xs text-muted-foreground px-1 overflow-x-auto scrollbar-none">
             {#if game.BetSize > 0 || !game.IsBettingPhase}
             <span>Trump <strong class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</strong></span>
             <span>Bet <strong class="text-foreground font-medium">{game.BetSize}</strong></span>
@@ -128,7 +128,7 @@
             {/if}
         </div>
 
-        <div class="rounded-xl border border-border bg-card/50 p-4 sm:p-6">
+    <div class="rounded-xl border border-border bg-card/50 p-4 sm:p-6">
     {#if game.IsBettingPhase}
     <div class="flex flex-col items-center gap-1">
         {#each game.Moves.slice(-3) as move}

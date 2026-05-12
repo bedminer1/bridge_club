@@ -97,6 +97,7 @@
 
     <!-- Right section -->
     <div class="flex items-center gap-3">
+        <div class="hidden sm:block">
         <Popover.Root>
             <Popover.Trigger class="p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors">
                 <Bell class="w-4 h-4" />
@@ -105,6 +106,7 @@
                 Notifications Cleared
             </Popover.Content>
         </Popover.Root>
+        </div>
 
         <a
             href="/user"
