@@ -33,7 +33,7 @@
     })
 </script>
 
-<div class="flex flex-col gap-10 w-full h-screen justify-center items-center">
+<div class="flex flex-col gap-10 w-full h-screen justify-center items-center overflow-auto">
     <Dialog.Root open={game.Winner !== ""}>
     <Dialog.Content>
         <Dialog.Header>
