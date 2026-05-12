@@ -19,12 +19,17 @@
     import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
     import { isCardIllegal, playCard } from "$lib/game/main";
     import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
+  import { browser } from "$app/environment";
 
     let game = $state(initGame())
 
     // user info
-    let username: string = $state(localStorage.getItem("username") ?? "")
-    let password: string = $state(localStorage.getItem("password") ?? "")
+    let username: string = $state("")
+    let password: string = $state("")
+    if (browser) {
+        username = localStorage.getItem("username") ?? ""
+        password = localStorage.getItem("password") ?? ""
+    }
     let loggedIn: boolean = $derived(username !== "")
     let openLoginDialog: boolean = $state(false)
     let openSaveDialog: boolean = $state(false)
