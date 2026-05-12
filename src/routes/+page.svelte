@@ -24,8 +24,15 @@
 
     let loggedIn: boolean = $state(false)
     let closeLoginDialog: boolean = $state(false)
+    let userTeam = $derived(game.Team1.some(p => p.ID === 1) ? game.Team1 : game.Team2)
+	let wonMatch = $derived(game.Winner === "Team 1" && userTeam === game.Team1 ||
+	               game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0)
+    let partner = $derived(userTeam.find(p => p.ID !== 1)?.ID ?? 0)
+
+    // user info
     let username: string = $state("")
     let password: string = $state("")
+
 
     // form inputs
     let betSize: number = $state(1)
@@ -131,7 +138,7 @@
                 </div>
                 <div class="flex justify-between gap-4">
                     <Label class="w-[60px] pr-6" for="password">Password</Label>
-                    <Input bind:value={password} />
+                    <Input type="password" bind:value={password} />
                 </div>
                 <div class="flex justify-center">
                     <Form.Button class="w-[80px]">
@@ -266,8 +273,44 @@
             </p>
 
             <form action="" method="POST" class="flex flex-col items-end" use:enhance>
+                <!-- Metadata -->
+	            <input type="hidden" name="date" value={Date.now()}>
+                
+                <!-- User Info -->
+                {#if !loggedIn}
+                <div class="flex flex-col gap-2 w-full">
+                    <div class="flex w-2/3 justify-between gap-4">
+                        <Label class="w-[60px] pr-6" for="username">Username</Label>
+                        <Input class="w-52" name="username" bind:value={username} />
+                    </div>
+                    <div class="flex w-2/3 justify-between gap-4">
+                        <Label class="w-[60px] pr-6" for="password">Password</Label>
+                        <Input class="w-52" name="password" type="password" bind:value={password} />
+                    </div>
+                </div>
+                {:else}
                 <input type="hidden" name="username" bind:value={username}>
                 <input type="hidden" name="password" bind:value={password}>
+                {/if}
+
+                <!-- Betting Info -->
+                <input type="hidden" name="trumpSuit" value={game.Trump}>
+                <input type="hidden" name="betSize" value={game.BetSize}>
+                <input type="hidden" name="betWinner" value={game.BetWinner.ID}>
+
+                <!-- Match Result -->
+                <input type="hidden" name="partner" value={partner}>
+                <input type="hidden" name="wonMatch" value={wonMatch}>
+
+                <!-- Sets Won -->
+                {#each game.Players as player, i}
+                    <input type="hidden" name={"player" + (i + 1) + "Sets"} value={player.Sets}>
+                {/each}
+
+                <!-- Hands (as JSON or comma-separated values) -->
+                 {#each game.Players as player, i}
+                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(player.PlayedCards)}>
+                {/each}
 
                 <Form.Button class="w-[60px]">
                     Save

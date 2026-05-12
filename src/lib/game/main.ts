@@ -57,7 +57,7 @@ export function playCard(game: Game, card: Card, player: Player) {
         opponents[0].Partner = opponents[1]
         opponents[1].Partner = opponents[0]
     }
-    if (player.Cards.length === 0) return
+    if (player.Cards.length === 0 || game.WhoseTurn !== player.ID) return
 
     game.Moves.push({
         PlayerID: player.ID,
@@ -94,14 +94,15 @@ export function playCard(game: Game, card: Card, player: Player) {
         const team1Sets = game.Team1.reduce((sum, player) => sum + player.Sets, 0)
         const team1Target = 6 + game.BetSize
         if (team1Sets === team1Target) {
+            game.TurnOnBots = false
             game.Winner = "Team 1"
         }
     } else {
         const team2Sets = game.Team2.reduce((sum, player) => sum + player.Sets, 0)
         const team2Target = 8 - game.BetSize
         if (team2Sets === team2Target) {
+            game.TurnOnBots = false
             game.Winner = "Team 2"
         }
     }
-    game.TurnOnBots = false
 }
