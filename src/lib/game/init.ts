@@ -55,6 +55,7 @@ export function initGame(): Game {
         BetSize: 0,
         IsBettingPhase: true,
         Moves: [],
+        PreviousMoves: [],
         WhoseTurn: 1,
         CardsPlayed: [],
         TrumpPlayed: false,

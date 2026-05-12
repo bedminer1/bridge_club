@@ -2,7 +2,7 @@
     import * as Card from "$lib/components/ui/card/index.js";
     import { suitToColor, suitToSymbol } from "$lib/utils";
     import { Crown } from "@lucide/svelte"
-    let { card, isIllegal, minify }: { card: Card, isIllegal: boolean, minify: boolean } = $props()
+    let { card, isIllegal, minify }: { card: Card, isIllegal: boolean | undefined, minify: boolean | undefined } = $props()
 
 
     const symbol = $derived(suitToSymbol.get(card.Suit))
@@ -23,3 +23,7 @@
 <!-- for safelist -->
 <span class="text-red-500"></span>
 <span class="text-black"></span>
+<span class="text-red-300"></span>
+<span class="text-blue-300"></span>
+<span class="text-amber-200"></span>
+<span class="text-lime-200"></span>

@@ -20,6 +20,7 @@ interface Game {
 	BetSize: number
 	IsBettingPhase: boolean
 	Moves: Move[]
+	PreviousMoves: Move[]
 	WhoseTurn: number
 	TrumpPlayed: boolean
 	CardsPlayed: Card[]

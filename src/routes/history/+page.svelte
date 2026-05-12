@@ -49,7 +49,7 @@
                 </div>
             </Card.Content>
 
-             <Card.Footer class="hidden sm:flex">
+             <Card.Footer class="hidden sm:flex w-1/5">
                 <p>{formatDate(matchRecord.date)}</p>
             </Card.Footer>
         </Card.Root>

@@ -39,14 +39,19 @@
 	               game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0)
     let partner = $derived(userTeam.find(p => p.ID !== 1)?.ID ?? 0)
 
-
-
     // form inputs
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
     let hiddenMode = $state(true)
     let difficulty = $state("Medium")
-    let botSpeed = $state(3)
+    let botSpeed = $state(2)
+
+    const playerIDToColor = new Map<number, string>([
+        [1, "red-300"],
+        [2, "blue-300"],
+        [3, "amber-200"],
+        [4, "lime-200"],
+    ])
 
     $effect(() => {
         if (game.Winner !== "") {
@@ -154,12 +159,29 @@
         {/each}
     </div>
     {:else}
-    <div>
-        {#each game.Moves as move}
-        <p>Player {move.PlayerID} played {move.CardPlayed.Rank} {move.CardPlayed.Suit}</p>
-        {/each}
+    <div class="flex justify-center relative h-21 w-full">
+        <div class="flex gap-2 mx-auto">
+            {#each game.Moves as move}
+            <div class="flex flex-col items-center">
+                <PokerCard card={move.CardPlayed} isIllegal={false} minify={false} />
+                <p class="text-{playerIDToColor.get(move.PlayerID)}">P{move.PlayerID}</p>
+            </div>
+            {/each}
+        </div>
+    
+        {#if game.PreviousMoves.length !== 0} 
+        <div class="absolute right-1/6 bottom-1/4 flex pl-4">
+            {#each game.PreviousMoves as move, index}
+                <HandDisplay index={index}>
+                    <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
+                    <p class="text-xs text-{playerIDToColor.get(move.PlayerID)}">P{move.PlayerID}</p>
+                </HandDisplay>
+            {/each}
+        </div>
+        {/if}
     </div>
     {/if}
+
 
     {#if !game.IsBettingPhase}
     <!-- MAIN PHASE -->
@@ -167,13 +189,13 @@
         {#each hiddenMode ? [game.Players[0]] : game.Players as player}
         <div>
             <div class="flex gap-2">
-                <p>Player {player.ID} ({player.Sets} sets) </p>
+                <p><span class="text-{playerIDToColor.get(player.ID)}">Player {player.ID}</span> ({player.Sets} sets) </p>
                 {#if !hiddenMode && player.Partner !== null}
                 <p>| Partner is Player {player.Partner?.ID}</p>
                 {/if}
             </div>
             
-            <div class="flex h-[100px]">
+            <div class="flex h-[100px] pl-4">
                 {#each player.Cards  as card, index}
                 <button
                     disabled={isCardIllegal(game, player, card)}
@@ -202,7 +224,7 @@
         <div class="flex gap-4">
             {#each game.Players.slice(1, 4) as player, index}
                 <div class="flex gap-2">
-                <p>Player {player.ID} ({player.Sets} sets) </p>
+                <p class="text-{playerIDToColor.get(player.ID)}">Player {player.ID} ({player.Sets} sets) </p>
                 </div>
 
                 {#if index < 2}
@@ -219,7 +241,7 @@
         <div class="flex flex-col gap-10">
             {#each hiddenMode ? [game.Players[0]] : game.Players as player}
             <div class="flex flex-col h-[100px]">
-                <p class="mb-2">Player {player.ID}</p>
+                <p class="mb-2 text-{playerIDToColor.get(player.ID)}">Player {player.ID}</p>
                 <div class="flex pl-4">
                     {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
                         <HandDisplay index={index}>

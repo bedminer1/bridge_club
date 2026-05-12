@@ -85,6 +85,7 @@ export function playCard(game: Game, card: Card, player: Player) {
     let winner = game.Players[winnerID-1]
     winner.Sets++
     game.WhoseTurn = winner.ID
+    game.PreviousMoves = game.Moves
     game.Moves = []
     game.TurnSuit = ""
 
