@@ -28,6 +28,18 @@ export function doesCard1Beat(game: Game, c1: Card, c2: Card): boolean {
     return false
 }
 
+export function findStrongestCard(game: Game, cards: Card[]) {
+    let strongestCard: Card = cards[0]
+
+    for (let card of cards) {
+        if (doesCard1Beat(game, card, strongestCard)) {
+            strongestCard = card
+        } 
+    }
+
+    return strongestCard
+}
+
 export function nextTurn(game: Game) {
     game.WhoseTurn = game.WhoseTurn === 4 ? 1 : game.WhoseTurn + 1 
 }
@@ -50,6 +62,7 @@ export function playCard(game: Game, card: Card, player: Player) {
         c.Suit === card.Suit && c.Value === card.Value
     )
     hand.splice(index, 1)
+    player.PlayedCards.push(card)
 
     nextTurn(game)
 
@@ -57,29 +70,10 @@ export function playCard(game: Game, card: Card, player: Player) {
     if (game.Moves.length !== 4) { return }
 
     // scan for highest value card
-    let stackSuit = game.Moves[0].CardPlayed.Suit
-    game.Moves.sort((a,b) => {
-        const aSuit = a.CardPlayed.Suit
-        const bSuit = b.CardPlayed.Suit
-        const aValue = a.CardPlayed.Value
-        const bValue = b.CardPlayed.Value
+    const cards = game.Moves.map(move => move.CardPlayed)
+    const strongestCard = findStrongestCard(game, cards)
 
-        const aIsTrump = aSuit === game.Trump
-        const bIsTrump = bSuit === game.Trump
-
-        if (aIsTrump && !bIsTrump) return -1
-        if (!aIsTrump && bIsTrump) return 1 // swap a and b
-
-        const aIsStack = aSuit === stackSuit
-        const bIsStack = bSuit === stackSuit
-        if (aIsStack && !bIsStack) return -1
-        if (!aIsStack && bIsStack) return 1
-
-        if (aSuit === bSuit) return bValue - aValue
-        return 0
-    })
-
-    let winnerID = game.Moves[0].PlayerID
+    let winnerID = game.Moves.find(move => move.CardPlayed === strongestCard)!.PlayerID
     let winner = game.Players[winnerID-1]
     winner.Sets++
     game.WhoseTurn = winner.ID

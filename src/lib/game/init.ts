@@ -38,6 +38,7 @@ export function initGame(): Game {
         players.push({
             ID: i,
             Cards: hands[i-1],
+            PlayedCards: [],
             Sets: 0
         })
     }
@@ -49,10 +50,11 @@ export function initGame(): Game {
         PartnerCard: cards[0],
         Team2: [],
         Trump: "Club",
-        BetSize: 1,
+        BetSize: 0,
         IsBettingPhase: true,
         Moves: [],
         WhoseTurn: 1,
+        CardsPlayed: [],
         TrumpPlayed: false,
         TurnSuit: "",
         Winner: ""

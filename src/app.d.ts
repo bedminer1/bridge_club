@@ -22,6 +22,7 @@ interface Game {
 	Moves: Move[]
 	WhoseTurn: number
 	TrumpPlayed: boolean
+	CardsPlayed: Card[]
 	TurnSuit: string
 	Winner: string
 }
@@ -35,6 +36,7 @@ interface Card {
 interface Player {
 	ID: number // 1-4
 	Cards: Card[]
+	PlayedCards: Card[]
 	Sets: number
 }
 

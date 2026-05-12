@@ -5,6 +5,7 @@
     import { Switch } from "$lib/components/ui/switch/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import { Separator } from "$lib/components/ui/separator/index.js";
 
     import { initGame } from "$lib/game/init";
     import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
@@ -16,7 +17,6 @@
     // form inputs
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
-    let desiredCard: Card | undefined = $state()
     let hiddenMode = $state(true)
 
     $effect(() => {
@@ -33,7 +33,7 @@
     })
 </script>
 
-<div class="flex flex-col gap-10 w-full h-screen justify-center items-center overflow-auto">
+<div class="flex flex-col gap-10 w-full h-screen  items-center overflow-auto">
     <Dialog.Root open={game.Winner !== ""}>
     <Dialog.Content>
         <Dialog.Header>
@@ -44,7 +44,7 @@
         </Dialog.Header>
     </Dialog.Content>
     </Dialog.Root>
-    <div class="flex justify-end w-full">
+    <div class="flex justify-end w-full p-3">
         <div class="flex items-center space-x-2">
             <Label for="hidden-mode">Hidden Mode</Label>
             <Switch id="hidden-mode" bind:checked={hiddenMode}/>
@@ -83,7 +83,6 @@
     <div>
         <p>Team 1: needs {6 + game.BetSize}</p>
         <p>Team 2: needs {8 - game.BetSize}</p>
-        <Button onclick={()=>autoPlayCard(game)}>Autoplay move</Button>
     </div>
     <div class="flex gap-10">
         {#each game.Players as player}
@@ -98,6 +97,15 @@
                     {card.Rank} {card.Suit}
                 </Button>
                 {/each}
+                {#if !hiddenMode}
+                <Separator />
+                    {#each player.PlayedCards as card}
+                     <Button 
+                        disabled={true}>
+                        {card.Rank} {card.Suit}
+                    </Button>
+                    {/each}
+                {/if}
             </div>
         </div>
         {/each}
