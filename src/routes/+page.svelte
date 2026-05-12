@@ -12,6 +12,8 @@
         Trump: string // trump suit
         BetSize: number
         IsBettingPhase: boolean
+        Moves: Move[]
+        WhoseTurn: number
     }
 
     interface Card {
@@ -28,7 +30,7 @@
 
     interface Move {
         CardPlayed: Card
-        Player: number
+        PlayerID: number
     }
 
     const valueToRank = new Map([
@@ -109,9 +111,11 @@
             Players: players,
             Team1: [0, 1],
             Team2: [2, 3],
-            Trump: "Spades",
+            Trump: "Club",
             BetSize: 1,
             IsBettingPhase: true,
+            Moves: [],
+            WhoseTurn: 1
         }
     }
 
@@ -123,11 +127,51 @@
     function raiseBet() {
         game.BetSize = betSize
         game.Trump = bettedSuit
-        game.IsBettingPhase = false
+        game.IsBettingPhase = false // for now
     }
 
-    function playCard(card: Card) {
+    function playCard(card: Card, playerID: number) {
+        if (game.IsBettingPhase) {
+            console.log("Can't bet during betting phase")
+            return
+        }
 
+        if (game.WhoseTurn !== playerID) {
+            console.log("Can't play when not your turn")
+            return
+        }
+
+        game.Moves.push({
+            PlayerID: playerID,
+            CardPlayed: card
+        })
+        game.WhoseTurn = game.WhoseTurn === 4 ? 1 : game.WhoseTurn + 1 
+
+        // check for end of stack
+        if (game.Moves.length === 4) {
+            // scan for highest value card
+            let stackSuit = game.Moves[0].CardPlayed.Suit
+            game.Moves.sort((a,b) => {
+                const aSuit = a.CardPlayed.Suit
+                const bSuit = b.CardPlayed.Suit
+                const aValue = a.CardPlayed.Value
+                const bValue = b.CardPlayed.Value
+
+                const aIsTrump = aSuit === game.Trump
+                const bIsTrump = bSuit === game.Trump
+
+                if (aIsTrump && !bIsTrump) return -1
+                if (!aIsTrump && bIsTrump) return 1 // swap a and b
+
+                const aIsStack = aSuit === stackSuit
+                const bIsStack = bSuit === stackSuit
+                if (aIsStack && !bIsStack) return -1
+                if (!aIsStack && bIsStack) return 1
+
+                if (aSuit === bSuit) return bValue - aValue
+                return 0
+            })
+        }
     }
 </script>
 
