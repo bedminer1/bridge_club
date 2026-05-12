@@ -39,24 +39,6 @@ export const actions = {
         const player3Hand = String(data.get('player3Hand'))
         const player4Hand = String(data.get('player4Hand'))
 
-        console.log({
-            userID: user.id,
-            date,
-            trumpSuit,
-            betSize,
-            betWinner,
-            partner,
-            wonMatch,
-            player1Sets,
-            player2Sets,
-            player3Sets,
-            player4Sets,
-            player1Hand,
-            player2Hand,
-            player3Hand,
-            player4Hand
-        })
-
         await db.insert(matches)
                 .values({
                     userID: user.id,

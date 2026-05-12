@@ -259,11 +259,11 @@
 </div>
 
 <Dialog.Root open={game.Winner !== ""}>
-    <Dialog.Trigger>
+    <!-- <Dialog.Trigger>
         <Button>
             For Testing, Ignore
         </Button>
-    </Dialog.Trigger>
+    </Dialog.Trigger> -->
     <Dialog.Content>
         <Dialog.Header>
         <Dialog.Title>{game.Winner} Won!</Dialog.Title>
