@@ -1,3 +1,5 @@
+import { autoPlayCard } from "./bot"
+
 export function isCardIllegal(game: Game, player: Player, card: Card): boolean {
     if (game.WhoseTurn !== player.ID) {
         return true
@@ -15,6 +17,14 @@ export function isCardIllegal(game: Game, player: Player, card: Card): boolean {
         return true
     }
 
+    return false
+}
+
+export function doesCard1Beat(game: Game, c1: Card, c2: Card): boolean {
+    if (c1.Suit === c2.Suit) return c1.Value > c2.Value
+    if (c1.Suit === game.Trump && c2.Suit !== game.Trump) return true
+    if (c1.Suit !== game.Trump && c2.Suit === game.Trump) return false
+    if (c1.Suit === game.TurnSuit && c2.Suit !== game.TurnSuit) return true
     return false
 }
 

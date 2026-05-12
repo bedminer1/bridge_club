@@ -6,6 +6,7 @@
     import { initGame } from "$lib/game/init";
     import { raiseBet } from "$lib/game/betting";
     import { isCardIllegal, playCard } from "$lib/game/main";
+    import { autoPlayCard } from "$lib/game/bot";
 
     let game = $state(initGame())
 
@@ -28,6 +29,7 @@
     <div>
         <p>Team 1: {game.Team1[0].ID}, {game.Team1[1].ID}</p>
         <p>Team 2: {game.Team2[0].ID}, {game.Team2[1].ID}</p>
+        <Button onclick={()=>autoPlayCard(game)}>Autoplay move</Button>
     </div>
     <div>
         {#each game.Moves as move}
