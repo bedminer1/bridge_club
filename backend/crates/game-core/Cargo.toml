@@ -1,0 +1,11 @@
+[package]
+name = "game-core"
+version = "0.1.0"
+edition = "2021"
+
+# Pure game logic — no I/O, no networking, no async.
+# This crate is the canonical bridge rules engine.
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.8"

@@ -1,1 +1,0 @@
-fn(axum::Json<Message>) -> impl Future<Output = axum::Json<Message>> {json_handler}: Handler<_, _>
