@@ -37,6 +37,7 @@ interface Player {
 	ID: number // 1-4
 	Cards: Card[]
 	PlayedCards: Card[]
+	Partner: Player | null
 	Sets: number
 }
 

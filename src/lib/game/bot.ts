@@ -78,9 +78,6 @@ export function autoFindPartner(game: Game, betWinner: Player) {
 }
 
 export function autoPlayCard(game: Game) {
-    setInterval(() => {
-        
-    }, 1000);
     const player = game.Players[game.WhoseTurn-1]
     const moves = game.Moves
     const playableCards = player.Cards.filter(card => !isCardIllegal(game, player, card))
@@ -89,8 +86,8 @@ export function autoPlayCard(game: Game) {
     if (moves.length === 0) {
         let strongestCard: Card = playableCards[0]
 
-        for (let card of player.Cards) {
-            if (!isCardIllegal(game, player, card) && doesCard1Beat(game, card, strongestCard)) {
+        for (let card of playableCards) {
+            if (doesCard1Beat(game, card, strongestCard)) {
                 strongestCard = card
             } 
         }
@@ -98,6 +95,95 @@ export function autoPlayCard(game: Game) {
         return
     } 
 
+    let currentWinningMove: Move = moves[0]
+    for (let move of moves.slice(1)) {
+        if (doesCard1Beat(game, move.CardPlayed, currentWinningMove.CardPlayed)) {
+            currentWinningMove = move
+        }
+    }
+
+    let cardToPlay: Card = playableCards[0]
+    const winningCards = playableCards.filter(card => doesCard1Beat(game, card, currentWinningMove.CardPlayed))
+
+    // TODO: logic for keeping track of cards played
+    if (winningCards.length !== 0) {
+        // play strongest
+        for (let card of winningCards) {
+            if (doesCard1Beat(game, card, cardToPlay)) {
+                cardToPlay = card
+            }
+        }
+    } else {
+        // play weakest
+        for (let card of playableCards) {
+            if (doesCard1Beat(game, cardToPlay, card)) {
+                cardToPlay = card
+            }
+        }
+    }
+
+    playCard(game, cardToPlay, player)
+}
+
+// adding teamwork
+export function autoPlayCardV2(game: Game) {
+    const player = game.Players[game.WhoseTurn-1]
+    const moves = game.Moves
+    const playableCards = player.Cards.filter(card => !isCardIllegal(game, player, card))
+    
+    const playedCards: Card[] = []
+    for (let player of game.Players) {
+        for (let card of player.PlayedCards) {
+            playedCards.push(card)
+        }
+    }
+
+    const playedValuesBySuit = new Map<string, Set<number>>()
+    for (let card of playedCards) {
+        if (!playedValuesBySuit.has(card.Suit)) {
+            playedValuesBySuit.set(card.Suit, new Set())
+        }
+        playedValuesBySuit.get(card.Suit)!.add(card.Value)
+    }
+
+    const strongestUnplayedCards = new Map<string, number>()
+    const suits = ["Club", "Diamond", "Heart", "Spades"]
+    for (let suit of suits) {
+        const played = playedValuesBySuit.get(suit) ?? new Set()
+        for (let val = 14; val >= 2; val--) {
+            if (!played.has(val)) {
+                strongestUnplayedCards.set(suit, val)
+                break
+            }
+        }
+    }
+
+    // if no cards played yet
+    if (moves.length === 0) {
+        let cardToPlay: Card = playableCards[0]
+
+        // if has strongest playable card, play it
+        for (let card of playableCards) {
+            for (let [_, value] of strongestUnplayedCards) {
+                if (card.Value === value) {
+                    playCard(game, card, player)
+                    return
+                }
+            }
+        }
+
+        // else play weakest card
+       for (let card of playableCards) {
+            if (doesCard1Beat(game, cardToPlay, card)) {
+                cardToPlay = card
+            }
+        }
+        playCard(game, cardToPlay, player)
+        return
+    } 
+
+
+    // TEMPORARY IMPORT FROM VERSION 1
     let currentWinningMove: Move = moves[0]
     for (let move of moves.slice(1)) {
         if (doesCard1Beat(game, move.CardPlayed, currentWinningMove.CardPlayed)) {

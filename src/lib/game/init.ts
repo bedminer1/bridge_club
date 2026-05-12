@@ -39,6 +39,7 @@ export function initGame(): Game {
             ID: i,
             Cards: hands[i-1],
             PlayedCards: [],
+            Partner: null,
             Sets: 0
         })
     }

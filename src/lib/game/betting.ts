@@ -8,7 +8,7 @@ export function isLegalRaise(game: Game, betSize: number, bettedSuit: string) {
         ["Heart", 2],
         ["Spades", 3]
     ])
-    
+
     return betSize > game.BetSize || betSize === game.BetSize && suitPriority.get(bettedSuit)! > suitPriority.get(game.Trump)!
 }
 
@@ -45,6 +45,7 @@ export function passBet(game: Game) {
         const betWinner = game.Players[game.Moves[0].PlayerID-1]
         game.BetWinner = betWinner
         const partner = autoFindPartner(game, betWinner) // option for manual
+        partner.Partner = betWinner
         const opponents = game.Players.filter(p => p !== betWinner && p !== partner)
         
         game.Team1 = [betWinner, partner]
@@ -54,5 +55,4 @@ export function passBet(game: Game) {
         nextTurn(game)
         return
     }
-
 }

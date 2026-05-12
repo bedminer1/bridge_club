@@ -7,10 +7,12 @@
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
 
+    import PokerCard from "./PokerCard.svelte";
+
     import { initGame } from "$lib/game/init";
     import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
     import { isCardIllegal, playCard } from "$lib/game/main";
-    import { autoBet, autoPlayCard } from "$lib/game/bot";
+    import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
 
     let game = $state(initGame())
 
@@ -18,6 +20,7 @@
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
     let hiddenMode = $state(true)
+    let difficulty = $state("Easy")
 
     $effect(() => {
         if (game)
@@ -26,12 +29,17 @@
                 if (game.IsBettingPhase) {
                     autoBet(game)
                 } else {
-                    autoPlayCard(game)
+                    if (difficulty === "Easy") {
+                        autoPlayCard(game)
+                    } else if (difficulty === "Medium") {
+                        autoPlayCardV2(game)
+                    }
                 }
             }
         }, 3000);
     })
 </script>
+
 
 <div class="flex flex-col gap-10 w-full h-screen  items-center overflow-auto">
     <Dialog.Root open={game.Winner !== ""}>
@@ -44,10 +52,25 @@
         </Dialog.Header>
     </Dialog.Content>
     </Dialog.Root>
-    <div class="flex justify-end w-full p-3">
-        <div class="flex items-center space-x-2">
-            <Label for="hidden-mode">Hidden Mode</Label>
-            <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+    <div class="flex justify-end w-full p-3 gap-4">
+        <div class="flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+                <Label for="difficulty">Difficulty:</Label>
+                <Select.Root type="single" bind:value={difficulty} disabled={!game.IsBettingPhase}>
+                    <Select.Trigger class="w-[100px]">
+                        {difficulty}
+                    </Select.Trigger>
+                    <Select.Content>
+                        <Select.Item value="Easy">Easy</Select.Item>
+                        <Select.Item value="Medium">Medium</Select.Item>
+                        <Select.Item value="Hard" disabled={true}>Hard</Select.Item>
+                    </Select.Content>
+                </Select.Root>
+            </div>
+            <div class="flex items-center space-x-2">
+                <Label for="hidden-mode">Hidden Mode: </Label>
+                <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+            </div>
         </div>
     </div>
     <div class="grid grid-cols-2 gap-2">
@@ -81,29 +104,32 @@
 
     {#if !game.IsBettingPhase}
     <div>
-        <p>Team 1: needs {6 + game.BetSize}</p>
-        <p>Team 2: needs {8 - game.BetSize}</p>
+        <p>Team 1 needs {6 + game.BetSize}</p>
+        <p>Team 2 needs {8 - game.BetSize}</p>
     </div>
-    <div class="flex gap-10">
+    <div class="flex flex-col gap-10">
         {#each game.Players as player}
         <div>
-            <p>P{player.ID}:</p>
-            <p>Sets: {player.Sets}</p>
-            <div class="flex flex-col gap-2">
-                {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card}
-                <Button 
+            <p>Player {player.ID} ({player.Sets} sets) </p>
+            <div class="flex h-[100px]">
+                {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
+                <button
                     disabled={isCardIllegal(game, player, card)}
                     onclick={()=>playCard(game, card, player)}>
-                    {card.Rank} {card.Suit}
-                </Button>
+                    <div class="relative ml-[-1rem] z-{index} hover:z-40 hover:-translate-y-1">
+                        <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)}/>
+                    </div>
+                </button>
                 {/each}
                 {#if !hiddenMode}
-                <Separator />
-                    {#each player.PlayedCards as card}
-                     <Button 
+                <Separator orientation="vertical" class="mx-10 h-full"/>
+                    {#each player.PlayedCards as card, index}
+                     <button 
                         disabled={true}>
-                        {card.Rank} {card.Suit}
-                    </Button>
+                        <div class="relative ml-[-1rem] z-{index} hover:z-40 hover:-translate-y-1 disabled:opacity-50">
+                            <PokerCard card={card} isIllegal={true}/>
+                        </div>
+                    </button>
                     {/each}
                 {/if}
             </div>
@@ -111,16 +137,15 @@
         {/each}
     </div>
     {:else}
-        <div class="flex gap-10">
-            {#each game.Players as player}
-            <div>
-                <p>P{player.ID}:</p>
-                <p>Sets: {player.Sets}</p>
-                <div class="flex flex-col gap-2">
-                    {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card}
-                    <Button>
-                        {card.Rank} {card.Suit}
-                    </Button>
+        <div class="flex flex-col gap-10">
+            {#each hiddenMode ? [game.Players[0]] : game.Players as player}
+            <div class="flex flex-col h-[100px]">
+                <p class="mb-2">Player {player.ID}</p>
+                <div class="flex pl-4">
+                    {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
+                        <div class="relative ml-[-1rem] z-{index} transition-transform hover:z-40 hover:-translate-y-1">
+                            <PokerCard card={card} isIllegal={false}/>
+                        </div>
                     {/each}
                 </div>
             </div>
