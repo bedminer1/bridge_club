@@ -2,9 +2,41 @@ import { db } from '$lib/server/db/index.js'
 import { users, matches } from "$lib/server/db/schema.js"
 import { eq } from 'drizzle-orm';
 import { hashPassword } from '$lib/server/crypto.js';
+import { invalidateAllSessions, validateSessionToken } from '$lib/auth.js';
+
+export async function load({ cookies }) {
+    // validate session cookie
+    const token = cookies.get("session")
+    if (token === undefined) {
+        console.log("Cookie not found")
+        return {
+            userID: 0
+        }
+    }
+    
+    const { session, user } = await validateSessionToken(token)
+
+    if (!session) {
+        console.log("Session invalid")
+        return {
+            userID: 0
+        } 
+    }
+    if (!user) {
+        console.log("User not found")
+        return {
+            userID: 0
+        }
+    }
+
+    return {
+        userID: session.userID,
+        username: user.username
+    }
+}
 
 export const actions = {
-    default: async ({ request }) => {
+    saveMatch: async ({ request }) => {
         const data = await request.formData()
         const username = data.get('username')
         const password = data.get('password')
@@ -31,6 +63,7 @@ export const actions = {
         }
 
         const date = Number(data.get('date'))
+        const botDifficulty = String(data.get('botDifficulty'))
 
         const trumpSuit = String(data.get('trumpSuit'))
         const betSize = Number(data.get('betSize'))
@@ -53,6 +86,7 @@ export const actions = {
                 .values({
                     userID: user.id,
                     date,
+                    botDifficulty,
                     trumpSuit,
                     betSize,
                     betWinner,
@@ -67,5 +101,18 @@ export const actions = {
                     player3Hand,
                     player4Hand
                 })
+    },
+
+    logout: async ({ request, cookies }) => {
+        const data = await request.formData()
+        const userIDStr = data.get("userID")
+        if (userIDStr === null) return
+
+        const userID = Number(userIDStr)
+        if (isNaN(userID)) return
+
+        cookies.delete("sessions", { path: "/", httpOnly: true, sameSite: "lax"})
+
+        invalidateAllSessions(Number(userID))
     }
 }

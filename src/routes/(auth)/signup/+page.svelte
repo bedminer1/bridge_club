@@ -7,13 +7,13 @@
         type Infer,
         superForm,
     } from "sveltekit-superforms";
-    import { signupFormSchema, type SignupFormSchema } from "./signupSchema";
+    import { userFormSchema, type UserFormSchema } from "../userSchema";
     import { zodClient } from "sveltekit-superforms/adapters";
     import FormFieldErrors from "$lib/components/ui/form/form-field-errors.svelte";
 
-    let { data }: { data: { form: SuperValidated<Infer<SignupFormSchema>> } } = $props()
+    let { data }: { data: { form: SuperValidated<Infer<UserFormSchema>> } } = $props()
     const form = superForm(data.form, {
-        validators: zodClient(signupFormSchema),
+        validators: zodClient(userFormSchema),
 
         onSubmit: () => {
           localStorage.setItem("username", $formData.username)
@@ -55,7 +55,14 @@
               </Form.Field>
           </Card.Content>
           <Card.Footer class="flex justify-end">
-              <Form.Button class="w-20">Register</Form.Button>
+              <div class="flex justify-between w-full">
+                  <a href="/login" class="text-xs italic underline text-gray-200 h-full flex items-end pb-2">
+                    Already have an account?
+                  </a>
+                  <Form.Button class="w-[80px]">
+                      Signup
+                  </Form.Button>
+              </div>
           </Card.Footer>
         </form>
     </Card.Root>

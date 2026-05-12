@@ -10,7 +10,6 @@
     import * as Form from "$lib/components/ui/form/index.js";
 
     import { enhance } from "$app/forms";
-    import { browser } from "$app/environment";
     import { Info, Settings, LogIn, LogOut } from "@lucide/svelte"
     import PokerCard from "./PokerCard.svelte";
     import HandDisplay from "./HandDisplay.svelte";
@@ -21,24 +20,18 @@
     import { isCardIllegal, playCard } from "$lib/game/main";
     import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
 
+    let { data } = $props()
+    let { username, userID } = $state(data)
+
     let game = $state(initGame())
 
     // user info
-    let username: string = $state("")
-    let password: string = $state("")
-    if (browser) {
-        username = localStorage.getItem("username") ?? ""
-        password = localStorage.getItem("password") ?? ""
-    }
-    let loggedIn: boolean = $derived(username !== "")
-    let openLoginDialog: boolean = $state(false)
+    let loggedIn: boolean = $derived(userID === 0 ? false : true)
     let openSaveDialog: boolean = $state(false)
 
-    function login() {
-        console.log("hi")
-        localStorage.setItem("username", username)
-        localStorage.setItem("password", password)
-        openLoginDialog = false
+    function logout() {
+        loggedIn = false
+
     }
 
     let userTeam = $derived(game.Team1.some(p => p.ID === 1) ? game.Team1 : game.Team2)
@@ -136,36 +129,14 @@
         </Popover.Root>
 
         {#if !loggedIn}
-        <Dialog.Root onOpenChange={() => openLoginDialog = true} open={openLoginDialog}>
-        <Dialog.Trigger>
-            <LogIn />
-        </Dialog.Trigger>
-        <Dialog.Content class="w-[320px]">
-            <Dialog.Header>
-            <Dialog.Title class="text-center mb-2">Login</Dialog.Title>
-            <form 
-                class="flex flex-col gap-2 mb-2"
-                onsubmit={login}>
-                <div class="flex justify-between gap-4">
-                    <Label class="w-[60px] pr-6" for="username">Username</Label>
-                    <Input bind:value={username} />
-                </div>
-                <div class="flex justify-between gap-4 mb-8">
-                    <Label class="w-[60px] pr-6" for="password">Password</Label>
-                    <Input type="password" bind:value={password} />
-                </div>
-                <div class="flex justify-between">
-                    <a href="/signup" class="text-xs italic underline text-gray-200 h-full flex items-end pb-2">Not Signed Up?</a>
-                    <Form.Button class="w-[80px]">
-                        Login
-                    </Form.Button>
-                </div>
-            </form>
-            </Dialog.Header>
-        </Dialog.Content>
-        </Dialog.Root>
+        <a href="/login"><LogIn /></a>
         {:else}
-        <LogOut onclick={()=>loggedIn = false} />
+        <form action="?/logout" method="POST" use:enhance={logout}>
+            <input type="hidden" name="userID" bind:value={userID}>
+            <button>
+                <LogOut/>
+            </button>
+        </form>
         {/if}
     </div>
     <div class="text-3xl">
@@ -301,16 +272,17 @@
                 {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
             </p>
 
-            <form action="" 
+            {#if loggedIn}
+            <form action="?/saveMatch" 
             method="POST" 
             class="flex flex-col items-end" 
             use:enhance={() => {openSaveDialog = false}}>
 
                 <!-- Metadata -->
 	            <input type="hidden" name="date" value={Date.now()}>
+	            <input type="hidden" name="botDifficulty" bind:value={difficulty}>
                 
                 <!-- User Info -->
-                {#if !loggedIn}
                 <div class="flex flex-col gap-2 w-full">
                     <div class="flex w-full justify-between gap-4">
                         <Label class="w-[60px] pr-6" for="username">Username</Label>
@@ -318,13 +290,9 @@
                     </div>
                     <div class="flex w-full justify-between gap-4">
                         <Label class="w-[60px] pr-6" for="password">Password</Label>
-                        <Input class="w-52" name="password" type="password" bind:value={password} />
                     </div>
                 </div>
-                {:else}
                 <input type="hidden" name="username" bind:value={username}>
-                <input type="hidden" name="password" bind:value={password}>
-                {/if}
 
                 <!-- Betting Info -->
                 <input type="hidden" name="trumpSuit" value={game.Trump}>
@@ -345,10 +313,11 @@
                     <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(player.PlayedCards)}>
                 {/each}
 
-                <Form.Button disabled={username === "" || password === ""} class="w-[60px] mt-4">
+                <Form.Button class="w-[60px] mt-4">
                     Save
                 </Form.Button>
             </form>
+        {/if}
         </Dialog.Description>
         </Dialog.Header>
     </Dialog.Content>
