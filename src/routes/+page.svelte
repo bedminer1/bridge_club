@@ -312,7 +312,7 @@
                     <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(player.PlayedCards)}>
                 {/each}
 
-                <Form.Button class="w-[60px]">
+                <Form.Button disabled={username === "" || password === ""} class="w-[60px]">
                     Save
                 </Form.Button>
             </form>
