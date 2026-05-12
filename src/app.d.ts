@@ -10,4 +10,31 @@ declare global {
 	}
 }
 
-export {};
+interface Game {
+	Players: Player[]
+	Team1: Player[] // winner of bet
+	Team2: Player[]
+	Trump: string // trump suit
+	BetSize: number
+	IsBettingPhase: boolean
+	Moves: Move[]
+	WhoseTurn: number
+	TrumpPlayed: boolean
+}
+
+interface Card {
+	Rank: string // 2 to Ace
+	Value: number // 2-14
+	Suit: string
+}
+
+interface Player {
+	ID: number // 1-4
+	Cards: Card[]
+	Sets: number
+}
+
+interface Move {
+	CardPlayed: Card
+	PlayerID: number
+}

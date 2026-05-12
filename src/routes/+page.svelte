@@ -1,163 +1,15 @@
 <script lang="ts">
-    import { enhance } from "$app/forms";
     import * as Select from "$lib/components/ui/select/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
 
-    // cards
-    interface Game {
-        Players: Player[]
-        Team1: Player[] // winner of bet
-        Team2: Player[]
-        Trump: string // trump suit
-        BetSize: number
-        IsBettingPhase: boolean
-        Moves: Move[]
-        WhoseTurn: number
-        TrumpPlayed: boolean
-    }
+    import { initGame } from "$lib/game/init";
+    import { raiseBet } from "$lib/game/betting";
 
-    interface Card {
-        Rank: string // 2 to Ace
-        Value: number // 2-14
-        Suit: string
-    }
+    let game = $state(initGame())
 
-    interface Player {
-        ID: number // 1-4
-        Cards: Card[]
-        Sets: number
-    }
-
-    interface Move {
-        CardPlayed: Card
-        PlayerID: number
-    }
-
-    const valueToRank = new Map([
-        [2, "2"],
-        [3, "3"],
-        [4, "4"],
-        [5, "5"],
-        [6, "6"],
-        [7, "7"],
-        [8, "8"],
-        [9, "9"],
-        [10, "10"],
-        [11, "J"],
-        [12, "Q"],
-        [13, "K"],
-        [14, "A"],
-    ])
-
-    const suitEnum = new Map([
-        [0, "Club"],
-        [1, "Diamond"],
-        [2, "Heart"],
-        [3, "Spades"],
-    ])
-
-    const suitSortOrder = new Map<string, number>([
-        ['Spades', 0],
-        ['Heart', 1],
-        ['Club', 2],
-        ['Diamond', 3],
-    ])
-
-    function initGame(): Game {
-        let cards: Card[] = []
-        // generate cards
-        for (let i = 0; i < 4; i++) { // suits
-            for (let val = 2; val <= 14; val++) { // value
-                cards.push({
-                    Rank: valueToRank.get(val)!,
-                    Value: val,
-                    Suit: suitEnum.get(i)!
-                })
-            }
-        }
-
-        // shuffle
-        for (let i = cards.length - 1; i > 0; i--) {
-            const j: number = Math.floor(Math.random() * (i + 1))
-            ;[cards[i], cards[j]] = [cards[j], cards[i]]
-        }
-
-        // deal
-        const hands: Card[][] = []
-        for (let i = 0; i < 4; i++) {
-            hands.push(cards.slice(i * 13, (i + 1) * 13))
-        }
-
-        // arrange cards
-        for (const hand of hands) {
-            hand.sort((a, b) => {
-                const suitA = suitSortOrder.get(a.Suit)!
-                const suitB = suitSortOrder.get(b.Suit)!
-                if (suitA !== suitB) return suitA - suitB
-                return a.Value - b.Value
-            })
-        }
-
-        let players: Player[] = []
-        for (let i = 1; i <= 4; i++) {
-            players.push({
-                ID: i,
-                Cards: hands[i-1],
-                Sets: 0
-            })
-        }
-
-        return {
-            Players: players,
-            Team1: [],
-            Team2: [],
-            Trump: "Club",
-            BetSize: 1,
-            IsBettingPhase: true,
-            Moves: [],
-            WhoseTurn: 1,
-            TrumpPlayed: false
-        }
-    }
-
-    let game = initGame()
-
-    let betSize: number
-    let bettedSuit: string = "Club"
-
-    function raiseBet() {
-        game.BetSize = betSize
-        game.Trump = bettedSuit
-        game.IsBettingPhase = false // for now, todo: implement passing and turns
-
-        const betWinner = game.Players[game.WhoseTurn-1]
-        const partner = findPartner(betWinner)
-        const opponents = game.Players.filter(p => p !== betWinner && p !== partner)
-        game.Team1 = [betWinner, partner]
-        game.Team2 = opponents
-    }
-
-    // defaults to finding person holding highest value 
-    // trump suit card the betWinner doesn't have
-    function findPartner(betWinner: Player) {
-        let highestCard: Card | null = null
-        let partner
-        
-        for (const player of game.Players) {
-            if (player === betWinner) continue
-            for (const card of player.Cards) {
-                if (card.Suit === game.Trump) {
-                    if (!highestCard || card.Value > highestCard.Value) {
-                        highestCard = card
-                        partner = player
-                    }
-                }
-            }
-        }
-
-        return partner!
-    }
+    let betSize: number = $state(1)
+    let bettedSuit: string = $state("Club")
 
     function playCard(card: Card, playerID: number) {
         if (game.IsBettingPhase) {
@@ -273,7 +125,7 @@
         </div>
         <div class="flex gap-2">
             <Button>Pass</Button>
-            <Button onclick={raiseBet}>Raise</Button>
+            <Button onclick={()=>raiseBet(game, betSize, bettedSuit)}>Raise</Button>
         </div>
     </div>
     {/if}
