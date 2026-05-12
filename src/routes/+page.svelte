@@ -32,6 +32,7 @@
     let bettedSuit: string = $state("Club")
     let hiddenMode = $state(true)
     let difficulty = $state("Medium")
+    let botSpeed = $state(4)
 
     $effect(() => {
         if (game)
@@ -47,7 +48,7 @@
                     }
                 }
             }
-        }, 3000);
+        }, botSpeed * 1000);
     })
 
    
@@ -108,7 +109,7 @@
             <Popover.Trigger><Settings /></Popover.Trigger>
             <Popover.Content class="border-2 w-auto mr-1 mt-1">
                 <div class="flex flex-col gap-4">
-                    <div class="flex flex-col gap-3">
+                    <div class="flex justify-between gap-3">
                         <Label for="difficulty">Difficulty</Label>
                         <Select.Root type="single" bind:value={difficulty} disabled={!game.IsBettingPhase}>
                             <Select.Trigger class="w-[100px]">
@@ -121,9 +122,13 @@
                             </Select.Content>
                         </Select.Root>
                     </div>
-                    <div class="flex flex-col gap-3">
+                    <div class="flex justify-between gap-3">
                         <Label for="hidden-mode">Hidden Mode </Label>
                         <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+                    </div>
+                    <div class="flex justify-between gap-3">
+                        <Label for="bot-speed">Bot Time per Move</Label>
+                        <Input type="number" class="w-[100px]" bind:value={botSpeed}/>
                     </div>
                 </div>
             </Popover.Content>
