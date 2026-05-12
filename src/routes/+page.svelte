@@ -7,9 +7,9 @@
     import * as Dialog from "$lib/components/ui/dialog/index.js";
 
     import { initGame } from "$lib/game/init";
-    import { raiseBet } from "$lib/game/betting";
+    import { raiseBet, passBet } from "$lib/game/betting";
     import { isCardIllegal, playCard } from "$lib/game/main";
-    import { autoPlayCard } from "$lib/game/bot";
+    import { autoBet, autoPlayCard } from "$lib/game/bot";
 
     let game = $state(initGame())
 
@@ -20,8 +20,15 @@
     let hiddenMode = $state(true)
 
     $effect(() => {
+        if (game)
         setInterval(() => {
-            if (game.WhoseTurn !== 1) autoPlayCard(game)
+            if (game.WhoseTurn !== 1) {
+                if (game.IsBettingPhase) {
+                    autoBet(game)
+                } else {
+                    autoPlayCard(game)
+                }
+            }
         }, 3000);
     })
 </script>
@@ -49,16 +56,29 @@
         </div>
     </div>
 
+    {#if game.IsBettingPhase}
+    <div>
+        {#each game.Moves as move}
+        {#if move.CardPlayed.Value === 0}
+        <p>Player {move.PlayerID} passed</p>
+        {:else}
+        <p>Player {move.PlayerID} raised {move.CardPlayed.Rank} {move.CardPlayed.Suit}</p>
+        {/if}
+        {/each}
+    </div>
+    {:else}
+    <div>
+        {#each game.Moves as move}
+        <p>Player {move.PlayerID} played {move.CardPlayed.Rank} {move.CardPlayed.Suit}</p>
+        {/each}
+    </div>
+    {/if}
+
     {#if !game.IsBettingPhase}
     <div>
         <p>Team 1: needs {6 + game.BetSize}</p>
         <p>Team 2: needs {8 - game.BetSize}</p>
         <Button onclick={()=>autoPlayCard(game)}>Autoplay move</Button>
-    </div>
-    <div>
-        {#each game.Moves as move}
-        <p>Player {move.PlayerID} played {move.CardPlayed.Rank} {move.CardPlayed.Suit}</p>
-        {/each}
     </div>
     <div class="flex gap-10">
         {#each game.Players as player}
@@ -78,16 +98,20 @@
         {/each}
     </div>
     {:else}
-     <div>
-            <p>P{game.Players[0].ID}:</p>
-            <p>Sets: {game.Players[0].Sets}</p>
-            <div class="flex flex-col gap-2">
-                {#each game.Players[0].Cards as card}
-                <Button>
-                    {card.Rank} {card.Suit}
-                </Button>
-                {/each}
+        <div class="flex gap-10">
+            {#each game.Players as player}
+            <div>
+                <p>P{player.ID}:</p>
+                <p>Sets: {player.Sets}</p>
+                <div class="flex flex-col gap-2">
+                    {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card}
+                    <Button>
+                        {card.Rank} {card.Suit}
+                    </Button>
+                    {/each}
+                </div>
             </div>
+            {/each}
         </div>
 
         <div class="flex flex-col justify-center items-center gap-2">
@@ -107,7 +131,7 @@
                 </Select.Root>
             </div>
             <div class="flex gap-2">
-                <Button>Pass</Button>
+                <Button onclick={()=>passBet(game)}>Pass</Button>
                 <Button onclick={()=>raiseBet(game, betSize, bettedSuit)}>Raise</Button>
             </div>
         </div>

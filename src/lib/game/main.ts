@@ -28,6 +28,10 @@ export function doesCard1Beat(game: Game, c1: Card, c2: Card): boolean {
     return false
 }
 
+export function nextTurn(game: Game) {
+    game.WhoseTurn = game.WhoseTurn === 4 ? 1 : game.WhoseTurn + 1 
+}
+
 export function playCard(game: Game, card: Card, player: Player) {
     if (game.Moves.length === 0) {
         game.TurnSuit = card.Suit
@@ -47,7 +51,7 @@ export function playCard(game: Game, card: Card, player: Player) {
     )
     hand.splice(index, 1)
 
-    game.WhoseTurn = game.WhoseTurn === 4 ? 1 : game.WhoseTurn + 1 
+    nextTurn(game)
 
     // check for end of stack
     if (game.Moves.length !== 4) { return }

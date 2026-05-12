@@ -1,5 +1,58 @@
-import { playCard } from "./main"
+import { playCard, nextTurn } from "./main"
 import { isCardIllegal, doesCard1Beat } from "./main"
+import { raiseBet, passBet } from "./betting"
+
+export function autoBet(game: Game) {
+    const player = game.Players[game.WhoseTurn-1]
+
+    // analyze strength of each suit
+    interface strength {
+        numberOfCards: number
+        picturesValue: number
+    }
+
+    let strengths = new Map<string, strength>()
+
+    for (let card of player.Cards) {
+        if (!strengths.has(card.Suit)) {
+            strengths.set(card.Suit, {
+                numberOfCards: 1,
+                picturesValue: card.Value > 10 ? card.Value - 10 : 0
+            })
+            continue
+        }
+
+        const currStrength = strengths.get(card.Suit)!
+        strengths.set(card.Suit, {
+            numberOfCards: currStrength.numberOfCards + 1,
+            picturesValue: currStrength.picturesValue + (card.Value > 10 ? card.Value - 10 : 0)
+        })
+    }
+
+    // find strongest suit, determine max bet
+    let betSize = 1
+    let bettedSuit = "Club"
+    let highestScore = 0
+    for (let [suit, strength] of strengths) {
+        const score = strength.numberOfCards * 2 + strength.picturesValue
+        if (score <= highestScore) continue
+
+        highestScore = score
+        bettedSuit = suit
+        
+        if (score >= 16) {
+            betSize = 3
+        } else if (score >= 13) {
+            betSize = 2
+        }
+    }
+
+    if (betSize > game.BetSize) {
+        raiseBet(game, betSize, bettedSuit)
+    } else {
+        passBet(game) // pass
+    }
+}
 
 // bots defaults to finding player holding highest value 
 // trump suit card the they don't have
