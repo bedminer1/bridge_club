@@ -45,6 +45,7 @@ export function initGame(): Game {
     return {
         Players: players,
         Team1: [],
+        PartnerCard: cards[0],
         Team2: [],
         Trump: "Club",
         BetSize: 1,

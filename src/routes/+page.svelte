@@ -4,6 +4,7 @@
     import { Button } from "$lib/components/ui/button/index.js";
     import { Switch } from "$lib/components/ui/switch/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
 
     import { initGame } from "$lib/game/init";
     import { raiseBet } from "$lib/game/betting";
@@ -21,17 +22,27 @@
     $effect(() => {
         setInterval(() => {
             if (game.WhoseTurn !== 1) autoPlayCard(game)
-        }, 5000);
+        }, 3000);
     })
 </script>
 
 <div class="flex flex-col gap-10 w-full h-screen justify-center items-center">
+    <Dialog.Root open={game.Winner !== ""}>
+    <Dialog.Content>
+        <Dialog.Header>
+        <Dialog.Title>{game.Winner} Won!</Dialog.Title>
+        <Dialog.Description>
+            {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
+        </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+    </Dialog.Root>
     <div class="grid grid-cols-2 gap-2">
         <p>Trump Suit: {game.Trump}</p>
         <p>Bet Size: {game.BetSize}</p>
         <p>Who's Turn: Player {game.WhoseTurn}</p>
         <p>Current Suit: {game.TurnSuit}</p>
-        <p>Winners: {game.Winner}</p>
+        <p>Partner Card: {game.PartnerCard.Rank} {game.PartnerCard.Suit}</p>
         <div class="flex items-center space-x-2">
             <Label for="hidden-mode">Hidden Mode</Label>
             <Switch id="hidden-mode" bind:checked={hiddenMode}/>
@@ -40,8 +51,8 @@
 
     {#if !game.IsBettingPhase}
     <div>
-        <p>Team 1: {game.Team1[0].ID}, {game.Team1[1].ID}</p>
-        <p>Team 2: {game.Team2[0].ID}, {game.Team2[1].ID}</p>
+        <p>Team 1: needs {6 + game.BetSize}</p>
+        <p>Team 2: needs {8 - game.BetSize}</p>
         <Button onclick={()=>autoPlayCard(game)}>Autoplay move</Button>
     </div>
     <div>
@@ -50,12 +61,12 @@
         {/each}
     </div>
     <div class="flex gap-10">
-        {#each hiddenMode ? [game.Players[0]] : game.Players as player}
+        {#each game.Players as player}
         <div>
             <p>P{player.ID}:</p>
             <p>Sets: {player.Sets}</p>
             <div class="flex flex-col gap-2">
-                {#each player.Cards as card}
+                {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card}
                 <Button 
                     disabled={isCardIllegal(game, player, card)}
                     onclick={()=>playCard(game, card, player)}>

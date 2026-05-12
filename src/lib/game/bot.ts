@@ -4,7 +4,7 @@ import { isCardIllegal, doesCard1Beat } from "./main"
 // bots defaults to finding player holding highest value 
 // trump suit card the they don't have
 export function autoFindPartner(game: Game, betWinner: Player) {
-    let highestCard: Card | null = null
+    let highestCard: Card = game.Players.find(p => p !== betWinner)?.Cards[0]!
     let partner
     
     for (const player of game.Players) {
@@ -18,6 +18,8 @@ export function autoFindPartner(game: Game, betWinner: Player) {
             }
         }
     }
+
+    game.PartnerCard = highestCard
 
     return partner!
 }
