@@ -43,8 +43,8 @@ export function initGame(username: string): Game {
             Partner: null,
             Sets: 0,
             IsBot: i === 1,
-            Username: i === 1 ? username : "Player " + i,
-            ShortUsername: i === 1 ? username[0] : "P" + i
+            Username: i === 1 && username !== "" ? username : "Player " + i,
+            ShortUsername: i === 1 && username !== "" ? username[0] : "P" + i
         })
     }
 

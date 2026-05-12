@@ -10,6 +10,7 @@
     import * as Form from "$lib/components/ui/form/index.js";
 
     import { enhance } from "$app/forms";
+    import { toggleMode, mode } from "mode-watcher"
     import { Info, Settings, LogIn, LogOut } from "@lucide/svelte"
     import PokerCard from "$lib/components/PokerCard.svelte";
     import HandDisplay from "$lib/components/HandDisplay.svelte";
@@ -45,12 +46,13 @@
     let hiddenMode = $state(true)
     let difficulty = $state("Medium")
     let botSpeed = $state(2)
+    let isLightMode = $state(mode.current === "light")
 
     const playerIDToColor = new Map<number, string>([
-        [1, "red-300"],
-        [2, "blue-300"],
-        [3, "amber-200"],
-        [4, "lime-200"],
+        [1, "[var(--red)]"],
+        [2, "[var(--blue)]"],
+        [3, "[var(--yellow)]"],
+        [4, "[var(--green)]"],
     ])
 
     $effect(() => {
@@ -127,6 +129,14 @@
                         <Label for="hidden-mode">Bots </Label>
                         <div class="w-25">
                             <Switch id="bots" bind:checked={game.TurnOnBots}/>
+                        </div>
+                    </div>
+
+                    <Separator />
+                    <div class="flex justify-between gap-3">
+                        <Label for="hidden-mode">Light Mode </Label>
+                        <div class="w-25">
+                            <Switch id="bots" bind:checked={isLightMode} onclick={toggleMode}/>
                         </div>
                     </div>
                 </div>

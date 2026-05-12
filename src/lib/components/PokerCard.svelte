@@ -5,6 +5,7 @@
     let { card, isIllegal, minify }: { card: Card, isIllegal: boolean | undefined, minify: boolean | undefined } = $props()
 
 
+
     const symbol = $derived(suitToSymbol.get(card.Suit))
     const color = $derived(suitToColor.get(card.Suit))
 </script>
@@ -23,7 +24,7 @@
 <!-- for safelist -->
 <span class="text-red-500"></span>
 <span class="text-black"></span>
-<span class="text-red-300"></span>
-<span class="text-blue-300"></span>
-<span class="text-amber-200"></span>
-<span class="text-lime-200"></span>
+<span class="text-[var(--red)]"></span>
+<span class="text-[var(--blue)]"></span>
+<span class="text-[var(--yellow)]"></span>
+<span class="text-[var(--green)]"></span>

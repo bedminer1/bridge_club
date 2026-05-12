@@ -10,7 +10,7 @@
 	injectAnalytics({ mode: dev ? 'development' : 'production' })
 </script>
 
-<ModeWatcher />
+<ModeWatcher defaultMode="dark" />
 <div class="absolute top-4 left-4">
 	<div class="flex gap-3">
 		<a href="/" class={page.url.pathname === "/" ? "opacity-100" : "opacity-55"}><Banana /></a>
