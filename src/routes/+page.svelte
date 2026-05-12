@@ -138,7 +138,7 @@
                     {#each player.PlayedCards as card, index}
                      <button 
                         disabled={true}>
-                        <div class="relative ml-[-1rem] z-{index} hover:z-40 hover:-translate-y-1 disabled:opacity-50">
+                        <div class="relative ml-[-1rem] z-{index} brightness-95 hover:brightness-125 hover:shadow-amber-300 hover:shadow-xl/15 hover:z-40 hover:-translate-y-1 disabled:opacity-50">
                             <PokerCard card={card} isIllegal={true}/>
                         </div>
                     </button>
@@ -158,7 +158,7 @@
                 <p class="mb-2">Player {player.ID}</p>
                 <div class="flex pl-4">
                     {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
-                        <div class="relative ml-[-1rem] z-{index} transition-transform hover:z-40 hover:-translate-y-1">
+                        <div class="relative ml-[-1rem] z-{index} transition-transform brightness-95 hover:brightness-125 hover:shadow-amber-300 hover:shadow-xl/15 hover:z-40 hover:-translate-y-1">
                             <PokerCard card={card} isIllegal={false}/>
                         </div>
                     {/each}
