@@ -259,11 +259,11 @@
 </div>
 
 <Dialog.Root onOpenChange={()=>openSaveDialog = true} open={openSaveDialog}>
-    <!-- <Dialog.Trigger>
+    <Dialog.Trigger>
         <Button>
             For Testing, Ignore
         </Button>
-    </Dialog.Trigger> -->
+    </Dialog.Trigger>
     <Dialog.Content class="w-[40%]">
         <Dialog.Header>
         <Dialog.Title>{game.Winner} Won!</Dialog.Title>
@@ -283,16 +283,7 @@
 	            <input type="hidden" name="botDifficulty" bind:value={difficulty}>
                 
                 <!-- User Info -->
-                <div class="flex flex-col gap-2 w-full">
-                    <div class="flex w-full justify-between gap-4">
-                        <Label class="w-[60px] pr-6" for="username">Username</Label>
-                        <Input class="w-52" name="username" bind:value={username} />
-                    </div>
-                    <div class="flex w-full justify-between gap-4">
-                        <Label class="w-[60px] pr-6" for="password">Password</Label>
-                    </div>
-                </div>
-                <input type="hidden" name="username" bind:value={username}>
+                <input type="hidden" name="userID" bind:value={userID}>
 
                 <!-- Betting Info -->
                 <input type="hidden" name="trumpSuit" value={game.Trump}>

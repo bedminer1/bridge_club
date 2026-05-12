@@ -8,7 +8,7 @@ export async function load({ cookies }) {
     // validate session cookie
     const token = cookies.get("session")
     if (token === undefined) {
-        console.log("Cookie not found")
+        console.log("error: Cookie not found")
         return {
             userID: 0
         }
@@ -29,6 +29,11 @@ export async function load({ cookies }) {
         }
     }
 
+    console.log(
+        "Username: ", user.username,
+        "\nUserID: ", user.id
+    )
+
     return {
         userID: session.userID,
         username: user.username
@@ -38,30 +43,7 @@ export async function load({ cookies }) {
 export const actions = {
     saveMatch: async ({ request }) => {
         const data = await request.formData()
-        const username = data.get('username')
-        const password = data.get('password')
-        const hashedPassword = await hashPassword(password as string)
-
-        if (typeof username !== 'string' || typeof password !== 'string') {
-            throw new Error('Invalid username or password')
-        }
-
-        // fetch from users, check if exists, get userID
-        const user = (await db
-            .select()
-            .from(users)
-            .where(eq(users.username, username)))[0]
-
-        if (!user) {
-            console.log('User not found')
-            return
-        }
-        const isValid = hashedPassword === user.password
-        if (!isValid) {
-            console.log('Incorrect password', user.password, hashedPassword)
-            return
-        }
-
+        const userID = Number(data.get("userID"))
         const date = Number(data.get('date'))
         const botDifficulty = String(data.get('botDifficulty'))
 
@@ -84,7 +66,7 @@ export const actions = {
         
         await db.insert(matches)
                 .values({
-                    userID: user.id,
+                    userID,
                     date,
                     botDifficulty,
                     trumpSuit,
