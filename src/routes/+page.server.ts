@@ -29,10 +29,10 @@ export async function load({ cookies }) {
         }
     }
 
-    console.log(
-        "Username: ", user.username,
-        "\nUserID: ", user.id
-    )
+    // console.log(
+    //     "Username: ", user.username,
+    //     "\nUserID: ", user.id
+    // )
 
     return {
         userID: session.userID,

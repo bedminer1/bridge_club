@@ -11,8 +11,8 @@
 
     import { enhance } from "$app/forms";
     import { Info, Settings, LogIn, LogOut } from "@lucide/svelte"
-    import PokerCard from "./PokerCard.svelte";
-    import HandDisplay from "./HandDisplay.svelte";
+    import PokerCard from "$lib/components/PokerCard.svelte";
+    import HandDisplay from "$lib/components/HandDisplay.svelte";
     
     import { suitToSymbol } from "$lib/utils"
     import { initGame } from "$lib/game/init";
@@ -179,7 +179,7 @@
                     disabled={isCardIllegal(game, player, card)}
                     onclick={()=>playCard(game, card, player)}>
                     <HandDisplay index={index}>
-                        <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)}/>
+                        <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
                     </HandDisplay>
                 </button>
                 {/each}
@@ -189,7 +189,7 @@
                      <button 
                         disabled={true}>
                         <HandDisplay index={index}>
-                            <PokerCard card={card} isIllegal={true}/>
+                            <PokerCard card={card} isIllegal={true} minify={false}/>
                         </HandDisplay>
                     </button>
                     {/each}
@@ -223,7 +223,7 @@
                 <div class="flex pl-4">
                     {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
                         <HandDisplay index={index}>
-                            <PokerCard card={card} isIllegal={false}/>
+                            <PokerCard card={card} isIllegal={false} minify={false}/>
                         </HandDisplay>
                     {/each}
                 </div>
@@ -259,11 +259,11 @@
 </div>
 
 <Dialog.Root onOpenChange={()=>openSaveDialog = true} open={openSaveDialog}>
-    <Dialog.Trigger>
+    <!-- <Dialog.Trigger>
         <Button>
             For Testing, Ignore
         </Button>
-    </Dialog.Trigger>
+    </Dialog.Trigger> -->
     <Dialog.Content class="w-[40%]">
         <Dialog.Header>
         <Dialog.Title>{game.Winner} Won!</Dialog.Title>
