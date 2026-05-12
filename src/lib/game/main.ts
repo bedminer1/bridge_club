@@ -82,7 +82,7 @@ export function playCard(game: Game, card: Card, player: Player) {
         }
     } else {
         const team2Sets = game.Team2.reduce((sum, player) => sum + player.Sets, 0)
-        const team2Target = 6 + game.BetSize
+        const team2Target = 8 - game.BetSize
         if (team2Sets === team2Target) {
             game.Winner = "Team 2"
         }
