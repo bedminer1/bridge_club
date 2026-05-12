@@ -145,6 +145,14 @@
             PlayerID: playerID,
             CardPlayed: card
         })
+
+        const player = game.Players[playerID - 1]
+        const hand = player.Cards
+        const index = hand.findIndex(c =>
+            c.Suit === card.Suit && c.Value === card.Value
+        )
+        hand.splice(index, 1)
+
         game.WhoseTurn = game.WhoseTurn === 4 ? 1 : game.WhoseTurn + 1 
 
         // check for end of stack
@@ -171,6 +179,12 @@
                 if (aSuit === bSuit) return bValue - aValue
                 return 0
             })
+
+            let winnerID = game.Moves[0].PlayerID
+            let winner = game.Players.find(player => player.ID = winnerID)!
+            winner.Sets++
+            game.WhoseTurn = winner.ID
+            game.Moves = []
         }
     }
 </script>
@@ -180,13 +194,22 @@
         <p>Trump Suit: {game.Trump}</p>
         <p>Bet Size: {game.BetSize}</p>
     </div>
+    <div>
+        {#each game.Moves as move}
+        <p>Player {move.PlayerID} played {move.CardPlayed.Rank} {move.CardPlayed.Suit}</p>
+        {/each}
+    </div>
     <div class="flex gap-10">
         {#each game.Players as player}
         <div>
             <p>P{player.ID}:</p>
-            {#each player.Cards as card}
-            <div>{card.Rank} {card.Suit}</div>
-            {/each}
+            <div class="flex flex-col gap-2">
+                {#each player.Cards as card}
+                <Button onclick={()=>playCard(card, player.ID)}>
+                    {card.Rank} {card.Suit}
+                </Button>
+                {/each}
+            </div>
         </div>
         {/each}
     </div>
