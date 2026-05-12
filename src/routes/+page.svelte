@@ -10,6 +10,7 @@
     import * as Form from "$lib/components/ui/form/index.js";
 
     import { enhance } from "$app/forms";
+    import { browser } from "$app/environment";
     import { Info, Settings, LogIn, LogOut } from "@lucide/svelte"
     import PokerCard from "./PokerCard.svelte";
     import HandDisplay from "./HandDisplay.svelte";
@@ -19,7 +20,6 @@
     import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
     import { isCardIllegal, playCard } from "$lib/game/main";
     import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
-  import { browser } from "$app/environment";
 
     let game = $state(initGame())
 
@@ -56,11 +56,11 @@
     let botSpeed = $state(3)
 
     $effect(() => {
-        if (!game || botSpeed == undefined || game.WhoseTurn === 1 || !game.TurnOnBots) return
         if (game.Winner !== "") {
             openSaveDialog = true
             return
         }
+        if (!game || botSpeed == undefined || game.WhoseTurn === 1 || !game.TurnOnBots) return
 
         const interval = setInterval(() => {
             if (game.IsBettingPhase) {
