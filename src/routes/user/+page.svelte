@@ -46,13 +46,13 @@
                     {#each matchRecords as matchRecord}
                         <a href="/user/{matchRecord.id}" class="block">
                             <Card.Root class="w-full rounded-lg border-border hover:border-accent/30 transition-colors">
-                                <div class="flex items-center p-4 gap-4">
+                                <div class="flex items-center justify-between p-4 gap-4">
                                     <!-- Result badge -->
                                     <div class="w-16 shrink-0">
                                         <span
                                             class="text-sm font-bold {matchRecord.wonMatch ? 'text-green' : 'text-red'}"
                                         >
-                                            {matchRecord.wonMatch ? "WIN" : "LOSS"}
+                                            {matchRecord.wonMatch ? "Victory" : "Defeat"}
                                         </span>
                                     </div>
 
@@ -65,7 +65,7 @@
                                             <span>|</span>
                                             <span>{formatDate(matchRecord.date)}</span>
                                         </div>
-                                        <div class="mt-2 flex">
+                                        <div class="mt-2 ml-4 flex">
                                             {#each JSON.parse(matchRecord.player1Hand) as card, index}
                                                 <HandDisplay {index}>
                                                     <PokerCard card={card} isIllegal={false} minify={true} />

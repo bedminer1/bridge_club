@@ -17,7 +17,7 @@
     class="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 border-b border-border bg-background/80 backdrop-blur-sm"
 >
     <!-- Left section -->
-    <div class="flex items-center gap-2">
+    <div class="flex items-center">
         <!-- Brand + separator -->
         <a href="/" class="font-bold text-base text-foreground hover:text-accent transition-colors no-underline mr-3">
             Bridge Club
@@ -47,13 +47,13 @@
             >
                 <Info class="w-4 h-4" />
             </a>
-        </div>
-
+            
+            
         <!-- Settings popover (only when game is active) -->
         {#if headerState.game}
             <Popover.Root>
                 <Popover.Trigger>
-                    <button class="p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors ml-1">
+                    <button class="p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors">
                         <Settings class="w-4 h-4" />
                     </button>
                 </Popover.Trigger>
@@ -91,17 +91,20 @@
                 </Popover.Content>
             </Popover.Root>
         {/if}
+        </div>
+
     </div>
 
     <!-- Right section -->
     <div class="flex items-center gap-3">
-        <button
-            disabled
-            class="p-1.5 rounded-md text-muted-foreground opacity-30 cursor-not-allowed"
-            title="Notifications (coming soon)"
-        >
-            <Bell class="w-4 h-4" />
-        </button>
+        <Popover.Root>
+            <Popover.Trigger class="p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors">
+                <Bell class="w-4 h-4" />
+            </Popover.Trigger>
+            <Popover.Content class="text-xs mr-2 mt-2" sideOffset={8}>
+                Notifications Cleared
+            </Popover.Content>
+        </Popover.Root>
 
         <a
             href="/user"

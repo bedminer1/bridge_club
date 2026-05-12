@@ -10,8 +10,8 @@
 </script>
 
 <p>
-    <span class="text-amber-200">P1[{getSets(1)}]</span> |
-    <span class="text-blue-300">P{partner}[{getSets(partner!)}]</span> :
-    <span class="text-red-300">P{opponents[0]}[{getSets(opponents[0])}]</span> |
-    <span class="text-red-300">P{opponents[1]}[{getSets(opponents[1])}]</span>
+    <span class="text-[var(--red)]">P1[{getSets(1)}]</span> |
+    <span class="text-[var(--blue)]">P{partner}[{getSets(partner!)}]</span> :
+    <span class="text-[var(--yellow)]">P{opponents[0]}[{getSets(opponents[0])}]</span> |
+    <span class="text-[var(--green)]">P{opponents[1]}[{getSets(opponents[1])}]</span>
 </p>

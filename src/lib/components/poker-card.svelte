@@ -1,11 +1,15 @@
 <script lang="ts">
-    import { suitToColor, suitToSymbol } from "$lib/utils";
+    import { suitToSymbol } from "$lib/utils";
     import { Crown } from "@lucide/svelte"
 
     let { card, isIllegal, minify }: { card: Card, isIllegal: boolean | undefined, minify: boolean | undefined } = $props()
 
     const symbol = $derived(suitToSymbol.get(card.Suit))
-    const color = $derived(suitToColor.get(card.Suit))
+
+    /** Card suit text color — use explicit hex values to avoid Tailwind JIT issues */
+    const cardColor = $derived(
+        card.Suit === "Heart" || card.Suit === "Diamond" ? "#dc2626" : "#111827"
+    )
 </script>
 
 <div class="relative {minify ? "w-[35px] h-[40px] text-sm" : "w-[43px] h-[52px] text-sm sm:w-[50px] sm:h-[60px] sm:text-lg"}">
@@ -17,6 +21,6 @@
             ? "border-muted cursor-not-allowed"
             : "border-border cursor-grab"}"
     >
-        <p class="text-{color} {isIllegal ? 'opacity-60' : ''} leading-none">{card.Rank}<br>{symbol}</p>
+        <p class="{isIllegal ? 'opacity-60' : ''} leading-none" style="color: {cardColor}">{card.Rank}<br>{symbol}</p>
     </div>
 </div>
