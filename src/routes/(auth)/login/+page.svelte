@@ -20,7 +20,7 @@
 </script>
 
 <div class="flex justify-center items-center w-full h-screen">
-    <Card.Root class="w-[40%]">
+    <Card.Root class="sm:w-[400px] w-[70%]">
       <Card.Header>
         <Card.Title>Log In</Card.Title>
         <Card.Description>Sign in to your account</Card.Description>

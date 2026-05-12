@@ -25,7 +25,7 @@
 </script>
 
 <div class="flex justify-center items-center w-full h-screen">
-    <Card.Root class="w-[40%]">
+    <Card.Root class="sm:w-[400px] w-[70%]">
       <Card.Header>
         <Card.Title>Sign Up</Card.Title>
         <Card.Description>Create a new account</Card.Description>
