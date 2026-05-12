@@ -1,12 +1,12 @@
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 
-export const user = sqliteTable('users', {
+export const users = sqliteTable('users', {
 	id: integer('id').primaryKey(),
 	username: text('username').notNull(),
 	password: text('password').notNull(), // encrypted
 });
 
-export const match = sqliteTable('matches', {
+export const matches = sqliteTable('matches', {
 	id: integer("id").primaryKey(),
 
 	// Metadata

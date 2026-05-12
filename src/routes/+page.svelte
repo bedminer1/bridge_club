@@ -7,17 +7,24 @@
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
+    import * as Form from "$lib/components/ui/form/index.js";
 
-    import { Info, Settings } from "@lucide/svelte"
+    import { enhance } from "$app/forms";
+    import { Info, Settings, LogIn } from "@lucide/svelte"
     import PokerCard from "./PokerCard.svelte";
+    
     import { suitToSymbol } from "$lib/utils"
-
     import { initGame } from "$lib/game/init";
     import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
     import { isCardIllegal, playCard } from "$lib/game/main";
     import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
 
     let game = $state(initGame())
+
+    let loggedIn: boolean = $state(false)
+    let closeDialogue: boolean = $state(false)
+    let username: string = $state("")
+    let password: string = $state("")
 
     // form inputs
     let betSize: number = $state(1)
@@ -48,6 +55,37 @@
 
 <div class="flex flex-col gap-10 w-full h-screen  items-center overflow-auto">
     <div class="flex justify-end w-full p-3 gap-4">
+        {#if !loggedIn}
+        <Dialog.Root open={closeDialogue}>
+        <Dialog.Trigger>
+            <LogIn />
+        </Dialog.Trigger>
+        <Dialog.Content class="w-[320px]">
+            <Dialog.Header>
+            <Dialog.Title class="text-center mb-2">Login</Dialog.Title>
+            <form class="flex flex-col gap-2 mb-2">
+                <div class="flex justify-between gap-4">
+                    <Label class="w-[60px] pr-6" for="username">Username</Label>
+                    <Input bind:value={username} />
+                </div>
+                <div class="flex justify-between gap-4">
+                    <Label class="w-[60px] pr-6" for="password">Password</Label>
+                    <Input bind:value={password} />
+                </div>
+            </form>
+            <div class="flex justify-center">
+                <Button class="w-[80px]" 
+                onclick={()=>{
+                    loggedIn = true; 
+                    closeDialogue = true}}>
+                    Login
+                </Button>
+            </div>
+            </Dialog.Header>
+        </Dialog.Content>
+        </Dialog.Root>
+        {/if}
+
         <Popover.Root>
             <Popover.Trigger><Info /></Popover.Trigger>
             <Popover.Content class="w-auto mr-2 mt-1">
@@ -171,7 +209,7 @@
 
         <div class="flex flex-col justify-center gap-2">
             <div class="flex gap-2">
-                <Input bind:value={betSize} class="w-[60px] text-center" type="numeric" placeholder="1-7"/>
+                <Input bind:value={betSize} class="w-[60px] text-center" type="number" placeholder="1-7"/>
         
                 <Select.Root type="single" bind:value={bettedSuit}>
                 <Select.Trigger class="w-[70px]">
@@ -197,11 +235,25 @@
 </div>
 
 <Dialog.Root open={game.Winner !== ""}>
+    <Dialog.Trigger>
+        <LogIn />
+    </Dialog.Trigger>
     <Dialog.Content>
         <Dialog.Header>
         <Dialog.Title>{game.Winner} Won!</Dialog.Title>
         <Dialog.Description>
-            {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
+            <p class="mb-4">
+                {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
+            </p>
+
+            <form action="" method="POST" class="flex flex-col items-end" use:enhance>
+                <input type="hidden" name="username" bind:value={username}>
+                <input type="hidden" name="password" bind:value={password}>
+
+                <Form.Button class="w-[60px]">
+                    Save
+                </Form.Button>
+            </form>
         </Dialog.Description>
         </Dialog.Header>
     </Dialog.Content>
