@@ -12,6 +12,7 @@
     import { enhance } from "$app/forms";
     import { Info, Settings, LogIn } from "@lucide/svelte"
     import PokerCard from "./PokerCard.svelte";
+    import HandDisplay from "./HandDisplay.svelte";
     
     import { suitToSymbol } from "$lib/utils"
     import { initGame } from "$lib/game/init";
@@ -168,9 +169,9 @@
                 <button
                     disabled={isCardIllegal(game, player, card)}
                     onclick={()=>playCard(game, card, player)}>
-                    <div class="relative ml-[-1rem] z-{index} hover:z-40 hover:-translate-y-1">
+                    <HandDisplay index={index}>
                         <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)}/>
-                    </div>
+                    </HandDisplay>
                 </button>
                 {/each}
                 {#if !hiddenMode}
@@ -178,9 +179,9 @@
                     {#each player.PlayedCards as card, index}
                      <button 
                         disabled={true}>
-                        <div class="relative ml-[-1rem] z-{index} transition-transform brightness-95 hover:brightness-125 hover:shadow-amber-300 hover:shadow-xl/15 hover:z-40 hover:-translate-y-1 disabled:opacity-50">
+                        <HandDisplay index={index}>
                             <PokerCard card={card} isIllegal={true}/>
-                        </div>
+                        </HandDisplay>
                     </button>
                     {/each}
                 {/if}
@@ -198,9 +199,9 @@
                 <p class="mb-2">Player {player.ID}</p>
                 <div class="flex pl-4">
                     {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
-                        <div class="relative ml-[-1rem] z-{index} transition-transform brightness-95 hover:brightness-125 hover:shadow-amber-300 hover:shadow-xl/15 hover:z-40 hover:-translate-y-1">
+                        <HandDisplay index={index}>
                             <PokerCard card={card} isIllegal={false}/>
-                        </div>
+                        </HandDisplay>
                     {/each}
                 </div>
             </div>
