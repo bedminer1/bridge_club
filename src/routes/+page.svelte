@@ -2,14 +2,17 @@
     import * as Select from "$lib/components/ui/select/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import { Separator } from "$lib/components/ui/separator/index.js";
 
     import { initGame } from "$lib/game/init";
     import { raiseBet } from "$lib/game/betting";
 
     let game = $state(initGame())
 
+    // form inputs
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
+    let desiredCard: Card | undefined = $state()
 
     function playCard(card: Card, playerID: number) {
         if (game.IsBettingPhase) {
@@ -20,6 +23,10 @@
         if (game.WhoseTurn !== playerID) {
             console.log("Can't play when not your turn")
             return
+        }
+
+        if (game.Moves.length === 0) {
+            game.TurnSuit = card.Suit
         }
 
         game.Moves.push({
@@ -67,23 +74,24 @@
         winner.Sets++
         game.WhoseTurn = winner.ID
         game.Moves = []
+        game.TurnSuit = ""
 
         // check for win
     }
 </script>
 
 <div class="flex flex-col gap-10 w-full h-screen justify-center items-center">
-    <div>
+    <div class="grid grid-cols-2 gap-2">
         <p>Trump Suit: {game.Trump}</p>
         <p>Bet Size: {game.BetSize}</p>
         <p>Who's Turn: Player {game.WhoseTurn}</p>
+        <p>Current Suit: {game.TurnSuit}</p>
     </div>
 
+    {#if !game.IsBettingPhase}
     <div>
-        {#if !game.IsBettingPhase}
         <p>Team 1: {game.Team1[0].ID}, {game.Team1[1].ID}</p>
         <p>Team 2: {game.Team2[0].ID}, {game.Team2[1].ID}</p>
-        {/if}
     </div>
     <div>
         {#each game.Moves as move}
@@ -97,7 +105,11 @@
             <p>Sets: {player.Sets}</p>
             <div class="flex flex-col gap-2">
                 {#each player.Cards as card}
-                <Button onclick={()=>playCard(card, player.ID)}>
+                <Button 
+                    disabled={game.WhoseTurn !== player.ID 
+                    || (game.TurnSuit !== "" && game.TurnSuit !== card.Suit)
+                    || (!game.TrumpPlayed && card.Suit === game.Trump)}
+                    onclick={()=>playCard(card, player.ID)}>
                     {card.Rank} {card.Suit}
                 </Button>
                 {/each}
@@ -105,29 +117,42 @@
         </div>
         {/each}
     </div>
+    {:else}
+     <div>
+            <p>P{game.Players[0].ID}:</p>
+            <p>Sets: {game.Players[0].Sets}</p>
+            <div class="flex flex-col gap-2">
+                {#each game.Players[0].Cards as card}
+                <Button>
+                    {card.Rank} {card.Suit}
+                </Button>
+                {/each}
+            </div>
+        </div>
 
-    {#if game.IsBettingPhase}
-    <div class="flex flex-col justify-center items-center gap-2">
-        <div class="flex gap-2">
-            <Input bind:value={betSize} type="number" placeholder="1 to 7"/>
-    
-            <Select.Root type="single" bind:value={bettedSuit}>
-            <Select.Trigger class="w-[180px]">
-                {bettedSuit}
-            </Select.Trigger>
-            <Select.Content>
-                <Select.Item value="Club">Club</Select.Item>
-                <Select.Item value="Diamond">Diamond</Select.Item>
-                <Select.Item value="Heart">Heart</Select.Item>
-                <Select.Item value="Spades">System</Select.Item>
-            </Select.Content>
-            </Select.Root>
+        <div class="flex flex-col justify-center items-center gap-2">
+            <div class="flex gap-2">
+                <Input bind:value={betSize} type="number" placeholder="1 to 7"/>
+        
+                <Select.Root type="single" bind:value={bettedSuit}>
+                <Select.Trigger class="w-[180px]">
+                    {bettedSuit}
+                </Select.Trigger>
+                <Select.Content>
+                    <Select.Item value="Club">Club</Select.Item>
+                    <Select.Item value="Diamond">Diamond</Select.Item>
+                    <Select.Item value="Heart">Heart</Select.Item>
+                    <Select.Item value="Spades">Spades</Select.Item>
+                </Select.Content>
+                </Select.Root>
+            </div>
+            <div class="flex gap-2">
+                <Button>Pass</Button>
+                <Button onclick={()=>raiseBet(game, betSize, bettedSuit)}>Raise</Button>
+            </div>
         </div>
-        <div class="flex gap-2">
-            <Button>Pass</Button>
-            <Button onclick={()=>raiseBet(game, betSize, bettedSuit)}>Raise</Button>
-        </div>
-    </div>
     {/if}
+
+
 </div>
 

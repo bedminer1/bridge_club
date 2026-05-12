@@ -51,7 +51,8 @@ export function initGame(): Game {
         IsBettingPhase: true,
         Moves: [],
         WhoseTurn: 1,
-        TrumpPlayed: false
+        TrumpPlayed: false,
+        TurnSuit: "",
     }
 }
 

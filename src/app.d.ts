@@ -20,6 +20,7 @@ interface Game {
 	Moves: Move[]
 	WhoseTurn: number
 	TrumpPlayed: boolean
+	TurnSuit: string
 }
 
 interface Card {
