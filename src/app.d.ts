@@ -21,6 +21,7 @@ interface Game {
 	WhoseTurn: number
 	TrumpPlayed: boolean
 	TurnSuit: string
+	Winner: string
 }
 
 interface Card {

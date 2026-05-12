@@ -53,6 +53,7 @@ export function initGame(): Game {
         WhoseTurn: 1,
         TrumpPlayed: false,
         TurnSuit: "",
+        Winner: ""
     }
 }
 
