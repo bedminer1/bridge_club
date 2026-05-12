@@ -10,7 +10,7 @@
     import * as Form from "$lib/components/ui/form/index.js";
 
     import { enhance } from "$app/forms";
-    import { Info, Settings, LogIn } from "@lucide/svelte"
+    import { Info, Settings, LogIn, LogOut } from "@lucide/svelte"
     import PokerCard from "./PokerCard.svelte";
     import HandDisplay from "./HandDisplay.svelte";
     
@@ -23,7 +23,7 @@
     let game = $state(initGame())
 
     let loggedIn: boolean = $state(false)
-    let closeDialogue: boolean = $state(false)
+    let closeLoginDialog: boolean = $state(false)
     let username: string = $state("")
     let password: string = $state("")
 
@@ -58,37 +58,6 @@
 
 <div class="flex flex-col gap-10 w-full h-screen  items-center overflow-auto">
     <div class="flex justify-end w-full p-3 gap-4">
-        {#if !loggedIn}
-        <Dialog.Root open={closeDialogue}>
-        <Dialog.Trigger>
-            <LogIn />
-        </Dialog.Trigger>
-        <Dialog.Content class="w-[320px]">
-            <Dialog.Header>
-            <Dialog.Title class="text-center mb-2">Login</Dialog.Title>
-            <form class="flex flex-col gap-2 mb-2">
-                <div class="flex justify-between gap-4">
-                    <Label class="w-[60px] pr-6" for="username">Username</Label>
-                    <Input bind:value={username} />
-                </div>
-                <div class="flex justify-between gap-4">
-                    <Label class="w-[60px] pr-6" for="password">Password</Label>
-                    <Input bind:value={password} />
-                </div>
-            </form>
-            <div class="flex justify-center">
-                <Button class="w-[80px]" 
-                onclick={()=>{
-                    loggedIn = true; 
-                    closeDialogue = true}}>
-                    Login
-                </Button>
-            </div>
-            </Dialog.Header>
-        </Dialog.Content>
-        </Dialog.Root>
-        {/if}
-
         <Popover.Root>
             <Popover.Trigger><Info /></Popover.Trigger>
             <Popover.Content class="w-auto mr-2 mt-1">
@@ -143,6 +112,39 @@
             </Popover.Content>
         </Popover.Root>
 
+                {#if !loggedIn}
+        <Dialog.Root open={closeLoginDialog}>
+        <Dialog.Trigger>
+            <LogIn />
+        </Dialog.Trigger>
+        <Dialog.Content class="w-[320px]">
+            <Dialog.Header>
+            <Dialog.Title class="text-center mb-2">Login</Dialog.Title>
+            <form 
+                class="flex flex-col gap-2 mb-2"
+                onsubmit={()=>{
+                    loggedIn = true; 
+                    closeLoginDialog = true}}>
+                <div class="flex justify-between gap-4">
+                    <Label class="w-[60px] pr-6" for="username">Username</Label>
+                    <Input bind:value={username} />
+                </div>
+                <div class="flex justify-between gap-4">
+                    <Label class="w-[60px] pr-6" for="password">Password</Label>
+                    <Input bind:value={password} />
+                </div>
+                <div class="flex justify-center">
+                    <Form.Button class="w-[80px]">
+                        Login
+                    </Form.Button>
+                </div>
+            </form>
+            </Dialog.Header>
+        </Dialog.Content>
+        </Dialog.Root>
+        {:else}
+        <LogOut onclick={()=>loggedIn = false} />
+        {/if}
     </div>
     <div class="text-3xl">
         <p>Player {game.WhoseTurn}'s turn</p>
@@ -251,7 +253,9 @@
 
 <Dialog.Root open={game.Winner !== ""}>
     <Dialog.Trigger>
-        <LogIn />
+        <Button>
+            For Testing, Ignore
+        </Button>
     </Dialog.Trigger>
     <Dialog.Content>
         <Dialog.Header>
