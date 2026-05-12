@@ -2,6 +2,8 @@
     import * as Select from "$lib/components/ui/select/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import { Switch } from "$lib/components/ui/switch/index.js";
+    import { Label } from "$lib/components/ui/label/index.js";
 
     import { initGame } from "$lib/game/init";
     import { raiseBet } from "$lib/game/betting";
@@ -14,6 +16,7 @@
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
     let desiredCard: Card | undefined = $state()
+    let hiddenMode = $state(true)
 
     $effect(() => {
         setInterval(() => {
@@ -29,6 +32,10 @@
         <p>Who's Turn: Player {game.WhoseTurn}</p>
         <p>Current Suit: {game.TurnSuit}</p>
         <p>Winners: {game.Winner}</p>
+        <div class="flex items-center space-x-2">
+            <Label for="hidden-mode">Hidden Mode</Label>
+            <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+        </div>
     </div>
 
     {#if !game.IsBettingPhase}
@@ -43,7 +50,7 @@
         {/each}
     </div>
     <div class="flex gap-10">
-        {#each game.Players as player}
+        {#each hiddenMode ? [game.Players[0]] : game.Players as player}
         <div>
             <p>P{player.ID}:</p>
             <p>Sets: {player.Sets}</p>
