@@ -51,6 +51,12 @@ export function playCard(game: Game, card: Card, player: Player) {
     if (card.Suit === game.Trump) {
         game.TrumpPlayed = true
     }
+    if (card === game.PartnerCard) {
+        game.BetWinner.Partner = player
+        let opponents = game.Players.filter(p => p !== game.BetWinner && p !== player)
+        opponents[0].Partner = opponents[1]
+        opponents[1].Partner = opponents[0]
+    }
 
     game.Moves.push({
         PlayerID: player.ID,

@@ -130,6 +130,13 @@ export function autoPlayCardV2(game: Game) {
     const player = game.Players[game.WhoseTurn-1]
     const moves = game.Moves
     const playableCards = player.Cards.filter(card => !isCardIllegal(game, player, card))
+
+    let weakestCard = playableCards[0]
+    for (let card of playableCards) {
+        if (doesCard1Beat(game, weakestCard, card)) {
+            weakestCard = card
+        }
+    }
     
     const playedCards: Card[] = []
     for (let player of game.Players) {
@@ -173,17 +180,10 @@ export function autoPlayCardV2(game: Game) {
         }
 
         // else play weakest card
-       for (let card of playableCards) {
-            if (doesCard1Beat(game, cardToPlay, card)) {
-                cardToPlay = card
-            }
-        }
-        playCard(game, cardToPlay, player)
+        playCard(game, weakestCard, player)
         return
     } 
 
-
-    // TEMPORARY IMPORT FROM VERSION 1
     let currentWinningMove: Move = moves[0]
     for (let move of moves.slice(1)) {
         if (doesCard1Beat(game, move.CardPlayed, currentWinningMove.CardPlayed)) {
@@ -191,9 +191,42 @@ export function autoPlayCardV2(game: Game) {
         }
     }
 
+    // if eat
+    if (currentWinningMove.PlayerID !== player.Partner?.ID) {
+        // if last move, use weakest card needed to win 
+        if (moves.length === 3) {
+            let winningPlayableCards: Card[] = []
+            for (let card of playableCards) {
+                if (doesCard1Beat(game, card, currentWinningMove.CardPlayed)) {
+                    winningPlayableCards.push(card)
+                }
+            }
+            // else play weakest card
+            if (winningPlayableCards.length === 0) {
+                playCard(game, weakestCard, player)
+                return
+            }
+    
+            let weakestWinningCard: Card = winningPlayableCards[0]
+            for (let card of winningPlayableCards) {
+                if (doesCard1Beat(game, weakestWinningCard, card)) {
+                    weakestWinningCard = card
+                }
+            }
+            playCard(game, weakestWinningCard, player)
+            return
+        }
+    } else { // if teammate winning
+        // if last move, weakest
+        if (moves.length === 3) {
+            playCard(game, weakestCard, player)
+        }
+    }
+
     let cardToPlay: Card = playableCards[0]
     const winningCards = playableCards.filter(card => doesCard1Beat(game, card, currentWinningMove.CardPlayed))
 
+    // TEMPORARY IMPORT FROM VERSION 1
     // TODO: logic for keeping track of cards played
     if (winningCards.length !== 0) {
         // play strongest

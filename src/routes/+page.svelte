@@ -20,7 +20,7 @@
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
     let hiddenMode = $state(true)
-    let difficulty = $state("Easy")
+    let difficulty = $state("Medium")
 
     $effect(() => {
         if (game)
@@ -110,7 +110,13 @@
     <div class="flex flex-col gap-10">
         {#each game.Players as player}
         <div>
-            <p>Player {player.ID} ({player.Sets} sets) </p>
+            <div class="flex gap-2">
+                <p>Player {player.ID} ({player.Sets} sets) </p>
+                {#if !hiddenMode && player.Partner !== null}
+                <p>| Partner is Player {player.Partner?.ID}</p>
+                {/if}
+            </div>
+            
             <div class="flex h-[100px]">
                 {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
                 <button
