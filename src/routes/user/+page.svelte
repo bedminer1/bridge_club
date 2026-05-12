@@ -58,7 +58,7 @@
 
                                     <!-- Info -->
                                     <div class="flex-1 min-w-0">
-                                        <div class="flex gap-3 text-xs text-muted-foreground">
+                                        <div class="flex gap-3 mb-6 text-xs text-muted-foreground">
                                             <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>
                                             <span>|</span>
                                             <span>{matchRecord.botDifficulty}</span>

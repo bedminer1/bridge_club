@@ -33,9 +33,6 @@
 
     // Sync reactive game state to shared header state
     $effect(() => { headerState.game = game })
-    $effect(() => { headerState.difficulty = difficulty })
-    $effect(() => { headerState.botSpeed = botSpeed })
-    $effect(() => { headerState.hiddenMode = hiddenMode })
 
     let isLightMode = $state(false)
     $effect(() => { headerState.isLightMode = isLightMode })
@@ -52,9 +49,6 @@
     // form inputs
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
-    let hiddenMode = $state(true)
-    let difficulty = $state("Medium")
-    let botSpeed = $state(2)
 
     const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
     let remainingDeck = $derived(
@@ -79,19 +73,19 @@
             openSaveDialog = true
             return
         }
-        if (!game || botSpeed == undefined || game.WhoseTurn === 1 || !game.TurnOnBots) return
+        if (!game || headerState.botSpeed == undefined || game.WhoseTurn === 1 || !game.TurnOnBots) return
 
         const interval = setInterval(() => {
             if (game.IsBettingPhase) {
                 autoBet(game)
             } else {
-                if (difficulty === "Easy") {
+                if (headerState.difficulty === "Easy") {
                     autoPlayCard(game)
-                } else if (difficulty === "Medium") {
+                } else if (headerState.difficulty === "Medium") {
                     autoPlayCardV2(game)
                 }
             }
-        }, botSpeed * 1000);
+        }, headerState.botSpeed * 1000);
 
         return () => clearInterval(interval)
     })
@@ -118,15 +112,45 @@
         </div>
     </div>
 {:else}
+    <!-- Play area table -->
+    <div class="flex flex-col gap-4 w-full max-w-3xl">
+        <!-- Game info strip -->
+        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground px-1">
+            {#if game.BetSize > 0 || !game.IsBettingPhase}
+            <span>Trump <strong class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</strong></span>
+            <span>Bet <strong class="text-foreground font-medium">{game.BetSize}</strong></span>
+            {/if}
+            {#if !game.IsBettingPhase}
+            <span>Winner <strong class="text-foreground font-medium">P{game.BetWinner.ID}</strong></span>
+            <span>Partner <strong class="text-accent font-medium">{game.PartnerCard.Rank}{suitToSymbol.get(game.PartnerCard.Suit)}</strong></span>
+            <span class="text-muted-foreground">|</span>
+            <span>Set <strong class="text-foreground font-medium">{game.Players.reduce((s,p) => s + p.Sets, 0)}/13</strong></span>
+            {/if}
+        </div>
+
+        <div class="rounded-xl border border-border bg-card/50 p-4 sm:p-6">
     {#if game.IsBettingPhase}
-    <div>
-        {#each game.Moves as move}
-        {#if move.CardPlayed.Value === 0}
-        <p>Player {move.PlayerID} passed</p>
-        {:else}
-        <p>Player {move.PlayerID} raised {move.CardPlayed.Value} {move.CardPlayed.Suit}</p>
-        {/if}
+    <div class="flex flex-col items-center gap-1">
+        {#each game.Moves.slice(-3) as move}
+            <div class="flex items-center gap-2 {move === game.Moves[game.Moves.length - 1] ? 'text-base font-medium' : 'text-xs text-muted-foreground/60'}">
+                <span class="text-{playerIDToColor.get(move.PlayerID)}">P{move.PlayerID}</span>
+                {#if move.CardPlayed.Value === 0}
+                    <span>passed</span>
+                {:else}
+                    <span>raised <strong>{move.CardPlayed.Value} {move.CardPlayed.Suit}</strong></span>
+                {/if}
+            </div>
         {/each}
+        {#if game.Moves.length < 4}
+            <div class="text-xs text-muted-foreground/40 mt-1">
+                waiting for P{game.WhoseTurn}...
+            </div>
+        {/if}
+        {#if game.Moves.length === 0}
+            <div class="text-xs text-muted-foreground/40">
+                P{game.WhoseTurn} to bet
+            </div>
+        {/if}
     </div>
     {:else}
     <div class="flex justify-center relative h-21 w-full">
@@ -154,33 +178,13 @@
 
 
     {#if !game.IsBettingPhase}
-    <!-- Game info cards -->
-    <div class="flex gap-4 text-sm">
-        <div class="rounded-md border border-border bg-card px-3 py-1.5">
-            <span class="text-muted-foreground text-xs">Trump</span>
-            <p class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</p>
-        </div>
-        <div class="rounded-md border border-border bg-card px-3 py-1.5">
-            <span class="text-muted-foreground text-xs">Bet</span>
-            <p class="text-accent font-medium">{game.BetSize}</p>
-        </div>
-        <div class="rounded-md border border-border bg-card px-3 py-1.5">
-            <span class="text-muted-foreground text-xs">Team 1</span>
-            <p class="text-foreground font-medium">{6 + game.BetSize} sets</p>
-        </div>
-        <div class="rounded-md border border-border bg-card px-3 py-1.5">
-            <span class="text-muted-foreground text-xs">Team 2</span>
-            <p class="text-foreground font-medium">{8 - game.BetSize} sets</p>
-        </div>
-    </div>
-
     <!-- MAIN PHASE -->
     <div class="flex flex-col gap-10">
-        {#each hiddenMode ? [game.Players[0]] : game.Players as player}
+        {#each headerState.hiddenMode ? [game.Players[0]] : game.Players as player}
         <div>
             <div class="flex gap-2">
                 <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
-                {#if !hiddenMode && player.Partner !== null}
+                {#if !headerState.hiddenMode && player.Partner !== null}
                 <p>| Partner is Player {player.Partner?.ID}</p>
                 {/if}
             </div>
@@ -189,13 +193,14 @@
                 {#each player.Cards  as card, index}
                 <button
                     disabled={isCardIllegal(game, player, card)}
-                    onclick={()=>playCard(game, card, player)}>
+                    onclick={()=>playCard(game, card, player)}
+                    class="text-left">
                     <HandDisplay index={index}>
                         <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
                     </HandDisplay>
                 </button>
                 {/each}
-                {#if !hiddenMode}
+                {#if !headerState.hiddenMode}
                 <Separator orientation="vertical" class="mx-10 h-full"/>
                     {#each player.PlayedCards as card, index}
                      <button 
@@ -210,7 +215,7 @@
         </div>
         {/each}
 
-        {#if hiddenMode}
+        {#if headerState.hiddenMode}
         <div class="flex gap-4">
             {#each game.Players.slice(1, 4) as player, index}
                 <div class="flex gap-2">
@@ -229,11 +234,11 @@
     {:else} 
     <!-- BETTING PHASE -->
         <div class="flex flex-col gap-10">
-            {#each hiddenMode ? [game.Players[0]] : game.Players as player}
+            {#each headerState.hiddenMode ? [game.Players[0]] : game.Players as player}
             <div class="flex flex-col h-[100px]">
                 <p class="mb-2 text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
                 <div class="flex pl-4">
-                    {#each !hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
+                    {#each !headerState.hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
                         <HandDisplay index={index}>
                             <PokerCard card={card} isIllegal={false} minify={false}/>
                         </HandDisplay>
@@ -244,30 +249,35 @@
         </div>
 
         <div class="flex flex-col justify-center gap-2">
-            <div class="flex gap-2">
-                <Input bind:value={betSize} class="w-[60px] text-center numberInput" type="number" placeholder="1-7"/>
-        
-                <Select.Root type="single" bind:value={bettedSuit}>
-                <Select.Trigger class="w-[70px]">
-                    <p class="text-xl">{suitToSymbol.get(bettedSuit)}</p>
-                </Select.Trigger>
-                <Select.Content>
-                    <Select.Item value="Club">Club</Select.Item>
-                    <Select.Item value="Diamond">Diamond</Select.Item>
-                    <Select.Item value="Heart">Heart</Select.Item>
-                    <Select.Item value="Spades">Spades</Select.Item>
-                </Select.Content>
-                </Select.Root>
-            </div>
-            <div class="flex gap-2">
-                <Button onclick={()=>passBet(game)}>Pass</Button>
-                <Button 
-                variant="destructive"
-                onclick={()=>raiseBet(game, betSize, bettedSuit)}
-                disabled={!isLegalRaise(game, betSize, bettedSuit)}>Raise</Button>
+            <div class="flex flex-col gap-2 items-start w-[45%]">
+                <div class="flex gap-2 w-full">
+                    <Input bind:value={betSize} class="text-center numberInput flex-1" type="number" placeholder="1-7"/>
+                    <Select.Root type="single" bind:value={bettedSuit}>
+                    <Select.Trigger class="flex-[3]">
+                        <p class="text-sm">{suitToSymbol.get(bettedSuit)} {bettedSuit}</p>
+                    </Select.Trigger>
+                    <Select.Content>
+                        <Select.Item value="Club">♣ Club</Select.Item>
+                        <Select.Item value="Diamond">♦ Diamond</Select.Item>
+                        <Select.Item value="Heart">♥ Heart</Select.Item>
+                        <Select.Item value="Spades">♠ Spades</Select.Item>
+                    </Select.Content>
+                    </Select.Root>
+                </div>
+                <div class="flex gap-2 w-full">
+                    <Button class="flex-1" onclick={()=>passBet(game)}>Pass</Button>
+                    <Button 
+                    variant="destructive"
+                    onclick={()=>raiseBet(game, betSize, bettedSuit)}
+                    disabled={!isLegalRaise(game, betSize, bettedSuit)}
+                    class="flex-1"
+                    >Raise</Button>
+                </div>
             </div>
         </div>
     {/if}
+        </div>
+    </div>
 {/if}
 </div>
 
@@ -293,7 +303,7 @@
 
                 <!-- Metadata -->
 	            <input type="hidden" name="date" value={Date.now()}>
-	            <input type="hidden" name="botDifficulty" bind:value={difficulty}>
+	            <input type="hidden" name="botDifficulty" bind:value={headerState.difficulty}>
                 
                 <!-- User Info -->
                 <input type="hidden" name="userID" bind:value={userID}>

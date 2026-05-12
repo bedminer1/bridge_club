@@ -17,7 +17,7 @@
     class="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 border-b border-border bg-background/80 backdrop-blur-sm"
 >
     <!-- Left section -->
-    <div class="flex items-center">
+    <div class="flex items-center gap-2">
         <!-- Brand + separator -->
         <a href="/" class="font-bold text-base text-foreground hover:text-accent transition-colors no-underline mr-3">
             Bridge Club
@@ -25,7 +25,7 @@
         <div class="w-px h-5 bg-border mr-3"></div>
 
         <!-- Nav icons -->
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-3">
             <a
                 href="/"
                 class="p-1.5 rounded-md {page.url.pathname === '/' ? 'text-accent bg-accent/10' : 'text-muted-foreground'} hover:text-accent hover:bg-accent/10 transition-colors"
