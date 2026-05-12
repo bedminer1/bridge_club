@@ -6,7 +6,9 @@
     import { Label } from "$lib/components/ui/label/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
+    import * as Popover from "$lib/components/ui/popover/index.js";
 
+    import { Info, Settings } from "@lucide/svelte"
     import PokerCard from "./PokerCard.svelte";
 
     import { initGame } from "$lib/game/init";
@@ -42,46 +44,50 @@
 
 
 <div class="flex flex-col gap-10 w-full h-screen  items-center overflow-auto">
-    <Dialog.Root open={game.Winner !== ""}>
-    <Dialog.Content>
-        <Dialog.Header>
-        <Dialog.Title>{game.Winner} Won!</Dialog.Title>
-        <Dialog.Description>
-            {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
-        </Dialog.Description>
-        </Dialog.Header>
-    </Dialog.Content>
-    </Dialog.Root>
     <div class="flex justify-end w-full p-3 gap-4">
-        <div class="flex flex-col gap-2">
-            <div class="flex items-center gap-2">
-                <Label for="difficulty">Difficulty:</Label>
-                <Select.Root type="single" bind:value={difficulty} disabled={!game.IsBettingPhase}>
-                    <Select.Trigger class="w-[100px]">
-                        {difficulty}
-                    </Select.Trigger>
-                    <Select.Content>
-                        <Select.Item value="Easy">Easy</Select.Item>
-                        <Select.Item value="Medium">Medium</Select.Item>
-                        <Select.Item value="Hard" disabled={true}>Hard</Select.Item>
-                    </Select.Content>
-                </Select.Root>
-            </div>
-            <div class="flex items-center space-x-2">
-                <Label for="hidden-mode">Hidden Mode: </Label>
-                <Switch id="hidden-mode" bind:checked={hiddenMode}/>
-            </div>
-        </div>
+        <Popover.Root>
+            <Popover.Trigger><Info /></Popover.Trigger>
+            <Popover.Content class="w-auto mr-2 mt-1">
+                <div>
+                    <p>The trump suit is {game.Trump}</p>
+                    <p>The bet size is {game.BetSize}</p>
+                     {#if !game.IsBettingPhase}
+                    <p>Player {game.BetWinner.ID} won the betting phase</p>
+                    <p>{game.PartnerCard.Rank} {game.PartnerCard.Suit} has been selected as the partner</p>
+                    <p>Team 1 needs {6 + game.BetSize}</p>
+                    <p>Team 2 needs {8 - game.BetSize}</p>
+                    {/if}
+                </div>
+            </Popover.Content>
+        </Popover.Root>
+        <Popover.Root>
+            <Popover.Trigger><Settings /></Popover.Trigger>
+            <Popover.Content class="border-2 w-auto mr-1 mt-1">
+                <div class="flex flex-col gap-4">
+                    <div class="flex flex-col gap-3">
+                        <Label for="difficulty">Difficulty</Label>
+                        <Select.Root type="single" bind:value={difficulty} disabled={!game.IsBettingPhase}>
+                            <Select.Trigger class="w-[100px]">
+                                {difficulty}
+                            </Select.Trigger>
+                            <Select.Content>
+                                <Select.Item value="Easy">Easy</Select.Item>
+                                <Select.Item value="Medium">Medium</Select.Item>
+                                <Select.Item value="Hard" disabled={true}>Hard</Select.Item>
+                            </Select.Content>
+                        </Select.Root>
+                    </div>
+                    <div class="flex flex-col gap-3">
+                        <Label for="hidden-mode">Hidden Mode </Label>
+                        <Switch id="hidden-mode" bind:checked={hiddenMode}/>
+                    </div>
+                </div>
+            </Popover.Content>
+        </Popover.Root>
+
     </div>
-    <div class="grid grid-cols-2 gap-2">
-        <p>Trump Suit: {game.Trump}</p>
-        <p>Bet Size: {game.BetSize}</p>
-        <p>Who's Turn: Player {game.WhoseTurn}</p>
-        <p>Current Suit: {game.TurnSuit}</p>
-        {#if !game.IsBettingPhase}
-        <p>Bet Winner: Player {game.BetWinner.ID}</p>
-        <p>Partner Card: {game.PartnerCard.Rank} {game.PartnerCard.Suit}</p>
-        {/if}
+    <div class="text-3xl">
+        <p>Player {game.WhoseTurn}'s turn</p>
     </div>
 
     {#if game.IsBettingPhase}
@@ -103,10 +109,6 @@
     {/if}
 
     {#if !game.IsBettingPhase}
-    <div>
-        <p>Team 1 needs {6 + game.BetSize}</p>
-        <p>Team 2 needs {8 - game.BetSize}</p>
-    </div>
     <div class="flex flex-col gap-10">
         {#each game.Players as player}
         <div>
@@ -182,7 +184,16 @@
             </div>
         </div>
     {/if}
-
-
 </div>
+
+<Dialog.Root open={game.Winner !== ""}>
+    <Dialog.Content>
+        <Dialog.Header>
+        <Dialog.Title>{game.Winner} Won!</Dialog.Title>
+        <Dialog.Description>
+            {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
+        </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+</Dialog.Root>
 
