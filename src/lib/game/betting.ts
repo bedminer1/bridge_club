@@ -1,6 +1,17 @@
 import { autoFindPartner } from "./bot"
 import { nextTurn } from "./main"
 
+export function isLegalRaise(game: Game, betSize: number, bettedSuit: string) {
+    const suitPriority = new Map<string, number>([
+        ["Club", 0],
+        ["Diamond", 1],
+        ["Heart", 2],
+        ["Spades", 3]
+    ])
+    
+    return betSize > game.BetSize || betSize === game.BetSize && suitPriority.get(bettedSuit)! > suitPriority.get(game.Trump)!
+}
+
 export function raiseBet(game: Game, betSize: number, bettedSuit: string) {
     game.BetSize = betSize
     game.Trump = bettedSuit

@@ -1,6 +1,6 @@
 import { playCard, nextTurn } from "./main"
 import { isCardIllegal, doesCard1Beat } from "./main"
-import { raiseBet, passBet } from "./betting"
+import { raiseBet, passBet, isLegalRaise } from "./betting"
 
 export function autoBet(game: Game) {
     const player = game.Players[game.WhoseTurn-1]
@@ -47,14 +47,7 @@ export function autoBet(game: Game) {
         }
     }
 
-    const suitPriority = new Map<string, number>([
-        ["Club", 0],
-        ["Diamond", 1],
-        ["Heart", 2],
-        ["Spades", 3]
-    ])
-
-    if (betSize > game.BetSize || betSize === game.BetSize && suitPriority.get(bettedSuit)! > suitPriority.get(game.Trump)!) {
+    if (isLegalRaise(game, betSize, bettedSuit)) {
         raiseBet(game, betSize, bettedSuit)
     } else {
         passBet(game) // pass

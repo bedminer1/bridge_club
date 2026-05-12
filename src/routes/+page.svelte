@@ -7,7 +7,7 @@
     import * as Dialog from "$lib/components/ui/dialog/index.js";
 
     import { initGame } from "$lib/game/init";
-    import { raiseBet, passBet } from "$lib/game/betting";
+    import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
     import { isCardIllegal, playCard } from "$lib/game/main";
     import { autoBet, autoPlayCard } from "$lib/game/bot";
 
@@ -137,7 +137,9 @@
             </div>
             <div class="flex gap-2">
                 <Button onclick={()=>passBet(game)}>Pass</Button>
-                <Button onclick={()=>raiseBet(game, betSize, bettedSuit)}>Raise</Button>
+                <Button 
+                onclick={()=>raiseBet(game, betSize, bettedSuit)}
+                disabled={!isLegalRaise(game, betSize, bettedSuit)}>Raise</Button>
             </div>
         </div>
     {/if}
