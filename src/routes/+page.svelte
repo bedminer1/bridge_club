@@ -22,16 +22,25 @@
 
     let game = $state(initGame())
 
-    let loggedIn: boolean = $state(false)
-    let closeLoginDialog: boolean = $state(false)
+    // user info
+    let username: string = $state(localStorage.getItem("username") ?? "")
+    let password: string = $state(localStorage.getItem("password") ?? "")
+    let loggedIn: boolean = $derived(username !== "")
+    let openLoginDialog: boolean = $state(false)
+    let openSaveDialog: boolean = $state(false)
+
+    function login() {
+        console.log("hi")
+        localStorage.setItem("username", username)
+        localStorage.setItem("password", password)
+        openLoginDialog = false
+    }
+
     let userTeam = $derived(game.Team1.some(p => p.ID === 1) ? game.Team1 : game.Team2)
 	let wonMatch = $derived(game.Winner === "Team 1" && userTeam === game.Team1 ||
 	               game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0)
     let partner = $derived(userTeam.find(p => p.ID !== 1)?.ID ?? 0)
 
-    // user info
-    let username: string = $state("")
-    let password: string = $state("")
 
 
     // form inputs
@@ -43,6 +52,10 @@
 
     $effect(() => {
         if (!game || botSpeed == undefined || game.WhoseTurn === 1 || !game.TurnOnBots) return
+        if (game.Winner !== "") {
+            openSaveDialog = true
+            return
+        }
 
         const interval = setInterval(() => {
             if (game.IsBettingPhase) {
@@ -58,8 +71,6 @@
 
         return () => clearInterval(interval)
     })
-
-   
 </script>
 
 
@@ -119,8 +130,8 @@
             </Popover.Content>
         </Popover.Root>
 
-                {#if !loggedIn}
-        <Dialog.Root open={closeLoginDialog}>
+        {#if !loggedIn}
+        <Dialog.Root onOpenChange={() => openLoginDialog = true} open={openLoginDialog}>
         <Dialog.Trigger>
             <LogIn />
         </Dialog.Trigger>
@@ -129,18 +140,17 @@
             <Dialog.Title class="text-center mb-2">Login</Dialog.Title>
             <form 
                 class="flex flex-col gap-2 mb-2"
-                onsubmit={()=>{
-                    loggedIn = true; 
-                    closeLoginDialog = true}}>
+                onsubmit={login}>
                 <div class="flex justify-between gap-4">
                     <Label class="w-[60px] pr-6" for="username">Username</Label>
                     <Input bind:value={username} />
                 </div>
-                <div class="flex justify-between gap-4">
+                <div class="flex justify-between gap-4 mb-8">
                     <Label class="w-[60px] pr-6" for="password">Password</Label>
                     <Input type="password" bind:value={password} />
                 </div>
-                <div class="flex justify-center">
+                <div class="flex justify-between">
+                    <a href="/signup" class="text-xs italic underline text-gray-200 h-full flex items-end pb-2">Not Signed Up?</a>
                     <Form.Button class="w-[80px]">
                         Login
                     </Form.Button>
@@ -258,13 +268,13 @@
     {/if}
 </div>
 
-<Dialog.Root open={game.Winner !== ""}>
+<Dialog.Root onOpenChange={()=>openSaveDialog = true} open={openSaveDialog}>
     <!-- <Dialog.Trigger>
         <Button>
             For Testing, Ignore
         </Button>
     </Dialog.Trigger> -->
-    <Dialog.Content>
+    <Dialog.Content class="w-[40%]">
         <Dialog.Header>
         <Dialog.Title>{game.Winner} Won!</Dialog.Title>
         <Dialog.Description>
@@ -272,18 +282,22 @@
                 {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
             </p>
 
-            <form action="" method="POST" class="flex flex-col items-end" use:enhance>
+            <form action="" 
+            method="POST" 
+            class="flex flex-col items-end" 
+            use:enhance={() => {openSaveDialog = false}}>
+
                 <!-- Metadata -->
 	            <input type="hidden" name="date" value={Date.now()}>
                 
                 <!-- User Info -->
                 {#if !loggedIn}
                 <div class="flex flex-col gap-2 w-full">
-                    <div class="flex w-2/3 justify-between gap-4">
+                    <div class="flex w-full justify-between gap-4">
                         <Label class="w-[60px] pr-6" for="username">Username</Label>
                         <Input class="w-52" name="username" bind:value={username} />
                     </div>
-                    <div class="flex w-2/3 justify-between gap-4">
+                    <div class="flex w-full justify-between gap-4">
                         <Label class="w-[60px] pr-6" for="password">Password</Label>
                         <Input class="w-52" name="password" type="password" bind:value={password} />
                     </div>
@@ -312,7 +326,7 @@
                     <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(player.PlayedCards)}>
                 {/each}
 
-                <Form.Button disabled={username === "" || password === ""} class="w-[60px]">
+                <Form.Button disabled={username === "" || password === ""} class="w-[60px] mt-4">
                     Save
                 </Form.Button>
             </form>

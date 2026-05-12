@@ -1,12 +1,14 @@
 import { db } from '$lib/server/db/index.js'
 import { users, matches } from "$lib/server/db/schema.js"
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { hashPassword } from '$lib/server/crypto.js';
 
 export const actions = {
     default: async ({ request }) => {
         const data = await request.formData()
         const username = data.get('username')
         const password = data.get('password')
+        const hashedPassword = await hashPassword(password as string)
 
         if (typeof username !== 'string' || typeof password !== 'string') {
             throw new Error('Invalid username or password')
@@ -16,9 +18,17 @@ export const actions = {
         const user = (await db
             .select()
             .from(users)
-            .where(and(eq(users.username, username))))[0]
+            .where(eq(users.username, username)))[0]
 
-        console.log(user)
+        if (!user) {
+            console.log('User not found')
+            return
+        }
+        const isValid = hashedPassword === user.password
+        if (!isValid) {
+            console.log('Incorrect password', user.password, hashedPassword)
+            return
+        }
 
         const date = Number(data.get('date'))
 
@@ -38,7 +48,7 @@ export const actions = {
         const player2Hand = String(data.get('player2Hand'))
         const player3Hand = String(data.get('player3Hand'))
         const player4Hand = String(data.get('player4Hand'))
-
+        
         await db.insert(matches)
                 .values({
                     userID: user.id,
