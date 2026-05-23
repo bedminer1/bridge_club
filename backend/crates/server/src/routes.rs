@@ -154,6 +154,7 @@ pub struct SaveMatchRequest {
     pub player3_hand: String,
     pub player4_hand: String,
     pub sets_data: Option<String>,
+    pub players: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -709,7 +710,7 @@ async fn get_matches(
         .query(
             "SELECT id, user_id, date, bot_difficulty, trump_suit, bet_size, bet_winner, \
              partner, won_match, player1_sets, player2_sets, player3_sets, player4_sets, \
-             player1_hand, player2_hand, player3_hand, player4_hand, sets_data \
+             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players \
              FROM matches WHERE user_id = ?1 ORDER BY date DESC",
             libsql::params![user.id],
         )
@@ -752,6 +753,7 @@ async fn get_matches(
                     player3_hand: row.get::<String>(15).unwrap_or_default(),
                     player4_hand: row.get::<String>(16).unwrap_or_default(),
                     sets_data: row.get::<Option<String>>(17).unwrap_or(None),
+                    players: row.get::<Option<String>>(18).unwrap_or(None),
                 });
             }
             Ok(None) => break,
@@ -814,8 +816,8 @@ async fn save_match(
         .execute(
             "INSERT INTO matches (user_id, date, bot_difficulty, trump_suit, bet_size, \
              bet_winner, partner, won_match, player1_sets, player2_sets, player3_sets, \
-             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             libsql::params![
                 user.id,
                 payload.date,
@@ -834,6 +836,7 @@ async fn save_match(
                 payload.player3_hand,
                 payload.player4_hand,
                 payload.sets_data,
+                payload.players,
             ],
         )
         .await;

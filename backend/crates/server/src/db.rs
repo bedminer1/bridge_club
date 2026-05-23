@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS matches (
     player4_hand    TEXT NOT NULL DEFAULT '[]',
 
     -- Completed sets data (JSON)
-    sets_data       TEXT
+    sets_data       TEXT,
+    players         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -100,8 +101,9 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
     let conn = pool.conn().await?;
     conn.execute_batch(SCHEMA_SQL).await?;
 
-    // Safe migration: add sets_data column if not exists
+    // Safe migration: add columns if they don't exist yet
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN sets_data TEXT;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players TEXT;").await;
 
     tracing::info!("Database schema up to date");
     Ok(())
@@ -141,6 +143,7 @@ pub struct MatchRow {
     pub player3_hand: String,
     pub player4_hand: String,
     pub sets_data: Option<String>,
+    pub players: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

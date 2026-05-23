@@ -11,6 +11,16 @@
     let { data } = $props()
     let { matchRecords, message, username } = $state(data)
 
+    /** Parse the players field from a match record, returning per-player names. */
+    function getPlayerName(matchRecord: any, seatIndex: number): string {
+        try {
+            const players = JSON.parse(matchRecord.players || "[]")
+            return players[seatIndex]?.username ?? `P${seatIndex + 1}`
+        } catch {
+            return `P${seatIndex + 1}`
+        }
+    }
+
     $effect(() => { headerState.username = username ?? "" })
     $effect(() => { headerState.loggedIn = message === "success" })
 </script>
@@ -66,14 +76,17 @@
 
                                     <!-- Info -->
                                     <div class="flex-1 min-w-0">
-                                        <div class="flex gap-3 mb-6 text-xs text-muted-foreground">
+                                        <div class="flex gap-3 mb-2 text-xs text-muted-foreground">
                                             <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>
                                             <span>|</span>
                                             <span>{matchRecord.botDifficulty}</span>
                                             <span>|</span>
                                             <span>{formatDate(matchRecord.date)}</span>
                                         </div>
-                                        <div class="mt-2 ml-4 flex">
+                                        <div class="text-xs text-muted-foreground mb-1">
+                                            {getPlayerName(matchRecord, 0)} vs {getPlayerName(matchRecord, 2)}, {getPlayerName(matchRecord, 3)}
+                                        </div>
+                                        <div class="flex">
                                             {#each JSON.parse(matchRecord.player1Hand) as card, index}
                                                 <HandDisplay {index}>
                                                     <PokerCard card={card} isIllegal={false} minify={true} />

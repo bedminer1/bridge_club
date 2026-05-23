@@ -18,6 +18,15 @@
         }
     }
 
+    /** Parse the players field: JSON array of { id, username } */
+    const playersMeta: Array<{ id: number; username: string }> = (() => {
+        try {
+            return JSON.parse(matchRecord.players || "[]")
+        } catch {
+            return []
+        }
+    })()
+
     const playerColor: Record<number, string> = {
         1: 'var(--red)',
         2: 'var(--blue)',
@@ -61,10 +70,12 @@
             {#each playerPlayedCards as playedCards, playerID}
                 {@const pid = playerID + 1}
                 {@const colorVar = pid === 1 ? '--red' : pid === 2 ? '--blue' : pid === 3 ? '--yellow' : '--green'}
+                {@const playerMeta = playersMeta[playerID]}
+                {@const playerName = playerMeta?.username ?? `P${pid}`}
                 {@const sets = matchRecord[`player${pid}Sets` as keyof MatchRecord] as number}
                 <div class="p-3">
                     <div class="flex items-center gap-2 mb-4 text-xs">
-                        <span class="font-medium" style="color: var({colorVar})">P{pid}</span>
+                        <span class="font-medium" style="color: var({colorVar})">{playerName}</span>
                         <span class="text-muted-foreground">{sets} sets</span>
                         <span class="text-muted-foreground/50">| {playedCards.length} cards played</span>
                     </div>

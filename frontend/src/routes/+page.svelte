@@ -359,6 +359,7 @@
             partner,
             wonMatch,
             setsData: saveCompletedSetsJson,
+            players: JSON.stringify((game.Players ?? []).map((p: any) => ({ id: p.ID, username: p.Username }))),
         }
 
         // Player sets counts
