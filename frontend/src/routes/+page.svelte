@@ -21,10 +21,10 @@
 
     import {
         createOnlineGame,
-        getRoomState,
         doBid,
         doPlay,
         doSelectPartner,
+        doAdvance,
     } from "$lib/game/api-game";
 
     let { data } = $props()
@@ -105,8 +105,9 @@
     let pollInterval: ReturnType<typeof setInterval> | null = null
 
     /**
-     * Start polling the backend for state updates.
-     * Used when waiting for bot turns in online mode.
+     * Start polling the backend to advance bot turns one at a time.
+     * Each tick calls /advance to process exactly one bot action,
+     * then updates the game state reactively.
      */
     function startPolling() {
         stopPolling()
@@ -117,14 +118,9 @@
                 return
             }
             try {
-                const updated = await getRoomState(roomId, onlineToken)
-                // Only update if state actually changed
-                if (updated.WhoseTurn !== game.WhoseTurn ||
-                    updated.Winner !== game.Winner ||
-                    updated.IsBettingPhase !== game.IsBettingPhase ||
-                    updated.IsPartnerSelectionPhase !== game.IsPartnerSelectionPhase) {
-                    game = updated
-                }
+                // Advance exactly one bot turn
+                const updated = await doAdvance(roomId, onlineToken)
+                game = updated
                 // Stop polling if it's human's turn or game is over
                 if (updated.WhoseTurn === 1 || updated.Winner !== "") {
                     stopPolling()

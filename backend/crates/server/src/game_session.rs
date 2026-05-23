@@ -112,7 +112,7 @@ pub fn action_human_move(
     table: &mut Table,
     human_seat: usize,
     action: &HumanAction,
-    difficulty: BotDifficulty,
+    _difficulty: BotDifficulty,
 ) -> Result<(), &'static str> {
     // Verify it's the human's turn
     let current = table.current_player_index();
@@ -136,8 +136,50 @@ pub fn action_human_move(
         }
     }
 
-    // After the human acts, let bots take their turns
-    process_bot_turns(table, human_seat, difficulty);
+    // Bot turns are now handled by the frontend polling /advance.
+    // After applying the human action, we return immediately.
 
     Ok(())
+}
+
+// ── Advance one bot turn ──────────────────────────────────────────────────
+
+/// Advance exactly one bot turn, if the current player is a bot.
+///
+/// Returns `Ok(true)` if a bot action was processed, `Ok(false)` if it's the
+/// human's turn, the game is finished, or no bot action is needed.
+pub fn advance_one_turn(
+    table: &mut Table,
+    human_seat: usize,
+    difficulty: BotDifficulty,
+) -> Result<bool, &'static str> {
+    // Stop if the game is finished
+    if table.phase == GamePhase::Finished {
+        return Ok(false);
+    }
+    // Stop if we're in a phase with no bot actions
+    if table.phase == GamePhase::Scoring || table.phase == GamePhase::Dealing {
+        return Ok(false);
+    }
+
+    let current = table.current_player_index();
+
+    // If it's the human's turn, nothing to advance
+    if current == human_seat {
+        return Ok(false);
+    }
+
+    // Run one bot action
+    auto_decide_and_act(table, difficulty)
+        .map_err(|e| {
+            tracing::warn!(
+                "Bot error at phase {:?}, player {}: {}",
+                table.phase,
+                current,
+                e
+            );
+            "Bot action failed"
+        })?;
+
+    Ok(true)
 }

@@ -281,6 +281,7 @@ pub fn routes(state: AppState) -> Router {
         // Single-player game routes
         .route("/api/game/new", post(create_single_player_game))
         .route("/api/game/{room_id}/action", post(single_player_action))
+        .route("/api/game/{room_id}/advance", post(advance_game))
         .with_state(state)
 }
 
@@ -1332,6 +1333,100 @@ async fn single_player_action(
         }
         Err(e) => (
             StatusCode::BAD_REQUEST,
+            Json(GameActionResponse {
+                ok: false,
+                state: None,
+                error: Some(e.to_string()),
+            }),
+        ),
+    }
+}
+
+// ── Advance bot turn endpoint ─────────────────────────────────────────────
+
+/// POST /api/game/{room_id}/advance
+///
+/// Advances exactly one bot turn, returning the updated game state.
+/// The frontend polls this endpoint at human-configured speed to create
+/// a visual delay between bot moves.
+async fn advance_game(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<Uuid>,
+) -> impl IntoResponse {
+    // Auth check
+    let user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => {
+            return (
+                status,
+                Json(GameActionResponse {
+                    ok: false,
+                    state: None,
+                    error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
+                }),
+            );
+        }
+    };
+
+    // Find the room
+    let mut rooms = state.rooms.write().await;
+    let room = match rooms.get_mut(&room_id) {
+        Some(r) => r,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(GameActionResponse {
+                    ok: false,
+                    state: None,
+                    error: Some("Room not found".to_string()),
+                }),
+            );
+        }
+    };
+
+    // Find the human seat (the authenticated user's seat)
+    let human_seat = match room
+        .sessions
+        .values()
+        .find(|s| s.player_name == user.username)
+    {
+        Some(session) => session.seat_index,
+        None => {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(GameActionResponse {
+                    ok: false,
+                    state: None,
+                    error: Some("You are not a player in this room".to_string()),
+                }),
+            );
+        }
+    };
+
+    // Determine difficulty (same logic as single_player_action)
+    let has_bots = room.sessions.values().any(|s| s.player_name.starts_with("Bot-"));
+    let difficulty = if has_bots {
+        BotDifficulty::Easy
+    } else {
+        BotDifficulty::Easy
+    };
+
+    // Advance exactly one bot turn
+    match game_session::advance_one_turn(&mut room.table, human_seat, difficulty) {
+        Ok(_advanced) => {
+            let state_resp = build_table_state(&room.table);
+            (
+                StatusCode::OK,
+                Json(GameActionResponse {
+                    ok: true,
+                    state: Some(state_resp),
+                    error: None,
+                }),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(GameActionResponse {
                 ok: false,
                 state: None,

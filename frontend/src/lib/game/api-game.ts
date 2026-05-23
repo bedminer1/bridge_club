@@ -409,6 +409,36 @@ export async function doSelectPartner(roomId: string, token: string, card: Card)
     return doAction(roomId, token, { type: "selectPartner", card: apiCard })
 }
 
+/**
+ * Advances exactly one bot turn on the backend.
+ * Poll this endpoint repeatedly to step through bot turns with a delay.
+ *
+ * @param roomId - The game room ID
+ * @param token - Session token
+ * @returns Updated Game state after one bot action
+ */
+export async function doAdvance(roomId: string, token: string): Promise<Game> {
+    const res = await fetch(`${API_URL}/api/game/${roomId}/advance`, {
+        method: "POST",
+        headers: {
+            "X-Session-Token": token,
+        },
+    })
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`Advance failed: ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`)
+    }
+
+    const data: ApiActionResponse = await res.json()
+    if (!data.ok || !data.state) {
+        throw new Error(`API advance returned error: ${JSON.stringify(data)}`)
+    }
+
+    const betWinnerIdx = data.state.betWinner ?? undefined
+    return apiStateToGame(data.state, roomId, betWinnerIdx)
+}
+
 // ── Core Action ────────────────────────────────────────────────────
 
 interface ActionPayload {
