@@ -3,10 +3,7 @@
     import { Input } from "$lib/components/ui/input/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
-    import * as Dialog from "$lib/components/ui/dialog/index.js";
-    import * as Form from "$lib/components/ui/form/index.js";
 
-    import { enhance } from "$app/forms";
     import PokerCard from "$lib/components/poker-card.svelte";
     import HandDisplay from "$lib/components/hand-display.svelte";
     
@@ -35,7 +32,6 @@
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
-    let openSaveDialog = $state(false)
 
     // Auto-start online game when logged in
     $effect(() => {
@@ -57,11 +53,6 @@
     // Sync user info to header
     $effect(() => { headerState.username = username })
     $effect(() => { headerState.loggedIn = loggedIn })
-
-    let userTeam = $derived(game.Team1?.some((p: any) => p.ID === 1) ? game.Team1 : game.Team2)
-    let wonMatch = $derived(game.Winner === "Team 1" && userTeam === game.Team1 ||
-                   game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0)
-    let partner = $derived(userTeam?.find((p: any) => p.ID !== 1)?.ID ?? 0)
 
     // form inputs
     let betSize: number = $state(1)
@@ -191,12 +182,10 @@
         return () => stopPolling()
     })
 
-    // Win detection
+    // Win detection — auto-save match immediately
     $effect(() => {
-        if (isOnline && game.Winner !== "") {
-            console.log("SAVE: game.CompletedSets length =", game.CompletedSets?.length ?? 0,
-                "game.CompletedSets =", JSON.stringify(game.CompletedSets))
-            openSaveDialog = true
+        if (isOnline && game.Winner !== "" && loggedIn && game.Players) {
+            autoSaveMatch()
         }
     })
 
@@ -222,6 +211,51 @@
     // Save-time data: computed once when game ends
     let savePlayedCards: Card[][] = $derived(playedCardsFromSets(game.CompletedSets ?? []))
     let saveCompletedSetsJson: string = $derived(JSON.stringify(game.CompletedSets ?? []))
+
+    /** Auto-save the match to the backend when the game ends. */
+    async function autoSaveMatch() {
+        const userTeam = game.Team1?.some((p: any) => p.ID === 1) ? game.Team1 : game.Team2
+        const wonMatch = game.Winner === "Team 1" && userTeam === game.Team1 ||
+                         game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0
+        const partner = userTeam?.find((p: any) => p.ID !== 1)?.ID ?? 0
+
+        const body: Record<string, unknown> = {
+            date: Date.now(),
+            botDifficulty: headerState.difficulty,
+            trumpSuit: game.Trump,
+            betSize: game.BetSize,
+            betWinner: game.BetWinner?.ID ?? 0,
+            partner,
+            wonMatch,
+            setsData: saveCompletedSetsJson,
+        }
+
+        // Player sets counts
+        for (let i = 0; i < 4; i++) {
+            body[`player${i + 1}Sets`] = game.Players[i]?.Sets ?? 0
+        }
+
+        // Player played cards
+        for (let i = 0; i < 4; i++) {
+            body[`player${i + 1}Hand`] = JSON.stringify(savePlayedCards[i] ?? [])
+        }
+
+        try {
+            const res = await fetch(`http://127.0.0.1:3000/api/matches`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Session-Token": onlineToken,
+                },
+                body: JSON.stringify(body),
+            })
+            if (!res.ok) {
+                console.error("Auto-save failed:", res.status, await res.text().catch(() => ""))
+            }
+        } catch (e) {
+            console.error("Auto-save error:", e)
+        }
+    }
 </script>
 
 <div class="flex flex-col gap-6 w-full min-h-screen items-center px-4 pt-20 pb-8">
@@ -425,58 +459,3 @@
 
 {/if}
 </div>
-
-<Dialog.Root onOpenChange={()=>openSaveDialog = true} open={openSaveDialog}>
-    <Dialog.Content class="w-[40%]">
-        <Dialog.Header>
-        <Dialog.Title>{game.Winner} Won!</Dialog.Title>
-        <Dialog.Description>
-            <p class="mb-4">
-                {game.Winner} has won {game.Winner ===  "Team 1" ? 6 + game.BetSize : 8 - game.BetSize} sets to win the game!
-            </p>
-
-            {#if loggedIn}
-            <form action="?/saveMatch" 
-            method="POST" 
-            class="flex flex-col items-end" 
-            use:enhance={() => {openSaveDialog = false}}>
-
-                <!-- Metadata -->
-	            <input type="hidden" name="date" value={Date.now()}>
-	            <input type="hidden" name="botDifficulty" bind:value={headerState.difficulty}>
-                
-                <!-- User Info -->
-                <input type="hidden" name="userID" bind:value={userID}>
-
-                <!-- Betting Info -->
-                <input type="hidden" name="trumpSuit" value={game.Trump}>
-                <input type="hidden" name="betSize" value={game.BetSize}>
-                <input type="hidden" name="betWinner" value={game.BetWinner.ID}>
-
-                <!-- Match Result -->
-                <input type="hidden" name="partner" value={partner}>
-                <input type="hidden" name="wonMatch" value={wonMatch}>
-
-                <!-- Sets Won -->
-                {#each game.Players as player, i}
-                    <input type="hidden" name={"player" + (i + 1) + "Sets"} value={player.Sets}>
-                {/each}
-
-                <!-- Hands (played cards per player, in play order, with WonSet flags) -->
-                {#each [0,1,2,3] as pid}
-                    {@const cardsForPlayer = savePlayedCards[pid] ?? []}
-                    <input type="hidden" name={"player" + (pid + 1) + "Hand"} value={JSON.stringify(cardsForPlayer)}>
-                {/each}
-
-                <!-- Completed sets data (set-by-set, for cross-reference) -->
-                <input type="hidden" name="setsData" value={saveCompletedSetsJson}>
-
-                <Form.Button class="w-[60px] mt-4">
-                    Save
-                </Form.Button>
-            </form>
-        {/if}
-        </Dialog.Description>
-        </Dialog.Header>
-    </Dialog.Content>
-</Dialog.Root>
