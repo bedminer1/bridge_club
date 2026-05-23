@@ -66,6 +66,7 @@ pub struct TableStateResponse {
     pub previous_trick_start_player: usize,
     pub call_history: Vec<game_core::Call>,
     pub call_history_start_player: usize,
+    pub partner_card: Option<game_core::Card>,
 }
 
 // ── Auth request / response types ─────────────────────────────────────────
@@ -959,6 +960,7 @@ async fn get_table_state(
             previous_trick_start_player: 0,
             call_history: Vec::new(),
             call_history_start_player: 0,
+            partner_card: None,
         })),
     };
 
@@ -1122,6 +1124,7 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
         previous_trick_start_player,
         call_history,
         call_history_start_player,
+        partner_card: table.partner_card,
     }
 }
 

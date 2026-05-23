@@ -18,7 +18,7 @@
     {/if}
     <div
         class="w-full h-full rounded-sm border bg-white p-1 {isIllegal
-            ? 'border-red-400/50 cursor-not-allowed opacity-40'
+            ? 'border-muted cursor-not-allowed opacity-60'
             : 'border-border cursor-grab'}"
     >
         <p class="{isIllegal ? 'opacity-60' : ''} leading-none" style="color: {cardColor}">{card.Rank}<br>{symbol}</p>

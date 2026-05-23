@@ -26,6 +26,7 @@ interface ApiState {
     previousTrickStartPlayer: number
     callHistory: Array<any>
     callHistoryStartPlayer: number
+    partnerCard: { suit: string; rank: string } | null
 }
 
 interface ApiNewGameResponse {
@@ -286,11 +287,14 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
         game.Team2 = players.filter((_, i) => !linked.has(i))
     }
 
-    // PartnerCard: try to find a representative card from the partner's hand
-    if (state.partnerIdx !== null && state.partnerIdx !== undefined && state.partnerIdx >= 0) {
-        const partnerHand = players[state.partnerIdx].Cards
-        if (partnerHand.length > 0) {
-            game.PartnerCard = partnerHand[Math.floor(partnerHand.length / 2)]
+    // PartnerCard: use the actual partner card from the API
+    if (state.partnerCard) {
+        const value = API_RANK_TO_VALUE[state.partnerCard.rank] ?? 2
+        game.PartnerCard = {
+            Rank: VALUE_TO_RANK[value] ?? String(value),
+            Value: value,
+            Suit: API_SUIT_TO_FRONTEND[state.partnerCard.suit] ?? state.partnerCard.suit,
+            WonSet: false,
         }
     }
 
