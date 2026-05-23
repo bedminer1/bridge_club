@@ -100,7 +100,10 @@
     function startPolling() {
         stopPolling()
         _pollActive = true
-        tick()
+        const delay = (headerState.botSpeed ?? 2) * 1000
+        pollTimeout = setTimeout(() => {
+            if (_pollActive) tick()
+        }, delay)
     }
 
     let _pollActive = $state(false)
@@ -138,14 +141,16 @@
     }
 
     // React to bot speed changes during active polling
+    let _lastBotSpeed = $state(headerState.botSpeed)
     $effect(() => {
-        const _ = headerState.botSpeed  // track changes
-        if (_pollActive) {
-            // Restart the current tick with new speed
+        const current = headerState.botSpeed
+        if (_pollActive && current !== _lastBotSpeed) {
+            _lastBotSpeed = current
             stopPolling()
             _pollActive = true
             tick()
         }
+        _lastBotSpeed = current
     })
 
     async function onlineRaiseBet(bs: number, suit: string) {
