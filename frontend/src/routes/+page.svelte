@@ -332,10 +332,11 @@
     const API_URL = "http://127.0.0.1:3000"
 
     // ── Lobby State ─────────────────────────────────────────────
-    let lobbyMode = $state<"create" | "join">("create")
+    let lobbyMode = $state<"" | "create" | "join">("create")
     let lobbyCreating = $state(false)
     let lobbyIsHost = $state(false)
     let lobbyRoomId = $state("")
+    let lobbyPlayerId = $state("")
     let lobbyJoinRoomId = $state("")
     let lobbyJoining = $state(false)
     let lobbyJoinError = $state("")
@@ -352,7 +353,7 @@
             })
             if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Failed: ${res.status} ${t}`); return }
             const d = await res.json()
-            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = true
+            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = true; lobbyPlayerId = d.playerId
             lobbyStartPolling()
         } catch (e) { console.error("Create room error:", e); alert("Failed. Is the backend running?") }
         finally { lobbyCreating = false }
@@ -368,10 +369,22 @@
             })
             if (!res.ok) { const t = await res.text().catch(() => ""); lobbyJoinError = `Failed: ${res.status} ${t}`; return }
             const d = await res.json()
-            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = false
+            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = false; lobbyPlayerId = d.playerId
             lobbyStartPolling()
         } catch (e) { console.error("Join error:", e); lobbyJoinError = "Failed. Is the backend running?" }
         finally { lobbyJoining = false }
+    }
+
+    async function lobbyLeaveRoom() {
+        if (!lobbyRoomId || !lobbyPlayerId) return
+        try {
+            await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/leave/${encodeURIComponent(lobbyPlayerId)}`, {
+                method: "POST",
+                headers: { "X-Session-Token": onlineToken },
+            })
+        } catch (e) { console.error("Leave error:", e) }
+        lobbyStopPolling()
+        lobbyRoomId = ""; lobbyPlayerId = ""; lobbyMySeatIndex = 0; lobbyIsHost = false; lobbyPlayers = []
     }
 
     async function lobbyStartGame() {
@@ -709,21 +722,30 @@
     <!-- Lobby UI -->
     <div class="w-full max-w-md">
         {#if !lobbyRoomId}
-            <!-- Mode Selector -->
-            <div class="flex justify-center gap-2 mb-6">
-                <Button onclick={() => { lobbyMode = "create" }} variant={lobbyMode === "create" ? "default" : "outline"}>
-                    Create Room
-                </Button>
-                <Button onclick={() => { lobbyMode = "join" }} variant={lobbyMode === "join" ? "default" : "outline"}>
-                    Join Room
-                </Button>
+            <!-- Mode Selector (always visible) -->
+            <div class="relative flex justify-center mb-6 items-center">
+                {#if lobbyMode}
+                <button onclick={() => lobbyMode = ""} class="absolute left-0 p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors text-4xl leading-none" title="Back">
+                    ←
+                </button>
+                {/if}
+                <div class="flex gap-2">
+                    <Button onclick={() => { if (lobbyMode === "create") lobbyCreateRoom(); else lobbyMode = "create" }}
+                        variant={lobbyMode === "create" ? "default" : "outline"}>
+                        Create Room
+                    </Button>
+                    <Button onclick={() => { lobbyMode = "join" }}
+                        variant={lobbyMode === "join" ? "default" : "outline"}>
+                        Join Room
+                    </Button>
+                </div>
             </div>
 
             {#if lobbyMode === "create"}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Create a Room</CardTitle>
-                        <CardDescription>Create a new lobby and invite friends to play.</CardDescription>
+                        <CardTitle class="text-center">Create a Room</CardTitle>
+                        <CardDescription class="text-center max-w-[220px] mx-auto">Create a new game room</CardDescription>
                     </CardHeader>
                     <CardContent class="flex flex-col gap-4">
                         <Button onclick={lobbyCreateRoom} disabled={lobbyCreating}>
@@ -731,11 +753,11 @@
                         </Button>
                     </CardContent>
                 </Card>
-            {:else}
+            {:else if lobbyMode === "join"}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Join a Room</CardTitle>
-                        <CardDescription>Enter the room ID shared by the host.</CardDescription>
+                        <CardTitle class="text-center">Join a Room</CardTitle>
+                        <CardDescription class="text-center max-w-[220px] mx-auto">Paste the room ID from the host</CardDescription>
                     </CardHeader>
                     <CardContent class="flex flex-col gap-4">
                         <div class="flex flex-col gap-2">
@@ -752,9 +774,12 @@
         {:else}
             <!-- Lobby View (waiting room) -->
             <Card>
-                <CardHeader>
-                    <CardTitle>Game Lobby</CardTitle>
-                    <CardDescription>Share the room ID below with friends to invite them.</CardDescription>
+                <CardHeader class="relative">
+                    <button onclick={lobbyLeaveRoom} class="absolute left-3 inset-y-0 flex items-center text-3xl leading-none text-muted-foreground hover:text-foreground transition-colors" title="Leave room">
+                        ←
+                    </button>
+                    <CardTitle class="text-center">Game Lobby</CardTitle>
+                    <CardDescription class="text-center max-w-[220px] mx-auto">Copy Room ID and invite friends</CardDescription>
                 </CardHeader>
                 <CardContent class="flex flex-col gap-4">
                     <div class="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/50">
@@ -782,6 +807,7 @@
                     {:else}
                         <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
                     {/if}
+                    <Button onclick={lobbyLeaveRoom} variant="outline" class="w-full mt-1">Leave Room</Button>
                 </CardContent>
             </Card>
         {/if}
