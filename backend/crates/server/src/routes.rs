@@ -67,6 +67,7 @@ pub struct TableStateResponse {
     pub call_history: Vec<game_core::Call>,
     pub call_history_start_player: usize,
     pub partner_card: Option<game_core::Card>,
+    pub trump_played: bool,
 }
 
 // ── Auth request / response types ─────────────────────────────────────────
@@ -961,6 +962,7 @@ async fn get_table_state(
             call_history: Vec::new(),
             call_history_start_player: 0,
             partner_card: None,
+            trump_played: false,
         })),
     };
 
@@ -1125,6 +1127,7 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
         call_history,
         call_history_start_player,
         partner_card: table.partner_card,
+        trump_played: table.trump_played,
     }
 }
 

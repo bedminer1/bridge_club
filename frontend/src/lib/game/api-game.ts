@@ -27,6 +27,7 @@ interface ApiState {
     callHistory: Array<any>
     callHistoryStartPlayer: number
     partnerCard: { suit: string; rank: string } | null
+    trumpPlayed: boolean
 }
 
 interface ApiNewGameResponse {
@@ -259,7 +260,7 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
         BetSize: state.betSize,
         IsBettingPhase: isBetting,
         IsPartnerSelectionPhase: isPartnerSelection,
-        TrumpPlayed: false, // API doesn't expose this
+        TrumpPlayed: state.trumpPlayed, // from API
         FullDeck: fullDeck,
         Moves: moves,
         PreviousMoves: prevMoves,

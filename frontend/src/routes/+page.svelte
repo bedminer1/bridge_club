@@ -261,6 +261,7 @@
     {/if}
 
 {#if game.IsPartnerSelectionPhase}
+    {#if game.BetWinner.ID === 1}
     <div class="flex flex-col gap-4 items-center">
         <p class="text-xl">Select a partner card</p>
         <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
@@ -276,6 +277,11 @@
             {/each}
         </div>
     </div>
+    {:else}
+    <div class="flex flex-col gap-4 items-center">
+        <p class="text-xl">Player {game.BetWinner.ID} is selecting a partner...</p>
+    </div>
+    {/if}
 {:else}
     <!-- Play area table -->
     <div class="flex flex-col gap-4 w-full max-w-3xl">
