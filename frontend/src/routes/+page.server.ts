@@ -46,6 +46,9 @@ export const actions = {
             player2Hand: formData.get("player2Hand"),
             player3Hand: formData.get("player3Hand"),
             player4Hand: formData.get("player4Hand"),
+
+            // Completed sets data
+            setsData: formData.get("setsData") ? String(formData.get("setsData")) : null,
         }
 
         const res = await fetch(`${API_URL}/api/matches`, {

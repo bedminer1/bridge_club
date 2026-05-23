@@ -1,6 +1,6 @@
 /** @file Core game actions: playing cards, resolving tricks, partner selection */
 
-import type { Game, Card, Player } from "./types"
+import type { Game, Card, Player, CompletedSet } from "./types"
 import { findStrongestCard } from "./cards"
 
 // ── Turn Management ────────────────────────────────────────────────
@@ -96,6 +96,7 @@ export function selectPartner(game: Game, card: Card): void {
     game.WhoseTurn = game.BetWinner.ID === 4 ? 1 : game.BetWinner.ID + 1
     game.Moves = []
     game.TurnSuit = ""
+    game.CompletedSets = []
 }
 
 // ── Private Helpers ────────────────────────────────────────────────
@@ -145,6 +146,16 @@ function resolveTrick(game: Game): void {
     const winnerId = game.Moves.find(m => m.CardPlayed === strongest)!.PlayerID
     const winner = game.Players[winnerId - 1]
     winner.Sets++
+
+    // Record the completed set
+    const completedSet: CompletedSet = {
+        Cards: game.Moves.map(m => ({
+            ...m.CardPlayed,
+            WonSet: m.PlayerID === winnerId,
+        })),
+        WinnerID: winnerId,
+    }
+    game.CompletedSets.push(completedSet)
 
     // Prepare for next trick
     game.WhoseTurn = winner.ID

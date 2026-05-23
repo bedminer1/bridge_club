@@ -30,11 +30,14 @@ export const matches = sqliteTable('matches', {
 	player3Sets: integer("player3_sets").notNull(),
 	player4Sets: integer("player4_sets").notNull(),
 
-	// Hands
-	player1Hand: text("player1_hand").notNull(),
-	player2Hand: text("player2_hand").notNull(),
-	player3Hand: text("player3_hand").notNull(),
-	player4Hand: text("player4_hand").notNull(),
+    // Hands
+    player1Hand: text("player1_hand").notNull(),
+    player2Hand: text("player2_hand").notNull(),
+    player3Hand: text("player3_hand").notNull(),
+    player4Hand: text("player4_hand").notNull(),
+
+    // Completed sets data (JSON)
+    setsData: text("sets_data"),
 })
 
 export const sessions = sqliteTable("sessions", {

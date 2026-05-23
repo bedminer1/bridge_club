@@ -519,6 +519,9 @@
                     <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(isOnline ? parseHandString(initialHandStrings[i] ?? "") : player.PlayedCards)}>
                 {/each}
 
+                <!-- Completed sets data (trick-by-trick) -->
+                <input type="hidden" name="setsData" value={JSON.stringify(game.CompletedSets)}>
+
                 <Form.Button class="w-[60px] mt-4">
                     Save
                 </Form.Button>

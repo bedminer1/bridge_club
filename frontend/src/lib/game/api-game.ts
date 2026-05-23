@@ -1,7 +1,7 @@
 /** @file API adapter for playing games against the Rust backend.
  *  Maps between the Rust backend's JSON state and the frontend's Game type. */
 
-import type { Game, Card, Player, Move } from "./types"
+import type { Game, Card, Player, Move, CompletedSet } from "./types"
 import { SUIT_ENUM, VALUE_TO_RANK, SUIT_SORT_ORDER } from "./cards"
 
 const API_URL = "http://127.0.0.1:3000"
@@ -29,6 +29,11 @@ interface ApiState {
     partnerCard: { suit: string; rank: string } | null
     trumpPlayed: boolean
     leadSuit: string | null
+    completedSets?: Array<{
+        cards: Array<{ suit: string; rank: string }>
+        winner: number
+        leadSuit: string
+    }>
 }
 
 interface ApiNewGameResponse {
@@ -289,6 +294,23 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
         TurnSuit: state.leadSuit ? (API_SUIT_TO_FRONTEND[state.leadSuit] ?? state.leadSuit) : "",
         Winner: winner,
         TurnOnBots: false, // backend handles bots
+        CompletedSets: [],
+    }
+
+    // Map completed sets from API
+    if (state.completedSets) {
+        game.CompletedSets = state.completedSets.map(apiSet => ({
+            Cards: apiSet.cards.map(apiCard => {
+                const val = API_RANK_TO_VALUE[apiCard.rank] ?? 2
+                return {
+                    Rank: VALUE_TO_RANK[val] ?? String(val),
+                    Value: val,
+                    Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
+                    WonSet: false,
+                }
+            }),
+            WinnerID: (apiSet.winner ?? 0) + 1,
+        }))
     }
 
     // Set bet winner and partner if available

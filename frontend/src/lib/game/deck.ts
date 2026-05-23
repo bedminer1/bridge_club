@@ -37,6 +37,7 @@ export function initGame(username: string): Game {
         TurnSuit: "",
         Winner: "",
         TurnOnBots: true,
+        CompletedSets: [],
     }
 }
 

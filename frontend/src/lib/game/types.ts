@@ -39,6 +39,8 @@ export interface Game {
     Winner: string
     /** Whether bot auto-play is enabled */
     TurnOnBots: boolean
+    /** All completed sets (tricks) during the playing phase */
+    CompletedSets: CompletedSet[]
 }
 
 /** A single playing card */
@@ -81,6 +83,14 @@ export interface Move {
     PlayerID: number
 }
 
+/** A completed set (trick) — all 4 cards played and who won */
+export interface CompletedSet {
+    /** The 4 cards played (index 0 = lead) */
+    Cards: Card[]
+    /** Player ID (1-4) who won this set */
+    WinnerID: number
+}
+
 /** Database record for a completed match */
 export type MatchRecord = {
     id: number
@@ -100,4 +110,6 @@ export type MatchRecord = {
     player2Hand: string
     player3Hand: string
     player4Hand: string
+    /** JSON string of completed sets: [{Cards: Card[], WinnerID: number}] */
+    setsData: string | null
 }

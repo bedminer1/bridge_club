@@ -75,6 +75,7 @@ type MatchRecord = {
 	player4Sets: number
 	player1Hand: string
 	player2Hand: string
-	player3Hand: string
-	player4Hand: string
+    player3Hand: string
+    player4Hand: string
+    setsData: string | null
 }
