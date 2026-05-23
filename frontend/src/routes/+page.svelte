@@ -513,7 +513,7 @@
 
                 <!-- Hands (as JSON or comma-separated values) -->
                  {#each game.Players as player, i}
-                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(player.PlayedCards)}>
+                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(isOnline ? player.Cards : player.PlayedCards)}>
                 {/each}
 
                 <Form.Button class="w-[60px] mt-4">
