@@ -17,15 +17,30 @@
     import { isCardIllegal } from "$lib/game/legality";
     import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
     import { headerState } from "$lib/game/header-state.svelte";
+    import type { Card, Player } from "$lib/game/types";
+
+    import {
+        createOnlineGame,
+        getRoomState,
+        doBid,
+        doPlay,
+        doSelectPartner,
+    } from "$lib/game/api-game";
 
     let { data } = $props()
-    let { username, userID } = $state(data)
+    let { username, userID, token } = $state(data)
 
     let game = $state(initGame(username))
 
+    // Online game state
+    let isOnline = $state(false)
+    let isOnlineLoading = $state(false)
+    let roomId = $state("")
+    let onlineToken = $state(token ?? "")
+
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
-    let openSaveDialog: boolean = $state(false)
+    let openSaveDialog = $state(false)
 
     function onlogout() {
         loggedIn = false
@@ -68,7 +83,128 @@
         [4, "[var(--green)]"],
     ])
 
+    // ── Online Game Actions ───────────────────────────────────────
+
+    async function startOnlineGame() {
+        if (!onlineToken) return
+        isOnlineLoading = true
+        try {
+            const result = await createOnlineGame(username, headerState.difficulty, onlineToken)
+            roomId = result.roomId
+            game = result.game
+            isOnline = true
+        } catch (e) {
+            console.error("Failed to start online game:", e)
+            alert("Failed to start online game. Is the backend running at http://127.0.0.1:3000?")
+        } finally {
+            isOnlineLoading = false
+        }
+    }
+
+    /** Poll interval ID for online bot turn waiting. */
+    let pollInterval: ReturnType<typeof setInterval> | null = null
+
+    /**
+     * Start polling the backend for state updates.
+     * Used when waiting for bot turns in online mode.
+     */
+    function startPolling() {
+        stopPolling()
+        const delay = (headerState.botSpeed ?? 2) * 1000
+        pollInterval = setInterval(async () => {
+            if (!isOnline || !roomId || !onlineToken) {
+                stopPolling()
+                return
+            }
+            try {
+                const updated = await getRoomState(roomId, onlineToken)
+                // Only update if state actually changed
+                if (updated.WhoseTurn !== game.WhoseTurn ||
+                    updated.Winner !== game.Winner ||
+                    updated.IsBettingPhase !== game.IsBettingPhase ||
+                    updated.IsPartnerSelectionPhase !== game.IsPartnerSelectionPhase) {
+                    game = updated
+                }
+                // Stop polling if it's human's turn or game is over
+                if (updated.WhoseTurn === 1 || updated.Winner !== "") {
+                    stopPolling()
+                }
+            } catch (e) {
+                console.error("Poll error:", e)
+            }
+        }, delay)
+    }
+
+    function stopPolling() {
+        if (pollInterval !== null) {
+            clearInterval(pollInterval)
+            pollInterval = null
+        }
+    }
+
+    // Online action wrappers
+    async function onlineRaiseBet(bs: number, suit: string) {
+        if (!isOnline || !roomId || !onlineToken) return
+        try {
+            const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
+            const updated = await doBid(roomId, onlineToken, call)
+            game = updated
+            if (game.WhoseTurn !== 1 && game.Winner === "") {
+                startPolling()
+            }
+        } catch (e) {
+            console.error("Online raise failed:", e)
+        }
+    }
+
+    async function onlinePassBet() {
+        if (!isOnline || !roomId || !onlineToken) return
+        try {
+            const updated = await doBid(roomId, onlineToken, "Pass")
+            game = updated
+            if (game.WhoseTurn !== 1 && game.Winner === "") {
+                startPolling()
+            }
+        } catch (e) {
+            console.error("Online pass failed:", e)
+        }
+    }
+
+    async function onlineSelectPartner(card: Card) {
+        if (!isOnline || !roomId || !onlineToken) return
+        try {
+            const updated = await doSelectPartner(roomId, onlineToken, card)
+            game = updated
+            if (game.WhoseTurn !== 1 && game.Winner === "") {
+                startPolling()
+            }
+        } catch (e) {
+            console.error("Online partner select failed:", e)
+        }
+    }
+
+    async function onlinePlayCard(card: Card, _player: Player) {
+        if (!isOnline || !roomId || !onlineToken) return
+        try {
+            const updated = await doPlay(roomId, onlineToken, card)
+            game = updated
+            if (game.WhoseTurn !== 1 && game.Winner === "") {
+                startPolling()
+            }
+        } catch (e) {
+            console.error("Online play failed:", e)
+        }
+    }
+
+    // Cleanup polling on component destroy
     $effect(() => {
+        return () => stopPolling()
+    })
+
+    // ── Bot Auto-Play (local mode only) ───────────────────────────
+
+    $effect(() => {
+        if (isOnline) return // backend handles bots
         if (game.Winner !== "") {
             openSaveDialog = true
             return
@@ -89,6 +225,22 @@
 
         return () => clearInterval(interval)
     })
+
+    // ── Online Win Detection ──────────────────────────────────────
+
+    $effect(() => {
+        if (isOnline && game.Winner !== "") {
+            openSaveDialog = true
+        }
+    })
+
+    // Suit name mapping (needed for online actions)
+    const FRONTEND_SUIT_TO_API: Record<string, string> = {
+        Club: "Clubs",
+        Diamond: "Diamonds",
+        Heart: "Hearts",
+        Spades: "Spades",
+    }
 </script>
 
 
@@ -98,13 +250,30 @@
         <p>Player {game.WhoseTurn}'s turn</p>
     </div>
 
+    {#if isOnlineLoading}
+    <div class="text-lg text-muted-foreground animate-pulse">
+        Starting online game...
+    </div>
+    {:else if !isOnline && loggedIn}
+    <div class="flex flex-col gap-3 items-center">
+        <Button onclick={startOnlineGame} disabled={isOnlineLoading}>
+            Start Online Game
+        </Button>
+        <p class="text-xs text-muted-foreground">Play against bots via the Rust backend at 127.0.0.1:3000</p>
+        <p class="text-xs text-muted-foreground">Or use the local game below:</p>
+    </div>
+    {/if}
+
 {#if game.IsPartnerSelectionPhase}
     <div class="flex flex-col gap-4 items-center">
         <p class="text-xl">Select a partner card</p>
         <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
         <div class="flex flex-wrap gap-1 justify-center max-w-3xl">
             {#each remainingDeck as card}
-                <button onclick={() => selectPartner(game, card)}
+                <button onclick={() => {
+                    if (isOnline) { onlineSelectPartner(card) }
+                    else { selectPartner(game, card) }
+                }}
                     class="transition-transform brightness-105 dark:brightness-95 hover:brightness-130 dark:hover:brightness-120 hover:shadow-accent hover:shadow-xl/30 hover:-translate-y-1 active:brightness-125 active:shadow-accent rounded-sm">
                     <PokerCard card={card} isIllegal={false} minify={true} />
                 </button>
@@ -193,7 +362,10 @@
                 {#each player.Cards  as card, index}
                 <button
                     disabled={isCardIllegal(game, player, card)}
-                    onclick={()=>playCard(game, card, player)}
+                    onclick={() => {
+                        if (isOnline) { onlinePlayCard(card, player) }
+                        else { playCard(game, card, player) }
+                    }}
                     class="text-left">
                     <HandDisplay index={index}>
                         <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
@@ -265,10 +437,16 @@
                     </Select.Root>
                 </div>
                 <div class="flex gap-2 w-full">
-                    <Button class="flex-1" onclick={()=>passBet(game)}>Pass</Button>
+                    <Button class="flex-1" onclick={() => {
+                        if (isOnline) { onlinePassBet() }
+                        else { passBet(game) }
+                    }}>Pass</Button>
                     <Button 
                     variant="destructive"
-                    onclick={()=>raiseBet(game, betSize, bettedSuit)}
+                    onclick={() => {
+                        if (isOnline) { onlineRaiseBet(betSize, bettedSuit) }
+                        else { raiseBet(game, betSize, bettedSuit) }
+                    }}
                     disabled={!isLegalRaise(game, betSize, bettedSuit)}
                     class="flex-1"
                     >Raise</Button>

@@ -4,6 +4,7 @@ export async function load({ cookies }) {
     const token = cookies.get("session")
     let userID = 0
     let username = ""
+    let sessionToken = ""
 
     if (token) {
         // Validate session against Rust backend
@@ -12,10 +13,11 @@ export async function load({ cookies }) {
         if (data.ok && data.user) {
             userID = data.user.id
             username = data.user.username
+            sessionToken = token
         }
     }
 
-    return { userID, username }
+    return { userID, username, token: sessionToken }
 }
 
 export const actions = {

@@ -1,5 +1,7 @@
 mod auth;
+mod bot;
 mod db;
+mod game_session;
 mod routes;
 mod session;
 

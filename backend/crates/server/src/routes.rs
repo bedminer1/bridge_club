@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::auth;
+use crate::bot::BotDifficulty;
 use crate::db::{DbPool, MatchRow, UserRow};
+use crate::game_session::{self, HumanAction};
 use crate::session::AppState;
 use game_core::Call;
 
@@ -139,6 +141,45 @@ pub struct SessionQuery {
     pub token: Option<String>,
 }
 
+// ── Single-player game request / response types ────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewGameRequest {
+    pub difficulty: String, // "Easy" or "Medium"
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewGameResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub room_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<TableStateResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameActionRequest {
+    #[serde(rename = "type")]
+    pub action_type: String, // "bid", "play", "selectPartner"
+    pub call: Option<Call>,
+    pub card: Option<game_core::Card>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameActionResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<TableStateResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 // ── Helper: extract session token from headers or query ───────────────────
 
 fn extract_token(headers: &HeaderMap, query: Option<&SessionQuery>) -> Option<String> {
@@ -232,6 +273,9 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/auth/logout", post(logout))
         // Match history routes
         .route("/api/matches", get(get_matches).post(save_match))
+        // Single-player game routes
+        .route("/api/game/new", post(create_single_player_game))
+        .route("/api/game/{room_id}/action", post(single_player_action))
         .with_state(state)
 }
 
@@ -1007,5 +1051,277 @@ async fn play_card(
             tracing::warn!("Card play rejected in room {}: {}", room_id, e);
             StatusCode::BAD_REQUEST
         }
+    }
+}
+
+// ── Helper: build TableStateResponse from a Table ─────────────────────────
+
+fn build_table_state(table: &game_core::Table) -> TableStateResponse {
+    let hands: Vec<String> = table
+        .players
+        .iter()
+        .map(|p| {
+            p.hand
+                .iter()
+                .map(|c| c.to_ascii_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+
+    let phase = format!("{:?}", table.phase);
+    let current_player = table.current_player_index();
+    let trump_suit = table.trump_suit.map(|s| s.to_string());
+    let sets_won = table.sets_won.to_vec();
+    let is_finished = table.phase == game_core::GamePhase::Finished;
+
+    TableStateResponse {
+        phase,
+        hands,
+        current_player,
+        bet_size: table.bet_size,
+        trump_suit,
+        bet_winner: table.bet_winner,
+        partner_idx: table.partner_idx,
+        sets_won,
+        completed_set_count: table.completed_sets.len(),
+        is_finished,
+    }
+}
+
+// ── Single-player game handlers ───────────────────────────────────────────
+
+async fn create_single_player_game(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<NewGameRequest>,
+) -> impl IntoResponse {
+    // Auth check
+    let user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => {
+            return (
+                status,
+                Json(NewGameResponse {
+                    ok: false,
+                    room_id: None,
+                    state: None,
+                    error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
+                }),
+            );
+        }
+    };
+
+    // Parse difficulty
+    let difficulty = match payload.difficulty.to_lowercase().as_str() {
+        "easy" => BotDifficulty::Easy,
+        "medium" => BotDifficulty::Medium,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(NewGameResponse {
+                    ok: false,
+                    room_id: None,
+                    state: None,
+                    error: Some("Difficulty must be 'Easy' or 'Medium'".to_string()),
+                }),
+            );
+        }
+    };
+
+    // Create the single-player game
+    let (mut room, session) =
+        game_session::new_single_player_game(&user.username, difficulty);
+
+    // Run initial bot turns (if it's not the human's turn to go first)
+    game_session::process_bot_turns(&mut room.table, session.human_seat_index, difficulty);
+
+    let state_resp = build_table_state(&room.table);
+    let room_id = room.room_id;
+
+    // Store the room in shared state
+    let mut rooms = state.rooms.write().await;
+    rooms.insert(room_id, room);
+
+    tracing::info!(
+        "Single-player game created: room={}, human={} (seat {}), difficulty={:?}",
+        room_id,
+        user.username,
+        session.human_seat_index,
+        difficulty,
+    );
+
+    (
+        StatusCode::CREATED,
+        Json(NewGameResponse {
+            ok: true,
+            room_id: Some(room_id),
+            state: Some(state_resp),
+            error: None,
+        }),
+    )
+}
+
+async fn single_player_action(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<Uuid>,
+    Json(payload): Json<GameActionRequest>,
+) -> impl IntoResponse {
+    // Auth check
+    let user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => {
+            return (
+                status,
+                Json(GameActionResponse {
+                    ok: false,
+                    state: None,
+                    error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
+                }),
+            );
+        }
+    };
+
+    // Find the room
+    let mut rooms = state.rooms.write().await;
+    let room = match rooms.get_mut(&room_id) {
+        Some(r) => r,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(GameActionResponse {
+                    ok: false,
+                    state: None,
+                    error: Some("Room not found".to_string()),
+                }),
+            );
+        }
+    };
+
+    // Determine the human seat index and difficulty.
+    // For single-player rooms, we need to find the human player.
+    // The human is the one whose name matches the authenticated user.
+    let human_seat = match room
+        .sessions
+        .values()
+        .find(|s| s.player_name == user.username)
+    {
+        Some(session) => session.seat_index,
+        None => {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(GameActionResponse {
+                    ok: false,
+                    state: None,
+                    error: Some("You are not a player in this room".to_string()),
+                }),
+            );
+        }
+    };
+
+    // Build the human action from the request
+    let human_action = match payload.action_type.as_str() {
+        "bid" => {
+            let call = match payload.call {
+                Some(c) => c,
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(GameActionResponse {
+                            ok: false,
+                            state: None,
+                            error: Some("Missing 'call' field for bid action".to_string()),
+                        }),
+                    );
+                }
+            };
+            HumanAction::Call(call)
+        }
+        "play" => {
+            let card = match payload.card {
+                Some(c) => c,
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(GameActionResponse {
+                            ok: false,
+                            state: None,
+                            error: Some("Missing 'card' field for play action".to_string()),
+                        }),
+                    );
+                }
+            };
+            HumanAction::PlayCard(card)
+        }
+        "selectPartner" => {
+            let card = match payload.card {
+                Some(c) => c,
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(GameActionResponse {
+                            ok: false,
+                            state: None,
+                            error: Some(
+                                "Missing 'card' field for selectPartner action".to_string(),
+                            ),
+                        }),
+                    );
+                }
+            };
+            HumanAction::SelectPartner(card)
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GameActionResponse {
+                    ok: false,
+                    state: None,
+                    error: Some(format!(
+                        "Unknown action type '{}'. Use 'bid', 'play', or 'selectPartner'",
+                        payload.action_type
+                    )),
+                }),
+            );
+        }
+    };
+
+    // Apply the human move and process bot turns.
+    // We determine difficulty by checking whether the room has bot players.
+    // Bot players have names starting with "Bot-".
+    let has_bots = room.sessions.values().any(|s| s.player_name.starts_with("Bot-"));
+    let difficulty = if has_bots {
+        BotDifficulty::Easy
+    } else {
+        // Default difficulty for non-bot rooms; shouldn't happen for single-player
+        BotDifficulty::Easy
+    };
+
+    match game_session::action_human_move(
+        &mut room.table,
+        human_seat,
+        &human_action,
+        difficulty,
+    ) {
+        Ok(()) => {
+            let state_resp = build_table_state(&room.table);
+            (
+                StatusCode::OK,
+                Json(GameActionResponse {
+                    ok: true,
+                    state: Some(state_resp),
+                    error: None,
+                }),
+            )
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(GameActionResponse {
+                ok: false,
+                state: None,
+                error: Some(e.to_string()),
+            }),
+        ),
     }
 }
