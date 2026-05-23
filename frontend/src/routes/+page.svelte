@@ -18,6 +18,7 @@
         doBid,
         doPlay,
         doSelectPartner,
+        apiStateToGame,
     } from "$lib/game/api-game";
 
     let { data } = $props()
@@ -155,6 +156,9 @@
 
     async function onlineRaiseBet(bs: number, suit: string) {
         if (!isOnline || !roomId || !onlineToken) return
+        // Sync state first
+        await syncState()
+        if (game.WhoseTurn !== 1) return
         try {
             const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
             const updated = await doBid(roomId, onlineToken, call)
@@ -169,6 +173,8 @@
 
     async function onlinePassBet() {
         if (!isOnline || !roomId || !onlineToken) return
+        await syncState()
+        if (game.WhoseTurn !== 1) return
         try {
             const updated = await doBid(roomId, onlineToken, "Pass")
             game = updated
@@ -182,6 +188,8 @@
 
     async function onlineSelectPartner(card: any) {
         if (!isOnline || !roomId || !onlineToken) return
+        await syncState()
+        if (game.WhoseTurn !== 1) return
         try {
             const updated = await doSelectPartner(roomId, onlineToken, card)
             game = updated
@@ -195,6 +203,8 @@
 
     async function onlinePlayCard(card: any, _player: any) {
         if (!isOnline || !roomId || !onlineToken) return
+        await syncState()
+        if (game.WhoseTurn !== 1) return
         try {
             const updated = await doPlay(roomId, onlineToken, card)
             game = updated
@@ -203,6 +213,23 @@
             }
         } catch (e) {
             console.error("Online play failed:", e)
+        }
+    }
+
+    /** Re-sync game state from the backend to avoid acting on stale data. */
+    async function syncState() {
+        try {
+            const res = await fetch(`${API_URL}/room/${roomId}/state`, {
+                headers: { "X-Session-Token": onlineToken },
+            })
+            if (res.ok) {
+                const data = await res.json()
+                const betWinnerIdx = data.betWinner ?? undefined
+                const updated = apiStateToGame(data, roomId, betWinnerIdx)
+                game = updated
+            }
+        } catch (e) {
+            console.error("Sync error:", e)
         }
     }
 
@@ -224,6 +251,8 @@
         Heart: "Hearts",
         Spades: "Spades",
     }
+
+    const API_URL = "http://127.0.0.1:3000"
 
     /** Build each player's sequence of played cards from completed sets. */
     function playedCardsFromSets(sets: Array<{ Cards: Card[]; PlayerIDs: number[]; WinnerID: number }>): Card[][] {
@@ -325,6 +354,8 @@
             {#if game.BetSize > 0 || !game.IsBettingPhase}
             <span>Trump <strong class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</strong></span>
             <span>Bet <strong class="text-foreground font-medium">{game.BetSize}</strong></span>
+            {/if}
+            {#if game.IsBettingPhase && game.BetSize > 0}
             <span class="text-muted-foreground/40">|</span>
             <span class="whitespace-nowrap">Bet winner <strong class="text-foreground font-medium">P{game.BetWinner.ID}</strong> + partner need <strong class="text-accent font-medium">{6 + game.BetSize}</strong> sets</span>
             <span class="whitespace-nowrap">Opponents need <strong class="text-foreground font-medium">{8 - game.BetSize}</strong> sets</span>
