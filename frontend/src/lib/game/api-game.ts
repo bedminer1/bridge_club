@@ -28,6 +28,7 @@ interface ApiState {
     callHistoryStartPlayer: number
     partnerCard: { suit: string; rank: string } | null
     trumpPlayed: boolean
+    leadSuit: string | null
 }
 
 interface ApiNewGameResponse {
@@ -260,12 +261,12 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
         BetSize: state.betSize,
         IsBettingPhase: isBetting,
         IsPartnerSelectionPhase: isPartnerSelection,
-        TrumpPlayed: state.trumpPlayed, // from API
+        TrumpPlayed: state.trumpPlayed,
         FullDeck: fullDeck,
         Moves: moves,
         PreviousMoves: prevMoves,
         WhoseTurn: whoseTurn,
-        TurnSuit: "",
+        TurnSuit: state.leadSuit ? (API_SUIT_TO_FRONTEND[state.leadSuit] ?? state.leadSuit) : "",
         Winner: winner,
         TurnOnBots: false, // backend handles bots
     }
