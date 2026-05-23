@@ -1060,7 +1060,7 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
 
     let phase = format!("{:?}", table.phase);
     let current_player = table.current_player_index();
-    let trump_suit = table.trump_suit.map(|s| s.to_string());
+    let trump_suit = table.trump_suit.map(|s| format!("{:?}", s));
     let sets_won = table.sets_won.to_vec();
     let is_finished = table.phase == game_core::GamePhase::Finished;
 

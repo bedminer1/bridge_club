@@ -47,6 +47,11 @@ const API_SUIT_TO_FRONTEND: Record<string, string> = {
     Diamonds: "Diamond",
     Hearts: "Heart",
     Spades: "Spades",
+    // Handle Unicode symbol from trumpSuit field
+    "♣": "Club",
+    "♦": "Diamond",
+    "♥": "Heart",
+    "♠": "Spades",
 }
 
 const FRONTEND_SUIT_TO_API: Record<string, string> = {
