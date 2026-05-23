@@ -21,10 +21,11 @@
 
     import {
         createOnlineGame,
+        doAdvance,
         doBid,
         doPlay,
         doSelectPartner,
-        doAdvance,
+        parseHandString,
     } from "$lib/game/api-game";
 
     let { data } = $props()
@@ -37,6 +38,7 @@
     let isOnlineLoading = $state(false)
     let roomId = $state("")
     let onlineToken = $state(token ?? "")
+    let initialHandStrings: string[] = $state([])
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -93,6 +95,7 @@
             roomId = result.roomId
             game = result.game
             isOnline = true
+            initialHandStrings = result.initialHands
         } catch (e) {
             console.error("Failed to start online game:", e)
             alert("Failed to start online game. Is the backend running at http://127.0.0.1:3000?")
@@ -513,7 +516,7 @@
 
                 <!-- Hands (as JSON or comma-separated values) -->
                  {#each game.Players as player, i}
-                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(isOnline ? player.Cards : player.PlayedCards)}>
+                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(isOnline ? parseHandString(initialHandStrings[i] ?? "") : player.PlayedCards)}>
                 {/each}
 
                 <Form.Button class="w-[60px] mt-4">

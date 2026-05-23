@@ -105,7 +105,7 @@ const VALUE_TO_API_RANK: Record<number, string> = {
  * Parse a hand string like "AS KH 3C 10D" into Card[].
  * Each token: rank part (1-2 chars) + suit initial (1 char).
  */
-function parseHandString(handStr: string): Card[] {
+export function parseHandString(handStr: string): Card[] {
     const tokens = handStr.trim().split(/\s+/)
     const cards: Card[] = []
     for (const token of tokens) {
@@ -142,11 +142,31 @@ function parseHandString(handStr: string): Card[] {
 export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: number): Game {
     const hands = state.hands.map(parseHandString)
 
-    // Build players
+    // ── Track played cards from current and previous trick ────────
+    const playedCardsPerPlayer: Card[][] = [[], [], [], []]
+    const addPlayed = (apiCard: any, playerIdx: number, isWon: boolean) => {
+        const val = API_RANK_TO_VALUE[apiCard.rank] ?? 2
+        playedCardsPerPlayer[playerIdx].push({
+            Rank: VALUE_TO_RANK[val] ?? String(val),
+            Value: val,
+            Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
+            WonSet: isWon,
+        })
+    }
+    const ctStart = state.currentTrickStartPlayer ?? 0
+    const ptStart = state.previousTrickStartPlayer ?? 0
+    const ptWinner = state.previousTrickWinner
+    ;(state.currentTrickCards || []).forEach((c, i) => addPlayed(c, (ctStart + i) % 4, false))
+    ;(state.previousTrickCards || []).forEach((c, i) => {
+        const pIdx = (ptStart + i) % 4
+        addPlayed(c, pIdx, ptWinner !== null && ptWinner !== undefined && pIdx === ptWinner)
+    })
+
+    // ── Build players ──────────────────────────────────────────────
     const players: Player[] = hands.map((hand, i) => ({
         ID: i + 1,
         Cards: hand,
-        PlayedCards: [],
+        PlayedCards: playedCardsPerPlayer[i] ?? [],
         Partner: null,
         Sets: state.setsWon[i] ?? 0,
         IsBot: i !== 0,
@@ -346,7 +366,7 @@ export async function createOnlineGame(
     username: string,
     difficulty: string,
     token: string,
-): Promise<{ roomId: string; game: Game }> {
+): Promise<{ roomId: string; game: Game; initialHands: string[] }> {
     const res = await fetch(`${API_URL}/api/game/new`, {
         method: "POST",
         headers: {
@@ -371,7 +391,7 @@ export async function createOnlineGame(
     game.Players[0].Username = username || "You"
     game.Players[0].ShortUsername = username ? username[0] : "Y"
 
-    return { roomId: data.roomId, game }
+    return { roomId: data.roomId, game, initialHands: data.state.hands }
 }
 
 /**
