@@ -1,5 +1,6 @@
 <script lang="ts">
     import * as Select from "$lib/components/ui/select/index.js";
+    import * as Dialog from "$lib/components/ui/dialog/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Separator } from "$lib/components/ui/separator/index.js";
@@ -65,6 +66,22 @@
 
     let isLightMode = $state(false)
     $effect(() => { headerState.isLightMode = isLightMode })
+
+    // Game-over dialog
+    let showGameOverDialog = $state(false)
+    $effect(() => {
+        if (game.Winner !== "") {
+            showGameOverDialog = true
+        }
+    })
+    const team1Sets = $derived(game.Players?.reduce?.((s: number, p: any, i: number) => {
+        const team1Ids = new Set(game.Team1?.map((t: any) => t.ID) ?? [])
+        return s + (team1Ids.has(p.ID) ? (p.Sets ?? 0) : 0)
+    }, 0) ?? 0)
+    const team2Sets = $derived(game.Players?.reduce?.((s: number, p: any, i: number) => {
+        const team2Ids = new Set(game.Team2?.map((t: any) => t.ID) ?? [])
+        return s + (team2Ids.has(p.ID) ? (p.Sets ?? 0) : 0)
+    }, 0) ?? 0)
 
     // Sync user info to header
     $effect(() => { headerState.username = username })
@@ -326,10 +343,12 @@
 
     /** Auto-save the match to the backend when the game ends. */
     async function autoSaveMatch() {
-        const userTeam = game.Team1?.some((p: any) => p.ID === humanPlayerId) ? game.Team1 : game.Team2
-        const wonMatch = game.Winner === "Team 1" && userTeam === game.Team1 ||
-                         game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0
-        const partner = userTeam?.find((p: any) => p.ID !== humanPlayerId)?.ID ?? 0
+        // Determine if the human player is on Team 1 (bet winner's team)
+        // Use ID comparison, not reference equality (Team1/Team2 arrays are always different instances)
+        const userIsTeam1 = game.Team1?.some((p: any) => p.ID === humanPlayerId) ?? false
+        const wonMatch = (game.Winner === "Team 1" && userIsTeam1) || (game.Winner === "Team 2" && !userIsTeam1) ? 1 : 0
+        const userTeam = userIsTeam1 ? game.Team1 : game.Team2
+        const partner = (userTeam ?? [])?.find((p: any) => p.ID !== humanPlayerId)?.ID ?? 0
 
         const body: Record<string, unknown> = {
             date: Date.now(),
@@ -574,5 +593,28 @@
     </div>
     {/if}
 
+    <!-- Game-over dialog -->
+    {#if showGameOverDialog}
+    <Dialog.Root bind:open={showGameOverDialog}>
+        <Dialog.Content class="max-w-sm">
+            <Dialog.Header class="text-center">
+                <Dialog.Title
+                    class="text-2xl font-bold {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'text-[var(--green)]' : 'text-[var(--red)]'}"
+                >
+                    {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'Victory!' : 'Defeat'}
+                </Dialog.Title>
+                <Dialog.Description class="flex flex-col gap-2 items-center pt-2">
+                    <span class="text-lg">Team 1 <span class="text-[var(--red)]">{team1Sets}</span> — <span class="text-[var(--blue)]">{team2Sets}</span> Team 2</span>
+                    <span class="text-xs text-muted-foreground mt-1">
+                        Bet: {game.BetSize}{suitToSymbol.get(game.Trump)}
+                    </span>
+                </Dialog.Description>
+            </Dialog.Header>
+            <Dialog.Footer class="justify-center">
+                <Button onclick={() => { showGameOverDialog = false }}>OK</Button>
+            </Dialog.Footer>
+        </Dialog.Content>
+    </Dialog.Root>
+    {/if}
 {/if}
 </div>
