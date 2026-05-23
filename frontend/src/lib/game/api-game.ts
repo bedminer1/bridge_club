@@ -302,29 +302,20 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
 }
 
 /**
- * Builds a full 52-card deck that excludes cards already in players' hands.
- * Used for the partner selection UI grid.
+ * Builds a full 52-card deck for the partner selection UI.
+ * The frontend filters out the human's cards client-side.
  */
-function buildFullDeck(hands: Card[][]): Card[] {
-    const inHands = new Set<string>()
-    for (const hand of hands) {
-        for (const card of hand) {
-            inHands.add(`${card.Suit}:${card.Value}`)
-        }
-    }
-
+function buildFullDeck(_hands: Card[][]): Card[] {
     const suits = ["Club", "Diamond", "Heart", "Spades"]
     const deck: Card[] = []
     for (const suit of suits) {
         for (let val = 2; val <= 14; val++) {
-            if (!inHands.has(`${suit}:${val}`)) {
-                deck.push({
-                    Rank: VALUE_TO_RANK[val],
-                    Value: val,
-                    Suit: suit,
-                    WonSet: false,
-                })
-            }
+            deck.push({
+                Rank: VALUE_TO_RANK[val],
+                Value: val,
+                Suit: suit,
+                WonSet: false,
+            })
         }
     }
     // Sort like sortHands
