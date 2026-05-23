@@ -89,6 +89,8 @@ export interface CompletedSet {
     Cards: Card[]
     /** Player ID (1-4) who won this set */
     WinnerID: number
+    /** Player ID (1-4) who played each card (same length as Cards) */
+    PlayerIDs: number[]
 }
 
 /** Database record for a completed match */

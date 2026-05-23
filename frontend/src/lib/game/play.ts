@@ -154,6 +154,7 @@ function resolveTrick(game: Game): void {
             WonSet: m.PlayerID === winnerId,
         })),
         WinnerID: winnerId,
+        PlayerIDs: game.Moves.map(m => m.PlayerID),
     }
     game.CompletedSets.push(completedSet)
 

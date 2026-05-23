@@ -11,13 +11,9 @@
     import HandDisplay from "$lib/components/hand-display.svelte";
     
     import { suitToSymbol } from "$lib/utils"
-    import { initGame } from "$lib/game/deck";
-    import { raiseBet, passBet, isLegalRaise } from "$lib/game/betting";
-    import { playCard, selectPartner } from "$lib/game/play";
+    import { isLegalRaise } from "$lib/game/betting";
     import { isCardIllegal } from "$lib/game/legality";
-    import { autoBet, autoPlayCard, autoPlayCardV2 } from "$lib/game/bot";
     import { headerState } from "$lib/game/header-state.svelte";
-    import type { Card, Player } from "$lib/game/types";
 
     import {
         createOnlineGame,
@@ -31,11 +27,10 @@
     let { data } = $props()
     let { username, userID, token } = $state(data)
 
-    let game = $state(initGame(username))
-
-    // Online game state
+    // Online-only game state
     let isOnline = $state(false)
     let isOnlineLoading = $state(false)
+    let game: any = $state({})
     let roomId = $state("")
     let onlineToken = $state(token ?? "")
     let initialHandStrings: string[] = $state([])
@@ -43,6 +38,13 @@
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
     let openSaveDialog = $state(false)
+
+    // Auto-start online game when logged in
+    $effect(() => {
+        if (loggedIn && onlineToken && !isOnline && !isOnlineLoading) {
+            startOnlineGame()
+        }
+    })
 
     function onlogout() {
         loggedIn = false
@@ -58,10 +60,10 @@
     $effect(() => { headerState.username = username })
     $effect(() => { headerState.loggedIn = loggedIn })
 
-    let userTeam = $derived(game.Team1.some(p => p.ID === 1) ? game.Team1 : game.Team2)
-	let wonMatch = $derived(game.Winner === "Team 1" && userTeam === game.Team1 ||
-	               game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0)
-    let partner = $derived(userTeam.find(p => p.ID !== 1)?.ID ?? 0)
+    let userTeam = $derived(game.Team1?.some((p: any) => p.ID === 1) ? game.Team1 : game.Team2)
+    let wonMatch = $derived(game.Winner === "Team 1" && userTeam === game.Team1 ||
+                   game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0)
+    let partner = $derived(userTeam?.find((p: any) => p.ID !== 1)?.ID ?? 0)
 
     // form inputs
     let betSize: number = $state(1)
@@ -70,12 +72,12 @@
     const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
     let remainingDeck = $derived(
         game.FullDeck
-            .filter(fc => !game.Players[0].Cards.some(pc => pc.Suit === fc.Suit && pc.Value === fc.Value))
-            .sort((a, b) => {
+            ?.filter((fc: any) => !game.Players?.[0]?.Cards?.some((pc: any) => pc.Suit === fc.Suit && pc.Value === fc.Value))
+            .sort((a: any, b: any) => {
                 const suitDiff = (suitOrder[a.Suit] ?? 0) - (suitOrder[b.Suit] ?? 0)
                 if (suitDiff !== 0) return suitDiff
                 return a.Value - b.Value
-            })
+            }) ?? []
     )
 
     const playerIDToColor = new Map<number, string>([
@@ -107,11 +109,6 @@
     /** Poll interval ID for online bot turn waiting. */
     let pollInterval: ReturnType<typeof setInterval> | null = null
 
-    /**
-     * Start polling the backend to advance bot turns one at a time.
-     * Each tick calls /advance to process exactly one bot action,
-     * then updates the game state reactively.
-     */
     function startPolling() {
         stopPolling()
         const delay = (headerState.botSpeed ?? 2) * 1000
@@ -121,10 +118,8 @@
                 return
             }
             try {
-                // Advance exactly one bot turn
                 const updated = await doAdvance(roomId, onlineToken)
                 game = updated
-                // Stop polling if it's human's turn or game is over
                 if (updated.WhoseTurn === 1 || updated.Winner !== "") {
                     stopPolling()
                 }
@@ -141,7 +136,6 @@
         }
     }
 
-    // Online action wrappers
     async function onlineRaiseBet(bs: number, suit: string) {
         if (!isOnline || !roomId || !onlineToken) return
         try {
@@ -169,7 +163,7 @@
         }
     }
 
-    async function onlineSelectPartner(card: Card) {
+    async function onlineSelectPartner(card: any) {
         if (!isOnline || !roomId || !onlineToken) return
         try {
             const updated = await doSelectPartner(roomId, onlineToken, card)
@@ -182,7 +176,7 @@
         }
     }
 
-    async function onlinePlayCard(card: Card, _player: Player) {
+    async function onlinePlayCard(card: any, _player: any) {
         if (!isOnline || !roomId || !onlineToken) return
         try {
             const updated = await doPlay(roomId, onlineToken, card)
@@ -200,49 +194,13 @@
         return () => stopPolling()
     })
 
-    // ── Win detection (online mode) ─────────────────────────────────
-
-    $effect(() => {
-        if (!isOnline) return
-        if (game.Winner !== "") {
-            openSaveDialog = true
-        }
-    })
-
-    // ── Bot Auto-Play (local mode only) ───────────────────────────
-
-    $effect(() => {
-        if (isOnline) return // backend handles bots
-        if (game.Winner !== "") {
-            openSaveDialog = true
-            return
-        }
-        if (!game || headerState.botSpeed == undefined || game.WhoseTurn === 1 || !game.TurnOnBots) return
-
-        const interval = setInterval(() => {
-            if (game.IsBettingPhase) {
-                autoBet(game)
-            } else {
-                if (headerState.difficulty === "Easy") {
-                    autoPlayCard(game)
-                } else if (headerState.difficulty === "Medium") {
-                    autoPlayCardV2(game)
-                }
-            }
-        }, headerState.botSpeed * 1000);
-
-        return () => clearInterval(interval)
-    })
-
-    // ── Online Win Detection ──────────────────────────────────────
-
+    // Win detection
     $effect(() => {
         if (isOnline && game.Winner !== "") {
             openSaveDialog = true
         }
     })
 
-    // Suit name mapping (needed for online actions)
     const FRONTEND_SUIT_TO_API: Record<string, string> = {
         Club: "Clubs",
         Diamond: "Diamonds",
@@ -251,50 +209,37 @@
     }
 </script>
 
-
 <div class="flex flex-col gap-6 w-full min-h-screen items-center px-4 pt-20 pb-8">
 
+    {#if isOnlineLoading}
+    <div class="text-lg text-muted-foreground animate-pulse">
+        Starting game...
+    </div>
+    {:else if isOnline && game.Players}
     <div class="text-2xl text-muted-foreground">
         <p>Player {game.WhoseTurn}'s turn</p>
     </div>
 
-    {#if isOnlineLoading}
-    <div class="text-lg text-muted-foreground animate-pulse">
-        Starting online game...
-    </div>
-    {:else if !isOnline && loggedIn}
-    <div class="flex flex-col gap-3 items-center">
-        <Button onclick={startOnlineGame} disabled={isOnlineLoading}>
-            Start Online Game
-        </Button>
-        <p class="text-xs text-muted-foreground">Play against bots via the Rust backend at 127.0.0.1:3000</p>
-        <p class="text-xs text-muted-foreground">Or use the local game below:</p>
-    </div>
-    {/if}
-
-{#if game.IsPartnerSelectionPhase}
-    {#if game.BetWinner.ID === 1}
-    <div class="flex flex-col gap-4 items-center">
-        <p class="text-xl">Select a partner card</p>
-        <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
-        <div class="flex flex-wrap gap-1 justify-center max-w-3xl">
-            {#each remainingDeck as card}
-                <button onclick={() => {
-                    if (isOnline) { onlineSelectPartner(card) }
-                    else { selectPartner(game, card) }
-                }}
-                    class="transition-transform brightness-105 dark:brightness-95 hover:brightness-130 dark:hover:brightness-120 hover:shadow-accent hover:shadow-xl/30 hover:-translate-y-1 active:brightness-125 active:shadow-accent rounded-sm">
-                    <PokerCard card={card} isIllegal={false} minify={true} />
-                </button>
-            {/each}
+    {#if game.IsPartnerSelectionPhase}
+        {#if game.BetWinner.ID === 1}
+        <div class="flex flex-col gap-4 items-center">
+            <p class="text-xl">Select a partner card</p>
+            <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
+            <div class="flex flex-wrap gap-1 justify-center max-w-3xl">
+                {#each remainingDeck as card}
+                    <button onclick={() => onlineSelectPartner(card)}
+                        class="transition-transform brightness-105 dark:brightness-95 hover:brightness-130 dark:hover:brightness-120 hover:shadow-accent hover:shadow-xl/30 hover:-translate-y-1 active:brightness-125 active:shadow-accent rounded-sm">
+                        <PokerCard card={card} isIllegal={false} minify={true} />
+                    </button>
+                {/each}
+            </div>
         </div>
-    </div>
+        {:else}
+        <div class="flex flex-col gap-4 items-center">
+            <p class="text-xl">Player {game.BetWinner.ID} is selecting a partner...</p>
+        </div>
+        {/if}
     {:else}
-    <div class="flex flex-col gap-4 items-center">
-        <p class="text-xl">Player {game.BetWinner.ID} is selecting a partner...</p>
-    </div>
-    {/if}
-{:else}
     <!-- Play area table -->
     <div class="flex flex-col gap-4 w-full max-w-3xl">
         <!-- Game info strip -->
@@ -307,7 +252,7 @@
             <span>Winner <strong class="text-foreground font-medium">P{game.BetWinner.ID}</strong></span>
             <span>Partner <strong class="text-accent font-medium">{game.PartnerCard.Rank}{suitToSymbol.get(game.PartnerCard.Suit)}</strong></span>
             <span class="text-muted-foreground">|</span>
-            <span>Set <strong class="text-foreground font-medium">{game.Players.reduce((s,p) => s + p.Sets, 0)}/13</strong></span>
+            <span>Set <strong class="text-foreground font-medium">{game.Players.reduce((s: number, p: any) => s + p.Sets, 0)}/13</strong></span>
             {/if}
         </div>
 
@@ -376,10 +321,7 @@
                 {#each player.Cards  as card, index}
                 <button
                     disabled={isCardIllegal(game, player, card)}
-                    onclick={() => {
-                        if (isOnline) { onlinePlayCard(card, player) }
-                        else { playCard(game, card, player) }
-                    }}
+                    onclick={() => onlinePlayCard(card, player)}
                     class="text-left">
                     <HandDisplay index={index}>
                         <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
@@ -451,16 +393,10 @@
                     </Select.Root>
                 </div>
                 <div class="flex gap-2 w-full">
-                    <Button class="flex-1" onclick={() => {
-                        if (isOnline) { onlinePassBet() }
-                        else { passBet(game) }
-                    }}>Pass</Button>
+                    <Button class="flex-1" onclick={onlinePassBet}>Pass</Button>
                     <Button 
                     variant="destructive"
-                    onclick={() => {
-                        if (isOnline) { onlineRaiseBet(betSize, bettedSuit) }
-                        else { raiseBet(game, betSize, bettedSuit) }
-                    }}
+                    onclick={() => onlineRaiseBet(betSize, bettedSuit)}
                     disabled={!isLegalRaise(game, betSize, bettedSuit)}
                     class="flex-1"
                     >Raise</Button>
@@ -470,15 +406,12 @@
     {/if}
         </div>
     </div>
+    {/if}
+
 {/if}
 </div>
 
 <Dialog.Root onOpenChange={()=>openSaveDialog = true} open={openSaveDialog}>
-    <!-- <Dialog.Trigger>
-        <Button>
-            For Testing, Ignore
-        </Button>
-    </Dialog.Trigger> -->
     <Dialog.Content class="w-[40%]">
         <Dialog.Header>
         <Dialog.Title>{game.Winner} Won!</Dialog.Title>
@@ -514,13 +447,13 @@
                     <input type="hidden" name={"player" + (i + 1) + "Sets"} value={player.Sets}>
                 {/each}
 
-                <!-- Hands (as JSON or comma-separated values) -->
-                 {#each game.Players as player, i}
-                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(isOnline ? parseHandString(initialHandStrings[i] ?? "") : player.PlayedCards)}>
+                <!-- Hands (dealt hands from online game) -->
+                {#each initialHandStrings as handStr, i}
+                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(parseHandString(handStr ?? ""))}>
                 {/each}
 
-                <!-- Completed sets data (trick-by-trick) -->
-                <input type="hidden" name="setsData" value={JSON.stringify(game.CompletedSets)}>
+                <!-- Completed sets data (set-by-set) -->
+                <input type="hidden" name="setsData" value={JSON.stringify(game.CompletedSets ?? [])}>
 
                 <Form.Button class="w-[60px] mt-4">
                     Save

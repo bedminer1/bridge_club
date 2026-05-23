@@ -19,6 +19,7 @@
     interface SavedCompletedSet {
         Cards: Card[]
         WinnerID: number
+        PlayerIDs: number[]
     }
     let completedSets: SavedCompletedSet[] = $derived.by(() => {
         if (!matchRecord.setsData) return []
@@ -34,12 +35,6 @@
         2: 'var(--blue)',
         3: 'var(--yellow)',
         4: 'var(--green)',
-    }
-    const playerBg: Record<number, string> = {
-        1: '#fee2e2',
-        2: '#dbeafe',
-        3: '#fef9c3',
-        4: '#dcfce7',
     }
     const playerShort: Record<number, string> = {
         1: 'P1',
@@ -73,22 +68,26 @@
             <ScoreDisplay {matchRecord} />
         </div>
 
-        <!-- Completed sets (trick-by-trick replay) -->
+        <!-- Completed sets (set-by-set replay) -->
         {#if completedSets.length > 0}
         <div class="rounded-lg border border-border bg-card/40 p-4 text-sm">
             <h3 class="text-sm font-semibold text-muted-foreground mb-3">Sets Played</h3>
-            <div class="flex flex-col gap-2">
+            <div class="flex flex-col gap-3">
                 {#each completedSets as set, setIdx}
-                <div class="flex items-center gap-2 rounded bg-muted/30 p-2">
-                    <span class="text-xs text-muted-foreground w-6 shrink-0">#{setIdx + 1}</span>
-                    <div class="flex gap-1.5 items-center">
-                        {#each set.Cards as card}
-                        <div class="relative">
+                <div class="flex items-start gap-2 rounded bg-muted/30 p-2">
+                    <span class="text-xs text-muted-foreground w-6 shrink-0 mt-2">#{setIdx + 1}</span>
+                    <div class="flex gap-2 items-start">
+                        {#each set.Cards as card, ci}
+                        {@const pid = set.PlayerIDs?.[ci] ?? 0}
+                        <div class="flex flex-col items-center gap-0.5 min-w-[35px]">
                             <PokerCard card={card} isIllegal={false} minify={true} />
+                            <span class="text-[10px] font-medium leading-none" style="color: {playerColor[pid] ?? 'var(--muted-foreground)'}">
+                                {playerShort[pid] ?? ''}
+                            </span>
                         </div>
                         {/each}
                     </div>
-                    <div class="flex items-center gap-1 ml-1 shrink-0">
+                    <div class="flex items-center gap-1 ml-1 shrink-0 mt-1.5">
                         <Crown class="w-3.5 h-3.5 text-accent" />
                         <span class="text-xs font-semibold" style="color: {playerColor[set.WinnerID] ?? 'var(--foreground)'}">
                             {playerShort[set.WinnerID] ?? 'P' + set.WinnerID}

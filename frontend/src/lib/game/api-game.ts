@@ -300,17 +300,43 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
     // Map completed sets from API
     if (state.completedSets) {
         game.CompletedSets = state.completedSets.map(apiSet => ({
-            Cards: apiSet.cards.map(apiCard => {
+            Cards: apiSet.cards.map((apiCard, i) => {
                 const val = API_RANK_TO_VALUE[apiCard.rank] ?? 2
+                // Winner is 0-indexed from the API, winner of this set
+                const isWinner = (apiSet.winner ?? 0) === i
                 return {
                     Rank: VALUE_TO_RANK[val] ?? String(val),
                     Value: val,
                     Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
-                    WonSet: false,
+                    WonSet: isWinner,
                 }
             }),
             WinnerID: (apiSet.winner ?? 0) + 1,
+            PlayerIDs: apiSet.cards.map((_, i) => {
+                // Card at position i was played by (set start player + i) % 4
+                // The set start player = (apiSet.winner... no, we need the leader)
+                // Leader = winner of previous set, or (bet_winner + 1) % 4 for first set
+                // Since we're processing sequentially, we can compute:
+                // card[i] was played by (leader + i) % 4
+                // For the first set, leader = (betWinner + 1) % 4
+                // For subsequent sets, leader = previous set's winner
+                // We'll compute this per-set below
+                return 0 // placeholder, computed below
+            }),
         }))
+
+        // Fix up PlayerIDs: each set's cards[i] was played by (leader + i) % 4
+        // First set leader = (betWinner + 1) % 4
+        // Subsequent set leader = previous set's winner
+        const betWinnerIdx = state.betWinner ?? 0
+        for (let si = 0; si < game.CompletedSets.length; si++) {
+            const prevWinner = si === 0
+                ? (betWinnerIdx + 1) % 4  // first set: left of bet winner
+                : game.CompletedSets[si - 1].WinnerID - 1  // prev set's winner (0-indexed)
+            game.CompletedSets[si].PlayerIDs = game.CompletedSets[si].Cards.map((_, ci) =>
+                ((prevWinner + ci) % 4) + 1
+            )
+        }
     }
 
     // Set bet winner and partner if available
