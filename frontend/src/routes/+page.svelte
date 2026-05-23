@@ -118,10 +118,11 @@
             roomId = existingRoomId
             const gameState = await getRoomState(existingRoomId, onlineToken)
             // Fix up player display: mark the correct seat as human
+            const isMultiplayer = page.url.searchParams.has("seat")
             for (let i = 0; i < gameState.Players.length; i++) {
                 gameState.Players[i].IsBot = i !== humanSeat
-                gameState.Players[i].Username = i === humanSeat ? "You" : `Bot ${i + 1}`
-                gameState.Players[i].ShortUsername = i === humanSeat ? "Y" : `B${i + 1}`
+                gameState.Players[i].Username = i === humanSeat ? "You" : isMultiplayer ? `P${i + 1}` : `Bot ${i + 1}`
+                gameState.Players[i].ShortUsername = i === humanSeat ? "Y" : `P${i + 1}`
             }
             game = gameState
             isOnline = true
