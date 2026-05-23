@@ -17,4 +17,6 @@ tracing-subscriber = "0.3"
 libsql = "0.9"
 serde_json = "1.0"
 dotenvy = "0.15"
-chrono = { version = "0.4", features = ["serde"] }
+# Auth
+sha2 = "0.10"
+base64 = "0.22"

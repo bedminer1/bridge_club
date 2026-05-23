@@ -114,6 +114,7 @@ pub struct UserRow {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
+#[serde(rename_all = "camelCase")]
 pub struct MatchRow {
     pub id: i64,
     pub user_id: i64,

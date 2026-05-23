@@ -2,11 +2,8 @@ import { fail, superValidate } from "sveltekit-superforms"
 import { userFormSchema } from "../userSchema.js"
 import { zod } from "sveltekit-superforms/adapters"
 import { redirect } from "@sveltejs/kit"
-import { db } from "$lib/server/db/index.js"
-import { users } from "$lib/server/db/schema.js"
-import { eq } from "drizzle-orm"
-import { hashPassword } from "$lib/server/crypto.js"
-import { generateSessionToken, createSession } from "$lib/auth.js"
+
+const API_URL = process.env.API_URL || "http://127.0.0.1:3000"
 
 export async function load() {
     return {
@@ -19,37 +16,32 @@ export const actions = {
         const form = await superValidate(event, zod(userFormSchema))
         
         if (!form.valid) {
-            return fail(400, {
-                form,
-            })
+            return fail(400, { form })
         }
         const username = form.data.username
-        const password = form.data.password
+        const password = form.data.password as string
 
-        // check if already exists
-        const existingUsers = await db
-            .select()
-            .from(users)
-            .where(eq(users.username, username))
+        // Call Rust backend
+        const res = await fetch(`${API_URL}/api/auth/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+        })
 
-        if (existingUsers.length > 0) {
-            form.errors.username = ["Already exists :/"]
-            console.log(form)
-            return fail(400, {
-                form
-            })
+        const data = await res.json()
+
+        if (!data.ok) {
+            form.errors.username = [data.error || "Signup failed"]
+            return fail(400, { form })
         }
 
-        const hashedPassword = await hashPassword(password)
-        const insertedUsers = await db.insert(users).values({
-            username,
-            password: hashedPassword
-        }).returning({ insertedID: users.id })
-
-        const user = existingUsers[0]
-                const token = generateSessionToken()
-                const session = createSession(token, insertedUsers[0].insertedID)
-                event.cookies.set("session", token, { path: "/", httpOnly: true, sameSite: "lax", expires: (await session).expiresAt})
+        // Set session cookie from backend response
+        event.cookies.set("session", data.token, {
+            path: "/",
+            httpOnly: true,
+            sameSite: "lax",
+            expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+        })
 
         redirect(307, "/")
     }
