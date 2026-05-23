@@ -197,6 +197,15 @@
         return () => stopPolling()
     })
 
+    // ── Win detection (online mode) ─────────────────────────────────
+
+    $effect(() => {
+        if (!isOnline) return
+        if (game.Winner !== "") {
+            openSaveDialog = true
+        }
+    })
+
     // ── Bot Auto-Play (local mode only) ───────────────────────────
 
     $effect(() => {
