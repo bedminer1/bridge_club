@@ -19,7 +19,6 @@
     let mode = $state<"create" | "join">("create");
 
     // Create room state
-    let playerName = $state(username || "");
     let creating = $state(false);
     let isHost = $state(false);
 
@@ -43,7 +42,6 @@
                     "Content-Type": "application/json",
                     "X-Session-Token": token,
                 },
-                body: JSON.stringify({ playerName: playerName || username || "Player" }),
             });
             if (!res.ok) {
                 const text = await res.text().catch(() => "");
@@ -195,11 +193,7 @@
                         </CardDescription>
                     </CardHeader>
                     <CardContent class="flex flex-col gap-4">
-                        <div class="flex flex-col gap-2">
-                            <label for="player-name" class="text-sm text-muted-foreground">Your Name</label>
-                            <Input id="player-name" bind:value={playerName} placeholder="Enter your name" />
-                        </div>
-                        <Button onclick={createRoom} disabled={creating || !playerName.trim()}>
+                        <Button onclick={createRoom} disabled={creating}>
                             {creating ? "Creating..." : "Create Room"}
                         </Button>
                     </CardContent>

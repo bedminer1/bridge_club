@@ -25,12 +25,6 @@ pub struct CreateRoomResponse {
     pub seat_index: usize,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateRoomRequest {
-    pub player_name: String,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomInfoResponse {
@@ -46,11 +40,6 @@ pub struct RoomPlayerInfo {
     pub name: String,
     pub seat_index: usize,
     pub is_bot: bool,
-}
-
-#[derive(Deserialize)]
-pub struct JoinRoomRequest {
-    pub player_name: String,
 }
 
 #[derive(Serialize)]
@@ -883,13 +872,26 @@ async fn save_match(
 
 async fn create_room(
     State(state): State<AppState>,
-    Json(payload): Json<CreateRoomRequest>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    // Auth check
+    let user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => return (
+            status,
+            Json(CreateRoomResponse {
+                room_id: Uuid::nil(),
+                player_id: Uuid::nil(),
+                seat_index: 0,
+            }),
+        ),
+    };
+
     let mut room = crate::session::GameRoom::new();
     let room_id = room.room_id;
 
-    // Auto-join the creating player
-    let (player_id, seat_index) = match room.add_player(&payload.player_name) {
+    // Auto-join the creating player using auth username
+    let (player_id, seat_index) = match room.add_player(&user.username) {
         Ok((pid, si)) => (pid, si),
         Err(e) => return (
             StatusCode::BAD_REQUEST,
@@ -904,7 +906,7 @@ async fn create_room(
     let mut rooms = state.rooms.write().await;
     rooms.insert(room_id, room);
 
-    tracing::info!("Created room {} with player '{}' at seat {}", room_id, payload.player_name, seat_index);
+    tracing::info!("Created room {} with player '{}' at seat {}", room_id, user.username, seat_index);
     (StatusCode::CREATED, Json(CreateRoomResponse { room_id, player_id, seat_index }))
 }
 
