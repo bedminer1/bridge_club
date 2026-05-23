@@ -32,20 +32,20 @@ export const actions = {
         // Build the match payload matching SaveMatchRequest
         const body = {
             date: Number(formData.get("date")),
-            bot_difficulty: formData.get("botDifficulty"),
-            trump_suit: formData.get("trumpSuit"),
-            bet_size: Number(formData.get("betSize")),
-            bet_winner: Number(formData.get("betWinner")),
+            botDifficulty: formData.get("botDifficulty"),
+            trumpSuit: formData.get("trumpSuit"),
+            betSize: Number(formData.get("betSize")),
+            betWinner: Number(formData.get("betWinner")),
             partner: formData.get("partner") ? Number(formData.get("partner")) : null,
-            won_match: formData.get("wonMatch") !== null ? Number(formData.get("wonMatch")) : null,
-            player1_sets: Number(formData.get("player1Sets")),
-            player2_sets: Number(formData.get("player2Sets")),
-            player3_sets: Number(formData.get("player3Sets")),
-            player4_sets: Number(formData.get("player4Sets")),
-            player1_hand: formData.get("player1Hand"),
-            player2_hand: formData.get("player2Hand"),
-            player3_hand: formData.get("player3Hand"),
-            player4_hand: formData.get("player4Hand"),
+            wonMatch: formData.get("wonMatch") !== null ? Number(formData.get("wonMatch")) : null,
+            player1Sets: Number(formData.get("player1Sets")),
+            player2Sets: Number(formData.get("player2Sets")),
+            player3Sets: Number(formData.get("player3Sets")),
+            player4Sets: Number(formData.get("player4Sets")),
+            player1Hand: formData.get("player1Hand"),
+            player2Hand: formData.get("player2Hand"),
+            player3Hand: formData.get("player3Hand"),
+            player4Hand: formData.get("player4Hand"),
         }
 
         const res = await fetch(`${API_URL}/api/matches`, {
