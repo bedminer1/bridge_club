@@ -83,8 +83,7 @@
             roomId = data.roomId;
             mySeatIndex = data.seatIndex;
             isHost = false;
-            stopPolling();
-            goto(`/?room=${encodeURIComponent(roomId)}&seat=${data.seatIndex}`);
+            startPolling();
             return;
         } catch (e) {
             console.error("Join room error:", e);
