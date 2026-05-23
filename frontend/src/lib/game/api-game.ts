@@ -34,6 +34,7 @@ interface ApiState {
         winner: number
         leadSuit: string
     }>
+    playerNames?: string[]
 }
 
 interface ApiNewGameResponse {
@@ -168,15 +169,16 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
     })
 
     // ── Build players ──────────────────────────────────────────────
+    const playerNames = state.playerNames ?? []
     const players: Player[] = hands.map((hand, i) => ({
         ID: i + 1,
         Cards: hand,
         PlayedCards: playedCardsPerPlayer[i] ?? [],
         Partner: null,
         Sets: state.setsWon[i] ?? 0,
-        IsBot: i !== 0,
-        Username: i === 0 ? "You" : `Bot ${i + 1}`,
-        ShortUsername: i === 0 ? "Y" : `B${i + 1}`,
+        IsBot: playerNames[i]?.startsWith("Bot-") ?? (i !== 0),
+        Username: playerNames[i] ?? (i === 0 ? "You" : `Bot ${i + 1}`),
+        ShortUsername: (playerNames[i] ?? (i === 0 ? "Y" : `B${i + 1}`)).charAt(0).toUpperCase(),
     }))
 
     // Map API suit to frontend suit

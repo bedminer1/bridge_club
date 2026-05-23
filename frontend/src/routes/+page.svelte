@@ -293,14 +293,11 @@
         }
     }
 
-    /** Fix up player display: mark the correct seat as human. */
+    /** Fix up player display: ensure IsBot is correct without overwriting real names. */
     function fixupPlayerDisplay(g: any) {
         if (!g.Players) return
-        const isMultiplayer = page.url.searchParams.has("seat")
         for (let i = 0; i < g.Players.length; i++) {
             g.Players[i].IsBot = i !== humanSeat
-            g.Players[i].Username = i === humanSeat ? "You" : isMultiplayer ? `P${i + 1}` : `Bot ${i + 1}`
-            g.Players[i].ShortUsername = i === humanSeat ? "Y" : `P${i + 1}`
         }
     }
 
@@ -308,6 +305,11 @@
     $effect(() => {
         return () => stopPolling()
     })
+
+    // Utility: get a player's display name from their ID
+    function playerName(playerId: number): string {
+        return game.Players?.find((p: any) => p.ID === playerId)?.Username ?? `P${playerId}`
+    }
 
     // Win detection — auto-save match immediately
     $effect(() => {
@@ -360,6 +362,7 @@
             wonMatch,
             setsData: saveCompletedSetsJson,
             players: JSON.stringify((game.Players ?? []).map((p: any) => ({ id: p.ID, username: p.Username }))),
+            roomId,
         }
 
         // Player sets counts
@@ -398,7 +401,7 @@
     </div>
     {:else if isOnline && game.Players}
     <div class="text-2xl text-muted-foreground">
-        <p>Player {game.WhoseTurn}'s turn</p>
+        <p>{playerName(game.WhoseTurn)}'s turn</p>
     </div>
 
     {#if game.IsPartnerSelectionPhase}
@@ -417,7 +420,7 @@
         </div>
         {:else}
         <div class="flex flex-col gap-4 items-center">
-            <p class="text-xl">Player {game.BetWinner.ID} is selecting a partner...</p>
+            <p class="text-xl">{playerName(game.BetWinner.ID)} is selecting a partner...</p>
         </div>
         {/if}
     {:else}
@@ -431,11 +434,11 @@
             {/if}
             {#if game.IsBettingPhase && game.BetSize > 0}
             <span class="text-muted-foreground/40">|</span>
-            <span class="whitespace-nowrap">Bet winner <strong class="text-foreground font-medium">P{game.BetWinner.ID}</strong> + partner need <strong class="text-accent font-medium">{6 + game.BetSize}</strong> sets</span>
+            <span class="whitespace-nowrap">Bet winner <strong class="text-foreground font-medium">{playerName(game.BetWinner.ID)}</strong> + partner need <strong class="text-accent font-medium">{6 + game.BetSize}</strong> sets</span>
             <span class="whitespace-nowrap">Opponents need <strong class="text-foreground font-medium">{8 - game.BetSize}</strong> sets</span>
             {/if}
             {#if !game.IsBettingPhase}
-            <span>Winner <strong class="text-foreground font-medium">P{game.BetWinner.ID}</strong></span>
+            <span>Winner <strong class="text-foreground font-medium">{playerName(game.BetWinner.ID)}</strong></span>
             <span>Partner <strong class="text-accent font-medium">{game.PartnerCard.Rank}{suitToSymbol.get(game.PartnerCard.Suit)}</strong></span>
             <span class="text-muted-foreground">|</span>
             <span>Set <strong class="text-foreground font-medium">{game.Players.reduce((s: number, p: any) => s + p.Sets, 0)}/13</strong></span>
@@ -447,7 +450,7 @@
     <div class="flex flex-col items-center gap-1">
         {#each game.Moves.slice(-3) as move}
             <div class="flex items-center gap-2 {move === game.Moves[game.Moves.length - 1] ? 'text-base font-medium' : 'text-xs text-muted-foreground/60'}">
-                <span class="text-{playerIDToColor.get(move.PlayerID)}">P{move.PlayerID}</span>
+                <span class="text-{playerIDToColor.get(move.PlayerID)}">{playerName(move.PlayerID)}</span>
                 {#if move.CardPlayed.Value === 0}
                     <span>passed</span>
                 {:else}
@@ -457,12 +460,12 @@
         {/each}
         {#if game.Moves.length < 4}
             <div class="text-xs text-muted-foreground/40 mt-1">
-                waiting for P{game.WhoseTurn}...
+                waiting for {playerName(game.WhoseTurn)}...
             </div>
         {/if}
         {#if game.Moves.length === 0}
             <div class="text-xs text-muted-foreground/40">
-                P{game.WhoseTurn} to bet
+                {playerName(game.WhoseTurn)} to bet
             </div>
         {/if}
     </div>
@@ -472,7 +475,7 @@
             {#each game.Moves as move}
             <div class="flex flex-col items-center">
                 <PokerCard card={move.CardPlayed} isIllegal={false} minify={false} />
-                <p class="text-{playerIDToColor.get(move.PlayerID)}">P{move.PlayerID}</p>
+                <p class="text-{playerIDToColor.get(move.PlayerID)}">{playerName(move.PlayerID)}</p>
             </div>
             {/each}
         </div>
@@ -482,7 +485,7 @@
             {#each game.PreviousMoves as move, index}
                 <HandDisplay index={index}>
                     <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
-                    <p class="text-xs text-{playerIDToColor.get(move.PlayerID)}">P{move.PlayerID}</p>
+                    <p class="text-xs text-{playerIDToColor.get(move.PlayerID)}">{playerName(move.PlayerID)}</p>
                 </HandDisplay>
             {/each}
         </div>
@@ -499,7 +502,7 @@
             <div class="flex gap-2">
                 <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
                 {#if !headerState.hiddenMode && player.Partner !== null}
-                <p>| Partner is Player {player.Partner?.ID}</p>
+                <p>| Partner is {playerName(player.Partner?.ID ?? 0)}</p>
                 {/if}
             </div>
             
@@ -533,7 +536,7 @@
         <div class="flex gap-4">
             {#each game.Players.slice(1, 4) as player, index}
                 <div class="flex gap-2">
-                <p class="text-{playerIDToColor.get(player.ID)}">Player {player.ID} ({player.Sets} sets) </p>
+                <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
                 </div>
 
                 {#if index < 2}

@@ -86,6 +86,7 @@ pub struct TableStateResponse {
     pub trump_played: bool,
     pub lead_suit: Option<String>,
     pub completed_sets: Vec<game_core::Set>,
+    pub player_names: Vec<String>,
 }
 
 // ── Auth request / response types ─────────────────────────────────────────
@@ -155,6 +156,7 @@ pub struct SaveMatchRequest {
     pub player4_hand: String,
     pub sets_data: Option<String>,
     pub players: Option<String>,
+    pub room_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -710,7 +712,7 @@ async fn get_matches(
         .query(
             "SELECT id, user_id, date, bot_difficulty, trump_suit, bet_size, bet_winner, \
              partner, won_match, player1_sets, player2_sets, player3_sets, player4_sets, \
-             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players \
+             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id \
              FROM matches WHERE user_id = ?1 ORDER BY date DESC",
             libsql::params![user.id],
         )
@@ -754,6 +756,7 @@ async fn get_matches(
                     player4_hand: row.get::<String>(16).unwrap_or_default(),
                     sets_data: row.get::<Option<String>>(17).unwrap_or(None),
                     players: row.get::<Option<String>>(18).unwrap_or(None),
+                    room_id: row.get::<Option<String>>(19).unwrap_or(None),
                 });
             }
             Ok(None) => break,
@@ -812,12 +815,37 @@ async fn save_match(
         }
     };
 
+    // Dedup: if a match with this room_id already exists, skip save
+    if let Some(ref room_id) = payload.room_id {
+        if let Ok(mut rows) = conn
+            .query(
+                "SELECT id FROM matches WHERE room_id = ?1 LIMIT 1",
+                libsql::params![room_id.clone()],
+            )
+            .await
+        {
+            if let Ok(Some(_)) = rows.next().await {
+                tracing::info!("Match for room {} already saved, skipping duplicate", room_id);
+                return (
+                    StatusCode::OK,
+                    Json(AuthResponse {
+                        ok: true,
+                        token: None,
+                        user_id: None,
+                        username: None,
+                        error: None,
+                    }),
+                );
+            }
+        }
+    }
+
     let result = conn
         .execute(
             "INSERT INTO matches (user_id, date, bot_difficulty, trump_suit, bet_size, \
              bet_winner, partner, won_match, player1_sets, player2_sets, player3_sets, \
-             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             libsql::params![
                 user.id,
                 payload.date,
@@ -837,6 +865,7 @@ async fn save_match(
                 payload.player4_hand,
                 payload.sets_data,
                 payload.players,
+                payload.room_id,
             ],
         )
         .await;
@@ -1100,6 +1129,7 @@ async fn get_table_state(
             trump_played: false,
             lead_suit: None,
             completed_sets: Vec::new(),
+            player_names: Vec::new(),
         })),
     };
 
@@ -1267,6 +1297,7 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
         trump_played: table.trump_played,
         lead_suit: table.lead_suit.map(|s| format!("{:?}", s)),
         completed_sets: table.completed_sets.clone(),
+        player_names: table.players.iter().map(|p| p.name.clone()).collect(),
     }
 }
 
