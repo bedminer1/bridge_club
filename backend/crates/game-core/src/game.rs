@@ -338,7 +338,10 @@ impl Table {
             let actual_winner = (leader + set.winner) % 4;
 
             self.sets_won[actual_winner] += 1;
-            self.completed_sets.push(set);
+            // Store set with absolute winner index
+            let mut stored_set = set;
+            stored_set.winner = actual_winner;
+            self.completed_sets.push(stored_set);
             self.current_set_cards = Vec::new();
             self.lead_suit = None;
 

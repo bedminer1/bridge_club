@@ -36,9 +36,10 @@ async fn main() {
 
     // CORS: allow the SvelteKit dev server with credentials
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::exact(
+        .allow_origin(AllowOrigin::list([
             HeaderValue::from_static("http://localhost:5173"),
-        ))
+            HeaderValue::from_static("http://127.0.0.1:5173"),
+        ]))
         .allow_methods(AllowMethods::list([
             axum::http::Method::GET,
             axum::http::Method::POST,

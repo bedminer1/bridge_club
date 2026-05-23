@@ -19,6 +19,10 @@ interface ApiState {
     setsWon: number[]
     completedSetCount: number
     isFinished: boolean
+    currentTrickCards: Array<{ suit: string; rank: string }>
+    currentTrickStartPlayer: number
+    previousTrickCards: Array<{ suit: string; rank: string }>
+    previousTrickWinner: number | null
 }
 
 interface ApiNewGameResponse {
@@ -165,8 +169,36 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
         }
     }
 
-    // Build a minimal set of moves for display
-    const moves: Move[] = []
+    const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
+
+    // Build moves from current trick cards
+    const moves: Move[] = (state.currentTrickCards || []).map((apiCard, i) => {
+        const playerIdx = ((state.currentTrickStartPlayer ?? 0) + i) % 4
+        const value = API_RANK_TO_VALUE[apiCard.rank] ?? 2
+        return {
+            CardPlayed: {
+                Rank: VALUE_TO_RANK[value] ?? String(value),
+                Value: value,
+                Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
+                WonSet: false,
+            },
+            PlayerID: playerIdx + 1,
+        }
+    })
+
+    // Build previous moves from completed trick cards
+    const prevMoves: Move[] = (state.previousTrickCards || []).map((apiCard, i) => {
+        const value = API_RANK_TO_VALUE[apiCard.rank] ?? 2
+        return {
+            CardPlayed: {
+                Rank: VALUE_TO_RANK[value] ?? String(value),
+                Value: value,
+                Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
+                WonSet: false,
+            },
+            PlayerID: i + 1, // placeholder — real player mapping needs leader
+        }
+    })
 
     // WhoseTurn: backend is 0-indexed, frontend is 1-indexed
     const whoseTurn = state.currentPlayer + 1
@@ -187,7 +219,7 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
         TrumpPlayed: false, // API doesn't expose this
         FullDeck: fullDeck,
         Moves: moves,
-        PreviousMoves: [],
+        PreviousMoves: prevMoves,
         WhoseTurn: whoseTurn,
         TurnSuit: "",
         Winner: winner,

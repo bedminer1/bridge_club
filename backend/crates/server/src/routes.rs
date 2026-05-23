@@ -47,6 +47,7 @@ pub struct SelectPartnerRequest {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TableStateResponse {
     pub phase: String,
     pub hands: Vec<String>,
@@ -58,6 +59,10 @@ pub struct TableStateResponse {
     pub sets_won: Vec<u8>,
     pub completed_set_count: usize,
     pub is_finished: bool,
+    pub current_trick_cards: Vec<game_core::Card>,
+    pub current_trick_start_player: usize,
+    pub previous_trick_cards: Vec<game_core::Card>,
+    pub previous_trick_winner: Option<usize>,
 }
 
 // ── Auth request / response types ─────────────────────────────────────────
@@ -943,39 +948,16 @@ async fn get_table_state(
             sets_won: Vec::new(),
             completed_set_count: 0,
             is_finished: false,
+            current_trick_cards: Vec::new(),
+            current_trick_start_player: 0,
+            previous_trick_cards: Vec::new(),
+            previous_trick_winner: None,
         })),
     };
 
-    let hands: Vec<String> = room.table.players
-        .iter()
-        .map(|p| {
-            p.hand.iter()
-                .map(|c| c.to_ascii_string())
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
-        .collect();
-
-    let phase = format!("{:?}", room.table.phase);
-    let current_player = room.table.current_player_index();
-    let trump_suit = room.table.trump_suit.map(|s| s.to_string());
-    let sets_won = room.table.sets_won.to_vec();
-    let is_finished = room.table.phase == game_core::GamePhase::Finished;
-
     (
         StatusCode::OK,
-        Json(TableStateResponse {
-            phase,
-            hands,
-            current_player,
-            bet_size: room.table.bet_size,
-            trump_suit,
-            bet_winner: room.table.bet_winner,
-            partner_idx: room.table.partner_idx,
-            sets_won,
-            completed_set_count: room.table.completed_sets.len(),
-            is_finished,
-        }),
+        Json(build_table_state(&room.table)),
     )
 }
 
@@ -1075,6 +1057,35 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
     let sets_won = table.sets_won.to_vec();
     let is_finished = table.phase == game_core::GamePhase::Finished;
 
+    // Current trick: cards in play
+    let current_trick_cards = table.current_set_cards.clone();
+    let n = current_trick_cards.len();
+    // Who led the current trick: if N cards in the trick and current_player
+    // is the next player to play, then leader = (current_player - N + 4) % 4
+    let current_trick_start_player = if n > 0 {
+        (current_player + 4 - n % 4) % 4
+    } else {
+        current_player
+    };
+
+    // Previous trick: last completed set
+    let (previous_trick_cards, previous_trick_winner) =
+        if let Some(last_set) = table.completed_sets.last() {
+            // Find the leader of the last completed set.
+            // First set is led by (bet_winner + 1) % 4.
+            // Each subsequent set is led by the previous set's winner.
+            let last_leader = if table.completed_sets.len() > 1 {
+                // The winner of the second-to-last set leads the last set
+                table.completed_sets[table.completed_sets.len() - 2].winner
+            } else {
+                // Only one set completed — first set leader
+                (table.bet_winner.unwrap_or(0) + 1) % 4
+            };
+            (last_set.cards.to_vec(), Some(last_set.winner))
+        } else {
+            (Vec::new(), None)
+        };
+
     TableStateResponse {
         phase,
         hands,
@@ -1086,6 +1097,10 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
         sets_won,
         completed_set_count: table.completed_sets.len(),
         is_finished,
+        current_trick_cards,
+        current_trick_start_player,
+        previous_trick_cards,
+        previous_trick_winner,
     }
 }
 
