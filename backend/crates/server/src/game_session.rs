@@ -146,11 +146,11 @@ pub fn action_human_move(
 
 /// Advance exactly one bot turn, if the current player is a bot.
 ///
-/// Returns `Ok(true)` if a bot action was processed, `Ok(false)` if it's the
+/// Returns `Ok(true)` if a bot action was processed, `Ok(false)` if it's a
 /// human's turn, the game is finished, or no bot action is needed.
 pub fn advance_one_turn(
     table: &mut Table,
-    human_seat: usize,
+    _human_seat: usize,
     difficulty: BotDifficulty,
 ) -> Result<bool, &'static str> {
     // Stop if the game is finished
@@ -164,8 +164,9 @@ pub fn advance_one_turn(
 
     let current = table.current_player_index();
 
-    // If it's the human's turn, nothing to advance
-    if current == human_seat {
+    // Only process the turn if the current player is a bot (name starts with "Bot-")
+    let player_name = &table.players[current].name;
+    if !player_name.starts_with("Bot-") {
         return Ok(false);
     }
 
