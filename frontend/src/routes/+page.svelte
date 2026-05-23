@@ -53,6 +53,13 @@
         loggedIn = false
     }
 
+    // Determine which seat this user is in (for multiplayer)
+    let humanSeat = $derived.by(() => {
+        const s = page.url.searchParams.get("seat")
+        return s !== null ? parseInt(s) : 0
+    })
+    let humanPlayerId = $derived(humanSeat + 1)
+
     // Sync reactive game state to shared header state
     $effect(() => { headerState.game = game })
 
@@ -110,10 +117,16 @@
         try {
             roomId = existingRoomId
             const gameState = await getRoomState(existingRoomId, onlineToken)
+            // Fix up player display: mark the correct seat as human
+            for (let i = 0; i < gameState.Players.length; i++) {
+                gameState.Players[i].IsBot = i !== humanSeat
+                gameState.Players[i].Username = i === humanSeat ? "You" : `Bot ${i + 1}`
+                gameState.Players[i].ShortUsername = i === humanSeat ? "Y" : `B${i + 1}`
+            }
             game = gameState
             isOnline = true
             // Start polling if it's not the human's turn
-            if (game.WhoseTurn !== 1 && game.Winner === "") {
+            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
         } catch (e) {
@@ -146,7 +159,7 @@
         try {
             const updated = await doAdvance(roomId, onlineToken)
             game = updated
-            if (updated.WhoseTurn === 1 || updated.Winner !== "") {
+            if (updated.WhoseTurn === humanPlayerId || updated.Winner !== "") {
                 _pollActive = false
                 return
             }
@@ -187,12 +200,12 @@
         if (!isOnline || !roomId || !onlineToken) return
         // Sync state first
         await syncState()
-        if (game.WhoseTurn !== 1) return
+        if (game.WhoseTurn !== humanPlayerId) return
         try {
             const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
             const updated = await doBid(roomId, onlineToken, call)
             game = updated
-            if (game.WhoseTurn !== 1 && game.Winner === "") {
+            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
         } catch (e) {
@@ -203,11 +216,11 @@
     async function onlinePassBet() {
         if (!isOnline || !roomId || !onlineToken) return
         await syncState()
-        if (game.WhoseTurn !== 1) return
+        if (game.WhoseTurn !== humanPlayerId) return
         try {
             const updated = await doBid(roomId, onlineToken, "Pass")
             game = updated
-            if (game.WhoseTurn !== 1 && game.Winner === "") {
+            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
         } catch (e) {
@@ -218,11 +231,11 @@
     async function onlineSelectPartner(card: any) {
         if (!isOnline || !roomId || !onlineToken) return
         await syncState()
-        if (game.WhoseTurn !== 1) return
+        if (game.WhoseTurn !== humanPlayerId) return
         try {
             const updated = await doSelectPartner(roomId, onlineToken, card)
             game = updated
-            if (game.WhoseTurn !== 1 && game.Winner === "") {
+            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
         } catch (e) {
@@ -233,11 +246,11 @@
     async function onlinePlayCard(card: any, _player: any) {
         if (!isOnline || !roomId || !onlineToken) return
         await syncState()
-        if (game.WhoseTurn !== 1) return
+        if (game.WhoseTurn !== humanPlayerId) return
         try {
             const updated = await doPlay(roomId, onlineToken, card)
             game = updated
-            if (game.WhoseTurn !== 1 && game.Winner === "") {
+            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
         } catch (e) {

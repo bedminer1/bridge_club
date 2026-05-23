@@ -29,6 +29,7 @@
 
     // Lobby info (players list)
     let roomId = $state("");
+    let mySeatIndex = $state(0);
     let players = $state<Array<{ name: string; seatIndex: number; isBot: boolean }>>([]);
     let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -50,6 +51,7 @@
             }
             const data = await res.json();
             roomId = data.roomId;
+            mySeatIndex = data.seatIndex;
             isHost = true;
             startPolling();
         } catch (e) {
@@ -79,8 +81,11 @@
             }
             const data = await res.json();
             roomId = data.roomId;
+            mySeatIndex = data.seatIndex;
             isHost = false;
-            startPolling();
+            stopPolling();
+            goto(`/?room=${encodeURIComponent(roomId)}&seat=${data.seatIndex}`);
+            return;
         } catch (e) {
             console.error("Join room error:", e);
             joinError = "Failed to join room. Is the backend running?";
@@ -106,7 +111,7 @@
             const data = await res.json();
             if (data.ok) {
                 stopPolling();
-                goto(`/?room=${encodeURIComponent(roomId)}`);
+                goto(`/?room=${encodeURIComponent(roomId)}&seat=${mySeatIndex}`);
             } else {
                 alert("Failed to start game: " + JSON.stringify(data));
             }
@@ -142,7 +147,7 @@
             if (data.isStarted) {
                 // Game already started, redirect
                 stopPolling();
-                goto(`/?room=${encodeURIComponent(roomId)}`);
+                goto(`/?room=${encodeURIComponent(roomId)}&seat=${mySeatIndex}`);
                 return;
             }
             players = data.players || [];
