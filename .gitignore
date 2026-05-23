@@ -1,0 +1,6 @@
+backend/target/
+**/node_modules/
+.env
+*.db
+**/.cache/
+cli_interface/compile_commands.json

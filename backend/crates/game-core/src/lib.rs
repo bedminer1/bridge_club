@@ -20,4 +20,4 @@ pub use card::{Card, Rank, Suit};
 pub use deck::Deck;
 pub use game::{GamePhase, Table};
 pub use player::{Direction, Player};
-pub use scoring::{ContractResult, DealScore, Trick, Vulnerability};
+pub use scoring::{ContractResult, DealScore, Set, Vulnerability};

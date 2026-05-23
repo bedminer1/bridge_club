@@ -1,3 +1,5 @@
+use crate::card::Card;
+use crate::card::Suit;
 use crate::bid::Contract;
 use serde::{Deserialize, Serialize};
 
@@ -23,31 +25,59 @@ impl Vulnerability {
     }
 }
 
-// ── Trick ─────────────────────────────────────────────────────────────────
+// ── Set (renamed from Trick) ───────────────────────────────────────────────
 
-use crate::card::Card;
-use crate::card::Suit;
-
-/// The result of a single trick (4 cards played).
+/// The result of a single set (4 cards played).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Trick {
+pub struct Set {
     /// Cards played in order (index 0 = lead, 1..3 = clockwise).
     pub cards: [Card; 4],
-    /// Player index that won this trick.
+    /// Player index (0..3) that won this set.
     pub winner: usize,
     /// Suit that was led.
     pub lead_suit: Suit,
 }
 
-impl Trick {
-    /// Create a new trick from the four played cards, given the trump suit
-    /// (None = no trump). Returns the trick with the winner set.
+/// Returns true if card `c1` beats card `c2` under Singapore Bridge rules.
+///
+/// Priority:
+/// 1. Same suit → higher rank wins.
+/// 2. Trump beats non-trump.
+/// 3. Led suit beats off-suit non-trump.
+/// 4. Otherwise, c1 does not beat c2.
+fn card1_beats(c1: Card, c2: Card, lead_suit: Suit, trump: Option<Suit>) -> bool {
+    // 1. Same suit → higher rank wins
+    if c1.suit == c2.suit {
+        return c1.rank > c2.rank;
+    }
+    // 2. Trump beats non-trump
+    if let Some(tr) = trump {
+        if c1.suit == tr && c2.suit != tr {
+            return true;
+        }
+        if c1.suit != tr && c2.suit == tr {
+            return false;
+        }
+    }
+    // 3. Led suit beats off-suit non-trump
+    if c1.suit == lead_suit && c2.suit != lead_suit {
+        return true;
+    }
+    false
+}
+
+impl Set {
+    /// Create a new set from the four played cards, given the trump suit
+    /// (None = no trump). Returns the set with the winner determined.
     pub fn new(cards: [Card; 4], trump: Option<Suit>) -> Self {
-        // TODO: determine lead suit from cards[0]
-        // TODO: determine winner:
-        //   - highest card of lead suit wins, UNLESS a trump was played
-        //   - if trump played, highest trump wins
-        todo!("Trick::new")
+        let lead_suit = cards[0].suit;
+        let mut winner = 0; // index into the cards array, not player index
+        for i in 1..4 {
+            if card1_beats(cards[i], cards[winner], lead_suit, trump) {
+                winner = i;
+            }
+        }
+        Set { cards, winner, lead_suit }
     }
 }
 
@@ -81,7 +111,7 @@ pub struct DealScore {
 // This is a stub. Full duplicate bridge scoring is fairly involved (above/below
 // line, slam bonuses, game bonuses, doubled/redoubled multipliers).
 // Start with a simple scoring scheme, then expand.
-pub fn score_deal(contract: &Contract, tricks_taken: u8, vulnerability: Vulnerability) -> DealScore {
+pub fn score_deal(_contract: &Contract, _tricks_taken: u8, _vulnerability: Vulnerability) -> DealScore {
     // TODO: Duplicate bridge scoring calculation.
     // 1. Determine if contract was made or down
     // 2. Calculate trick score (above/below the line)

@@ -5,6 +5,8 @@
     import PokerCard from "$lib/components/poker-card.svelte";
     import { formatDate } from "$lib/utils";
     import { headerState } from "$lib/game/header-state.svelte";
+    import { toggleMode } from "mode-watcher";
+    import { Switch } from "$lib/components/ui/switch/index.js";
 
     let { data } = $props()
     let { matchRecords, message, username } = $state(data)
@@ -36,6 +38,12 @@
                 logout
             </button>
         </form>
+
+        <!-- Theme toggle -->
+        <div class="flex items-center gap-3 mb-10">
+            <span class="text-xs text-muted-foreground">Light Mode</span>
+            <Switch bind:checked={headerState.isLightMode} onclick={toggleMode} />
+        </div>
 
         <!-- Match history -->
         <div class="w-full max-w-3xl">

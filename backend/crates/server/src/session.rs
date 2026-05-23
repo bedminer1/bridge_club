@@ -5,11 +5,14 @@ use uuid::Uuid;
 
 use game_core::Table;
 
+use crate::db::DbPool;
+
 // ── Session ────────────────────────────────────────────────────────────────
 
 /// Identifies a single connected player within a game session.
 /// A session represents one seat at the table.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PlayerSession {
     pub player_id: Uuid,
     pub player_name: String,
@@ -40,20 +43,44 @@ impl GameRoom {
     /// Add a player to this room. Returns their seat index (0..3) or error
     /// if the room is full.
     pub fn add_player(&mut self, player_name: &str) -> Result<(Uuid, usize), &'static str> {
-        // TODO:
-        // 1. Check if room is full (sessions.len() < 4)
-        // 2. Generate player_id (Uuid::new_v4())
-        // 3. Assign seat index (smallest available 0..3)
-        // 4. Update player name on the table
-        // 5. Insert into sessions
-        // 6. Return (player_id, seat_index)
-        todo!("GameRoom::add_player")
+        if self.sessions.len() >= 4 {
+            return Err("Room is full (max 4 players)");
+        }
+        if self.is_started {
+            return Err("Game already started");
+        }
+
+        let player_id = Uuid::new_v4();
+        // Find smallest available seat index
+        let mut taken = [false; 4];
+        for session in self.sessions.values() {
+            taken[session.seat_index] = true;
+        }
+        let seat_index = taken.iter().position(|&t| !t).unwrap();
+
+        // Update the player name on the table
+        self.table.players[seat_index].name = player_name.to_string();
+
+        self.sessions.insert(
+            player_id,
+            PlayerSession {
+                player_id,
+                player_name: player_name.to_string(),
+                seat_index,
+            },
+        );
+
+        Ok((player_id, seat_index))
     }
 
     /// Remove a player from the room.
     pub fn remove_player(&mut self, player_id: Uuid) {
-        // TODO: remove from sessions, reset seat name on table
-        todo!("GameRoom::remove_player")
+        if let Some(session) = self.sessions.remove(&player_id) {
+            // Reset the player name on the table
+            let default_names = ["North", "East", "South", "West"];
+            self.table.players[session.seat_index].name =
+                default_names[session.seat_index].to_string();
+        }
     }
 
     /// Number of seated players (0..4).
@@ -67,12 +94,22 @@ impl GameRoom {
     }
 }
 
-// ── Global Game State ──────────────────────────────────────────────────────
+// ── Global Application State ───────────────────────────────────────────────
 
-/// Shared mutable state for the entire server — a map of room_id → GameRoom.
-pub type AppState = Arc<RwLock<HashMap<Uuid, GameRoom>>>;
+/// Shared mutable state for the entire server.
+#[derive(Clone)]
+pub struct AppState {
+    /// In-memory game rooms (ephemeral game state).
+    pub rooms: Arc<RwLock<HashMap<Uuid, GameRoom>>>,
+    /// Persistent database pool for users, matches, sessions.
+    #[allow(dead_code)]
+    pub db: DbPool,
+}
 
-/// Create a fresh shared state.
-pub fn new_app_state() -> AppState {
-    Arc::new(RwLock::new(HashMap::new()))
+/// Create a fresh shared state with a database pool.
+pub async fn new_app_state(db_pool: DbPool) -> AppState {
+    AppState {
+        rooms: Arc::new(RwLock::new(HashMap::new())),
+        db: db_pool,
+    }
 }

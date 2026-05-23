@@ -28,34 +28,35 @@ pub struct Deck {
 impl Deck {
     /// Creates a fresh, unshuffled 52-card deck (Clubs 2..A, Diamonds 2..A, …).
     pub fn new() -> Self {
-        // TODO: Build the full 52-card Vec.
-        // Hint: for suit in Suit::ALL { for rank in Rank::ALL { … } }
-        todo!("Deck::new")
+        let mut cards = Vec::with_capacity(52);
+        for suit in Suit::ALL {
+            for rank in Rank::ALL {
+                cards.push(Card::new(suit, rank));
+            }
+        }
+        Deck { cards }
     }
 
-    /// Randomly permutes the remaining cards.
+    /// Randomly permutes the remaining cards (Fisher-Yates shuffle).
     pub fn shuffle(&mut self) {
-        // TODO: use rand::seq::SliceRandom::shuffle
-        todo!("Deck::shuffle")
+        let mut rng = thread_rng();
+        self.cards.shuffle(&mut rng);
     }
 
     /// Removes and returns the top card.
     /// Panics if the deck is empty.
     pub fn draw(&mut self) -> Card {
-        // TODO: cards.pop().expect("deck empty")
-        todo!("Deck::draw")
+        self.cards.pop().expect("deck empty")
     }
 
     /// Number of cards remaining in the deck.
     pub fn size(&self) -> usize {
-        // TODO: self.cards.len()
-        todo!("Deck::size")
+        self.cards.len()
     }
 
     /// Returns true when all cards have been drawn.
     pub fn is_empty(&self) -> bool {
-        // TODO: self.cards.is_empty()
-        todo!("Deck::is_empty")
+        self.cards.is_empty()
     }
 }
 

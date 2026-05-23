@@ -1,0 +1,9 @@
+{
+  "lsp": {
+    "rust-analyzer": {
+      "env": {
+        "LIBCLANG_PATH": "/Library/Developer/CommandLineTools/usr/lib"
+      }
+    }
+  }
+}

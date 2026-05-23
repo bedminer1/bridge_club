@@ -3,10 +3,8 @@
     import { Input } from "$lib/components/ui/input/index.js";
     import { Switch } from "$lib/components/ui/switch/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
-    import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
 
-    import { toggleMode } from "mode-watcher";
     import { Gamepad2, Crown, Info, Settings, Bell, User } from "@lucide/svelte";
     import { page } from "$app/state";
 
@@ -81,11 +79,6 @@
                         <div class="flex justify-between items-center gap-4">
                             <Label for="bots">Bots</Label>
                             <Switch bind:checked={headerState.game.TurnOnBots} />
-                        </div>
-                        <Separator />
-                        <div class="flex justify-between items-center gap-4">
-                            <Label for="light-mode">Light Mode</Label>
-                            <Switch bind:checked={headerState.isLightMode} onclick={toggleMode} />
                         </div>
                     </div>
                 </Popover.Content>

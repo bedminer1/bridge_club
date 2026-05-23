@@ -66,8 +66,37 @@ impl Bid {
     /// Level is the first char (digit 1-7). The rest is the strain.
     /// Returns None on parse failure.
     pub fn parse(s: &str) -> Option<Self> {
-        // TODO: validate level digit, parse strain from remaining chars
-        todo!("Bid::parse")
+        let s = s.trim();
+        if s.len() < 2 {
+            return None;
+        }
+        // First character must be a digit 1-7
+        let level_char = s.chars().next()?;
+        let level: u8 = level_char.to_digit(10)? as u8;
+        if !(1..=7).contains(&level) {
+            return None;
+        }
+        let rest = &s[1..].trim();
+        let strain = match rest.to_lowercase().as_str() {
+            "c" | "♣" | "clubs" => Strain::Clubs,
+            "d" | "♦" | "diamonds" => Strain::Diamonds,
+            "h" | "♥" | "hearts" => Strain::Hearts,
+            "s" | "♠" | "spades" => Strain::Spades,
+            "nt" | "notrump" | "no trump" => Strain::NoTrump,
+            _ => return None,
+        };
+        Some(Bid { level, strain })
+    }
+}
+
+/// Strain rank for comparison: NT > Spades > Hearts > Diamonds > Clubs.
+fn strain_cmp_rank(strain: Strain) -> u8 {
+    match strain {
+        Strain::Clubs => 0,
+        Strain::Diamonds => 1,
+        Strain::Hearts => 2,
+        Strain::Spades => 3,
+        Strain::NoTrump => 4,
     }
 }
 
@@ -80,8 +109,14 @@ impl PartialOrd for Bid {
 
 impl Ord for Bid {
     fn cmp(&self, other: &Self) -> Ordering {
-        // TODO: compare level first, then strain
-        todo!("Bid::cmp")
+        match self.level.cmp(&other.level) {
+            Ordering::Equal => {
+                let self_rank = strain_cmp_rank(self.strain);
+                let other_rank = strain_cmp_rank(other.strain);
+                self_rank.cmp(&other_rank)
+            }
+            other => other,
+        }
     }
 }
 
@@ -136,7 +171,7 @@ impl fmt::Display for Call {
 
 // ── Contract ──────────────────────────────────────────────────────────────
 
-/// The final contract after the auction ends (3 passes after a bid).
+/// The final contract after the auction ends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Contract {
     pub bid: Bid,
@@ -198,28 +233,61 @@ impl AuctionState {
 
     /// Apply a call and advance the state.
     /// Returns Ok(()) if the call was legal, Err(&str) if illegal.
+    ///
+    /// Singapore Bridge rules:
+    /// - Pass: increments consecutive_passes
+    /// - Bid: must outrank last_bid, resets consecutive_passes
     pub fn make_call(&mut self, call: Call) -> Result<(), &'static str> {
-        // TODO: Validate and apply the call.
-        // - Pass: increment consecutive_passes, check for auction end
-        // - Bid: must be higher than last_bid, reset consecutive_passes
-        // - Double: opponents must have made last bid, not already doubled
-        // - Redouble: must be doubled by opponents, not already redoubled
-        // Then advance current_player = (current_player + 1) % 4
-        todo!("AuctionState::make_call")
+        if self.is_ended() {
+            return Err("Auction has ended");
+        }
+        match call {
+            Call::Bid(bid) => {
+                if let Some(last) = self.last_bid {
+                    if bid <= last {
+                        return Err("Bid must outrank the current bid");
+                    }
+                }
+                self.last_bid = Some(bid);
+                self.last_bidder = Some(self.current_player);
+                self.consecutive_passes = 0;
+            }
+            Call::Pass => {
+                self.consecutive_passes += 1;
+            }
+            _ => return Err("Double/Redouble not allowed in Singapore Bridge auction"),
+        }
+        self.call_history.push(call);
+        self.current_player = (self.current_player + 1) % 4;
+        Ok(())
     }
 
-    /// Returns true if the auction has ended (3 consecutive passes after a bid,
-    /// or 4 passes with no bid — passed out).
+    /// Returns true if the auction has ended.
+    ///
+    /// Singapore Bridge: auction ends when there are at least 4 calls and
+    /// the last 3 are Pass (3 consecutive passes after the last raise).
+    /// Also ends if 4 passes with no bid (everyone passed out).
     pub fn is_ended(&self) -> bool {
-        // TODO: logic for auction end conditions
-        todo!("AuctionState::is_ended")
+        if self.call_history.len() < 4 {
+            return false;
+        }
+        // Check if the last 3 calls are all Pass
+        let last_three = &self.call_history[self.call_history.len() - 3..];
+        last_three.iter().all(|c| matches!(c, Call::Pass))
     }
 
     /// If the auction ended with a contract (not passed out), returns the
     /// final contract. Otherwise returns None.
     pub fn final_contract(&self) -> Option<Contract> {
-        // TODO: determine declarer (first player on declaring side who bid
-        // the strain of the final contract), build Contract struct
-        todo!("AuctionState::final_contract")
+        if !self.is_ended() {
+            return None;
+        }
+        let bid = self.last_bid?;
+        Some(Contract {
+            bid,
+            doubled: self.doubled,
+            redoubled: self.redoubled,
+            declarer: self.last_bidder?,
+        })
     }
 }

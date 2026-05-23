@@ -21,7 +21,7 @@
             <h2 class="font-semibold mb-2">About</h2>
             <p class="text-muted-foreground">
                 Built as a learning project. Open source on
-                <a href="https://github.com/bedminer1/BRIDGE" target="_blank" class="text-accent hover:underline">
+                <a href="https://github.com/bedminer1/bridge_club" target="_blank" class="text-accent hover:underline">
                     GitHub <Github class="inline w-3 h-3" />
                 </a>.
             </p>
