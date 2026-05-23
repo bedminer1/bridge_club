@@ -139,7 +139,7 @@
             });
             if (!res.ok) return;
             const data = await res.json();
-            if (data.phase === "started") {
+            if (data.isStarted) {
                 // Game already started, redirect
                 stopPolling();
                 goto(`/?room=${encodeURIComponent(roomId)}`);
