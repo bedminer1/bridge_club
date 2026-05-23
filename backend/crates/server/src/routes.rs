@@ -63,6 +63,7 @@ pub struct TableStateResponse {
     pub current_trick_start_player: usize,
     pub previous_trick_cards: Vec<game_core::Card>,
     pub previous_trick_winner: Option<usize>,
+    pub previous_trick_start_player: usize,
 }
 
 // ── Auth request / response types ─────────────────────────────────────────
@@ -953,6 +954,7 @@ async fn get_table_state(
             current_trick_start_player: 0,
             previous_trick_cards: Vec::new(),
             previous_trick_winner: None,
+            previous_trick_start_player: 0,
         })),
     };
 
@@ -1070,12 +1072,13 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
     };
 
     // Previous trick: last completed set
+    let previous_trick_start_player;
     let (previous_trick_cards, previous_trick_winner) =
         if let Some(last_set) = table.completed_sets.last() {
             // Find the leader of the last completed set.
             // First set is led by (bet_winner + 1) % 4.
             // Each subsequent set is led by the previous set's winner.
-            let last_leader = if table.completed_sets.len() > 1 {
+            previous_trick_start_player = if table.completed_sets.len() > 1 {
                 // The winner of the second-to-last set leads the last set
                 table.completed_sets[table.completed_sets.len() - 2].winner
             } else {
@@ -1084,6 +1087,7 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
             };
             (last_set.cards.to_vec(), Some(last_set.winner))
         } else {
+            previous_trick_start_player = 0;
             (Vec::new(), None)
         };
 
@@ -1102,6 +1106,7 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
         current_trick_start_player,
         previous_trick_cards,
         previous_trick_winner,
+        previous_trick_start_player,
     }
 }
 

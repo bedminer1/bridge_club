@@ -23,6 +23,7 @@ interface ApiState {
     currentTrickStartPlayer: number
     previousTrickCards: Array<{ suit: string; rank: string }>
     previousTrickWinner: number | null
+    previousTrickStartPlayer: number
 }
 
 interface ApiNewGameResponse {
@@ -187,16 +188,23 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
     })
 
     // Build previous moves from completed trick cards
+    const prevTrickStartPlayer = state.previousTrickStartPlayer ?? 0
+    const prevTrickWinnerIdx = state.previousTrickWinner
     const prevMoves: Move[] = (state.previousTrickCards || []).map((apiCard, i) => {
         const value = API_RANK_TO_VALUE[apiCard.rank] ?? 2
+        // Determine which player index played this card: cards[0] was led by start player
+        const cardPlayer = (prevTrickStartPlayer + i) % 4
+        // Mark as WonSet if this card was played by the winner
+        const isWon = prevTrickWinnerIdx !== null && prevTrickWinnerIdx !== undefined
+            && cardPlayer === prevTrickWinnerIdx
         return {
             CardPlayed: {
                 Rank: VALUE_TO_RANK[value] ?? String(value),
                 Value: value,
                 Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
-                WonSet: false,
+                WonSet: isWon,
             },
-            PlayerID: i + 1, // placeholder — real player mapping needs leader
+            PlayerID: cardPlayer + 1,
         }
     })
 
