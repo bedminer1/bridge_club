@@ -94,35 +94,59 @@
         }
     }
 
-    /** Poll interval ID for online bot turn waiting. */
-    let pollInterval: ReturnType<typeof setInterval> | null = null
+    /** Poll timeout handle for online bot turn waiting. */
+    let pollTimeout: ReturnType<typeof setTimeout> | null = null
 
     function startPolling() {
         stopPolling()
-        const delay = (headerState.botSpeed ?? 2) * 1000
-        pollInterval = setInterval(async () => {
-            if (!isOnline || !roomId || !onlineToken) {
-                stopPolling()
+        _pollActive = true
+        tick()
+    }
+
+    let _pollActive = $state(false)
+
+    async function tick() {
+        if (!isOnline || !roomId || !onlineToken) {
+            stopPolling()
+            return
+        }
+        try {
+            const updated = await doAdvance(roomId, onlineToken)
+            game = updated
+            if (updated.WhoseTurn === 1 || updated.Winner !== "") {
+                _pollActive = false
                 return
             }
-            try {
-                const updated = await doAdvance(roomId, onlineToken)
-                game = updated
-                if (updated.WhoseTurn === 1 || updated.Winner !== "") {
-                    stopPolling()
-                }
-            } catch (e) {
-                console.error("Poll error:", e)
-            }
+        } catch (e) {
+            console.error("Poll error:", e)
+            _pollActive = false
+            return
+        }
+        // Schedule next tick with current bot speed (reads fresh each tick)
+        const delay = (headerState.botSpeed ?? 2) * 1000
+        pollTimeout = setTimeout(() => {
+            if (_pollActive) tick()
         }, delay)
     }
 
     function stopPolling() {
-        if (pollInterval !== null) {
-            clearInterval(pollInterval)
-            pollInterval = null
+        _pollActive = false
+        if (pollTimeout !== null) {
+            clearTimeout(pollTimeout)
+            pollTimeout = null
         }
     }
+
+    // React to bot speed changes during active polling
+    $effect(() => {
+        const _ = headerState.botSpeed  // track changes
+        if (_pollActive) {
+            // Restart the current tick with new speed
+            stopPolling()
+            _pollActive = true
+            tick()
+        }
+    })
 
     async function onlineRaiseBet(bs: number, suit: string) {
         if (!isOnline || !roomId || !onlineToken) return
