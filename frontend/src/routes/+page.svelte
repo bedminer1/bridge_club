@@ -77,7 +77,7 @@
     const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
     let remainingDeck = $derived(
         game.FullDeck
-            ?.filter((fc: any) => !game.Players?.[0]?.Cards?.some((pc: any) => pc.Suit === fc.Suit && pc.Value === fc.Value))
+            ?.filter((fc: any) => !game.Players?.[humanSeat]?.Cards?.some((pc: any) => pc.Suit === fc.Suit && pc.Value === fc.Value))
             .sort((a: any, b: any) => {
                 const suitDiff = (suitOrder[a.Suit] ?? 0) - (suitOrder[b.Suit] ?? 0)
                 if (suitDiff !== 0) return suitDiff
@@ -117,13 +117,7 @@
         try {
             roomId = existingRoomId
             const gameState = await getRoomState(existingRoomId, onlineToken)
-            // Fix up player display: mark the correct seat as human
-            const isMultiplayer = page.url.searchParams.has("seat")
-            for (let i = 0; i < gameState.Players.length; i++) {
-                gameState.Players[i].IsBot = i !== humanSeat
-                gameState.Players[i].Username = i === humanSeat ? "You" : isMultiplayer ? `P${i + 1}` : `Bot ${i + 1}`
-                gameState.Players[i].ShortUsername = i === humanSeat ? "Y" : `P${i + 1}`
-            }
+            fixupPlayerDisplay(gameState)
             game = gameState
             isOnline = true
             // Start polling if it's not the human's turn
@@ -159,6 +153,7 @@
         }
         try {
             const updated = await doAdvance(roomId, onlineToken)
+            fixupPlayerDisplay(updated)
             game = updated
             if (updated.WhoseTurn === humanPlayerId || updated.Winner !== "") {
                 _pollActive = false
@@ -205,6 +200,7 @@
         try {
             const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
             const updated = await doBid(roomId, onlineToken, call)
+            fixupPlayerDisplay(updated)
             game = updated
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
@@ -220,6 +216,7 @@
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             const updated = await doBid(roomId, onlineToken, "Pass")
+            fixupPlayerDisplay(updated)
             game = updated
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
@@ -235,6 +232,7 @@
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             const updated = await doSelectPartner(roomId, onlineToken, card)
+            fixupPlayerDisplay(updated)
             game = updated
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
@@ -250,6 +248,7 @@
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             const updated = await doPlay(roomId, onlineToken, card)
+            fixupPlayerDisplay(updated)
             game = updated
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
@@ -269,10 +268,22 @@
                 const data = await res.json()
                 const betWinnerIdx = data.betWinner ?? undefined
                 const updated = apiStateToGame(data, roomId, betWinnerIdx)
+                fixupPlayerDisplay(updated)
                 game = updated
             }
         } catch (e) {
             console.error("Sync error:", e)
+        }
+    }
+
+    /** Fix up player display: mark the correct seat as human. */
+    function fixupPlayerDisplay(g: any) {
+        if (!g.Players) return
+        const isMultiplayer = page.url.searchParams.has("seat")
+        for (let i = 0; i < g.Players.length; i++) {
+            g.Players[i].IsBot = i !== humanSeat
+            g.Players[i].Username = i === humanSeat ? "You" : isMultiplayer ? `P${i + 1}` : `Bot ${i + 1}`
+            g.Players[i].ShortUsername = i === humanSeat ? "Y" : `P${i + 1}`
         }
     }
 
@@ -315,10 +326,10 @@
 
     /** Auto-save the match to the backend when the game ends. */
     async function autoSaveMatch() {
-        const userTeam = game.Team1?.some((p: any) => p.ID === 1) ? game.Team1 : game.Team2
+        const userTeam = game.Team1?.some((p: any) => p.ID === humanPlayerId) ? game.Team1 : game.Team2
         const wonMatch = game.Winner === "Team 1" && userTeam === game.Team1 ||
                          game.Winner === "Team 2" && userTeam === game.Team2 ? 1 : 0
-        const partner = userTeam?.find((p: any) => p.ID !== 1)?.ID ?? 0
+        const partner = userTeam?.find((p: any) => p.ID !== humanPlayerId)?.ID ?? 0
 
         const body: Record<string, unknown> = {
             date: Date.now(),
@@ -371,7 +382,7 @@
     </div>
 
     {#if game.IsPartnerSelectionPhase}
-        {#if game.BetWinner.ID === 1}
+        {#if game.BetWinner.ID === humanPlayerId}
         <div class="flex flex-col gap-4 items-center">
             <p class="text-xl">Select a partner card</p>
             <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
@@ -463,7 +474,7 @@
     {#if !game.IsBettingPhase}
     <!-- MAIN PHASE -->
     <div class="flex flex-col gap-10">
-        {#each headerState.hiddenMode ? [game.Players[0]] : game.Players as player}
+        {#each headerState.hiddenMode ? [game.Players[humanSeat]] : game.Players as player}
         <div>
             <div class="flex gap-2">
                 <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
@@ -517,11 +528,11 @@
     {:else} 
     <!-- BETTING PHASE -->
         <div class="flex flex-col gap-10">
-            {#each headerState.hiddenMode ? [game.Players[0]] : game.Players as player}
+            {#each headerState.hiddenMode ? [game.Players[humanSeat]] : game.Players as player}
             <div class="flex flex-col h-[100px]">
                 <p class="mb-2 text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
                 <div class="flex pl-4">
-                    {#each !headerState.hiddenMode || player.ID === 1 ? player.Cards : []  as card, index}
+                    {#each !headerState.hiddenMode || player.ID === humanPlayerId ? player.Cards : []  as card, index}
                         <HandDisplay index={index}>
                             <PokerCard card={card} isIllegal={false} minify={false}/>
                         </HandDisplay>
