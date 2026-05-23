@@ -194,6 +194,8 @@
     // Win detection
     $effect(() => {
         if (isOnline && game.Winner !== "") {
+            console.log("SAVE: game.CompletedSets length =", game.CompletedSets?.length ?? 0,
+                "game.CompletedSets =", JSON.stringify(game.CompletedSets))
             openSaveDialog = true
         }
     })
@@ -210,13 +212,16 @@
         const played: Card[][] = [[], [], [], []]
         for (const set of sets) {
             for (let i = 0; i < set.Cards.length; i++) {
-                const pid = (set.PlayerIDs[i] ?? 1) - 1  // 0-indexed
-                // Card object already has WonSet correctly set
+                const pid = (set.PlayerIDs[i] ?? 1) - 1
                 played[pid].push(set.Cards[i])
             }
         }
         return played
     }
+
+    // Save-time data: computed once when game ends
+    let savePlayedCards: Card[][] = $derived(playedCardsFromSets(game.CompletedSets ?? []))
+    let saveCompletedSetsJson: string = $derived(JSON.stringify(game.CompletedSets ?? []))
 </script>
 
 <div class="flex flex-col gap-6 w-full min-h-screen items-center px-4 pt-20 pb-8">
@@ -459,11 +464,12 @@
 
                 <!-- Hands (played cards per player, in play order, with WonSet flags) -->
                 {#each [0,1,2,3] as pid}
-                    <input type="hidden" name={"player" + (pid + 1) + "Hand"} value={JSON.stringify(playedCardsFromSets(game.CompletedSets ?? [])[pid] ?? [])}>
+                    {@const cardsForPlayer = savePlayedCards[pid] ?? []}
+                    <input type="hidden" name={"player" + (pid + 1) + "Hand"} value={JSON.stringify(cardsForPlayer)}>
                 {/each}
 
-                <!-- Completed sets data (set-by-set, already in Sets Played section) -->
-                <input type="hidden" name="setsData" value={JSON.stringify(game.CompletedSets ?? [])}>
+                <!-- Completed sets data (set-by-set, for cross-reference) -->
+                <input type="hidden" name="setsData" value={saveCompletedSetsJson}>
 
                 <Form.Button class="w-[60px] mt-4">
                     Save
