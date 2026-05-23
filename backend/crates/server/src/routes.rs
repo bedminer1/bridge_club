@@ -18,6 +18,7 @@ use game_core::Call;
 // ── Request / Response types ──────────────────────────────────────────────
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateRoomResponse {
     pub room_id: Uuid,
     pub player_id: Uuid,
@@ -25,11 +26,13 @@ pub struct CreateRoomResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateRoomRequest {
     pub player_name: String,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RoomInfoResponse {
     pub room_id: Uuid,
     pub is_started: bool,
@@ -38,6 +41,7 @@ pub struct RoomInfoResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RoomPlayerInfo {
     pub name: String,
     pub seat_index: usize,
@@ -50,6 +54,7 @@ pub struct JoinRoomRequest {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JoinRoomResponse {
     pub player_id: Uuid,
     pub seat_index: usize,
