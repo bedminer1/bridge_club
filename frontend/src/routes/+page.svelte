@@ -325,6 +325,9 @@
             {#if game.BetSize > 0 || !game.IsBettingPhase}
             <span>Trump <strong class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</strong></span>
             <span>Bet <strong class="text-foreground font-medium">{game.BetSize}</strong></span>
+            <span class="text-muted-foreground/40">|</span>
+            <span class="whitespace-nowrap">Bet winner <strong class="text-foreground font-medium">P{game.BetWinner.ID}</strong> + partner need <strong class="text-accent font-medium">{6 + game.BetSize}</strong> sets</span>
+            <span class="whitespace-nowrap">Opponents need <strong class="text-foreground font-medium">{8 - game.BetSize}</strong> sets</span>
             {/if}
             {#if !game.IsBettingPhase}
             <span>Winner <strong class="text-foreground font-medium">P{game.BetWinner.ID}</strong></span>
@@ -457,7 +460,7 @@
         <div class="flex flex-col justify-center gap-2">
             <div class="flex flex-col gap-2 items-start w-[45%]">
                 <div class="flex gap-2 w-full">
-                    <Input bind:value={betSize} class="text-center numberInput flex-1" type="number" placeholder="1-7"/>
+                    <Input bind:value={betSize} class="text-center numberInput flex-1" type="number" min={1} max={7} placeholder="1-7"/>
                     <Select.Root type="single" bind:value={bettedSuit}>
                     <Select.Trigger class="flex-[3]">
                         <p class="text-sm">{suitToSymbol.get(bettedSuit)} {bettedSuit}</p>
