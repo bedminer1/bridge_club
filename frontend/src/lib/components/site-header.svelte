@@ -5,7 +5,7 @@
     import { Label } from "$lib/components/ui/label/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
 
-    import { Gamepad2, Crown, Info, Settings, Bell, User, Users } from "@lucide/svelte";
+    import { Gamepad2, Crown, Info, Settings, Bell, User } from "@lucide/svelte";
     import { page } from "$app/state";
 
     import { headerState } from "$lib/game/header-state.svelte";
@@ -44,13 +44,6 @@
                 title="About"
             >
                 <Info class="w-4 h-4" />
-            </a>
-            <a
-                href="/lobby"
-                class="p-1.5 rounded-md {page.url.pathname === '/lobby' ? 'text-accent bg-accent/10' : 'text-muted-foreground'} hover:text-accent hover:bg-accent/10 transition-colors"
-                title="Lobby"
-            >
-                <Users class="w-4 h-4" />
             </a>
             
             

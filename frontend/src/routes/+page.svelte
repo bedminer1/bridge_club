@@ -23,6 +23,15 @@
         apiStateToGame,
     } from "$lib/game/api-game";
     import { page } from "$app/state";
+    import { goto } from "$app/navigation";
+
+    import {
+        Card,
+        CardContent,
+        CardHeader,
+        CardTitle,
+        CardDescription,
+    } from "$lib/components/ui/card/index.js";
 
     let { data } = $props()
     let { username, userID, token } = $state(data)
@@ -37,16 +46,11 @@
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
 
-    // Auto-start online game or join existing room when logged in
+    // Load a room if the URL has a ?room= param; otherwise show the lobby
     $effect(() => {
-        if (loggedIn && onlineToken && !isOnline && !isOnlineLoading) {
-            // Check if we have a roomId from URL (lobby flow)
-            const urlRoomId = page.url.searchParams.get("room")
-            if (urlRoomId) {
-                loadExistingRoom(urlRoomId)
-            } else {
-                startOnlineGame()
-            }
+        const urlRoomId = page.url.searchParams.get("room")
+        if (loggedIn && onlineToken && !isOnline && !isOnlineLoading && urlRoomId) {
+            loadExistingRoom(urlRoomId)
         }
     })
 
@@ -70,7 +74,7 @@
     // Game-over dialog
     let showGameOverDialog = $state(false)
     $effect(() => {
-        if (game.Winner !== "") {
+        if (game.Winner) {
             showGameOverDialog = true
         }
     })
@@ -327,6 +331,84 @@
 
     const API_URL = "http://127.0.0.1:3000"
 
+    // ── Lobby State ─────────────────────────────────────────────
+    let lobbyMode = $state<"create" | "join">("create")
+    let lobbyCreating = $state(false)
+    let lobbyIsHost = $state(false)
+    let lobbyRoomId = $state("")
+    let lobbyJoinRoomId = $state("")
+    let lobbyJoining = $state(false)
+    let lobbyJoinError = $state("")
+    let lobbyMySeatIndex = $state(0)
+    let lobbyPlayers = $state<Array<{ name: string; seatIndex: number; isBot: boolean }>>([])
+    let lobbyPollInterval: ReturnType<typeof setInterval> | null = null
+
+    async function lobbyCreateRoom() {
+        lobbyCreating = true
+        try {
+            const res = await fetch(`${API_URL}/api/rooms`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
+            })
+            if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Failed: ${res.status} ${t}`); return }
+            const d = await res.json()
+            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = true
+            lobbyStartPolling()
+        } catch (e) { console.error("Create room error:", e); alert("Failed. Is the backend running?") }
+        finally { lobbyCreating = false }
+    }
+
+    async function lobbyJoinRoom() {
+        if (!lobbyJoinRoomId.trim()) return
+        lobbyJoining = true; lobbyJoinError = ""
+        try {
+            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyJoinRoomId.trim())}/join`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
+            })
+            if (!res.ok) { const t = await res.text().catch(() => ""); lobbyJoinError = `Failed: ${res.status} ${t}`; return }
+            const d = await res.json()
+            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = false
+            lobbyStartPolling()
+        } catch (e) { console.error("Join error:", e); lobbyJoinError = "Failed. Is the backend running?" }
+        finally { lobbyJoining = false }
+    }
+
+    async function lobbyStartGame() {
+        try {
+            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/start`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
+            })
+            if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Start failed: ${res.status} ${t}`); return }
+            const d = await res.json()
+            if (d.ok) { lobbyStopPolling(); goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`) }
+            else { alert("Start failed: " + JSON.stringify(d)) }
+        } catch (e) { console.error("Start error:", e); alert("Failed. Is the backend running?") }
+    }
+
+    function lobbyStartPolling() {
+        lobbyStopPolling(); lobbyPoll()
+        lobbyPollInterval = setInterval(lobbyPoll, 2000)
+    }
+    function lobbyStopPolling() {
+        if (lobbyPollInterval !== null) { clearInterval(lobbyPollInterval); lobbyPollInterval = null }
+    }
+    async function lobbyPoll() {
+        if (!lobbyRoomId) return
+        try {
+            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/info`, {
+                headers: { "X-Session-Token": onlineToken },
+            })
+            if (!res.ok) return
+            const d = await res.json()
+            if (d.isStarted) { lobbyStopPolling(); goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`); return }
+            lobbyPlayers = d.players || []
+        } catch (e) { console.error("Poll error:", e) }
+    }
+    async function lobbyCopyRoomId() { try { await navigator.clipboard.writeText(lobbyRoomId) } catch {} }
+    $effect(() => { return () => lobbyStopPolling() })
+
     /** Build each player's sequence of played cards from completed sets. */
     function playedCardsFromSets(sets: Array<{ Cards: Card[]; PlayerIDs: number[]; WinnerID: number }>): Card[][] {
         const played: Card[][] = [[], [], [], []]
@@ -395,6 +477,7 @@
 
 <div class="flex flex-col gap-6 w-full min-h-screen items-center px-4 pt-20 pb-8">
 
+    {#if page.url.searchParams.get("room")}
     {#if isOnlineLoading}
     <div class="text-lg text-muted-foreground animate-pulse">
         Starting game...
@@ -470,23 +553,23 @@
         {/if}
     </div>
     {:else}
-    <div class="flex justify-center relative h-21 w-full">
-        <div class="flex gap-2 mx-auto">
-            {#each game.Moves as move}
-            <div class="flex flex-col items-center">
+    <div class="flex justify-center relative h-28 w-full">
+        <div class="flex gap-2 mx-auto items-start">
+            {#each game.Moves as move, i}
+            <div class="flex flex-col {i % 2 === 0 ? 'items-center mb-8' : 'items-center mt-8'}">
                 <PokerCard card={move.CardPlayed} isIllegal={false} minify={false} />
-                <p class="text-{playerIDToColor.get(move.PlayerID)}">{playerName(move.PlayerID)}</p>
+                <p class="text-{playerIDToColor.get(move.PlayerID)} text-xs whitespace-nowrap">{playerName(move.PlayerID)}</p>
             </div>
             {/each}
         </div>
     
         {#if game.PreviousMoves.length !== 0} 
-        <div class="absolute right-2 bottom-2 sm:right-1/6 sm:bottom-1/4 flex pl-4">
-            {#each game.PreviousMoves as move, index}
-                <HandDisplay index={index}>
+        <div class="absolute right-2 bottom-2 flex flex-col" style="gap: {6 - game.PreviousMoves.length * 1.5}px;">
+            {#each game.PreviousMoves as move, i}
+                <div class="flex items-center gap-1" style="margin-left: {i * 5}px;">
                     <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
-                    <p class="text-xs text-{playerIDToColor.get(move.PlayerID)}">{playerName(move.PlayerID)}</p>
-                </HandDisplay>
+                    <p class="text-xs text-{playerIDToColor.get(move.PlayerID)} whitespace-nowrap">{playerName(move.PlayerID)}</p>
+                </div>
             {/each}
         </div>
         {/if}
@@ -620,5 +703,88 @@
         </Dialog.Content>
     </Dialog.Root>
     {/if}
+    {/if}
+
+    {:else}
+    <!-- Lobby UI -->
+    <div class="w-full max-w-md">
+        {#if !lobbyRoomId}
+            <!-- Mode Selector -->
+            <div class="flex justify-center gap-2 mb-6">
+                <Button onclick={() => { lobbyMode = "create" }} variant={lobbyMode === "create" ? "default" : "outline"}>
+                    Create Room
+                </Button>
+                <Button onclick={() => { lobbyMode = "join" }} variant={lobbyMode === "join" ? "default" : "outline"}>
+                    Join Room
+                </Button>
+            </div>
+
+            {#if lobbyMode === "create"}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Create a Room</CardTitle>
+                        <CardDescription>Create a new lobby and invite friends to play.</CardDescription>
+                    </CardHeader>
+                    <CardContent class="flex flex-col gap-4">
+                        <Button onclick={lobbyCreateRoom} disabled={lobbyCreating}>
+                            {lobbyCreating ? "Creating..." : "Create Room"}
+                        </Button>
+                    </CardContent>
+                </Card>
+            {:else}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Join a Room</CardTitle>
+                        <CardDescription>Enter the room ID shared by the host.</CardDescription>
+                    </CardHeader>
+                    <CardContent class="flex flex-col gap-4">
+                        <div class="flex flex-col gap-2">
+                            <label for="room-id" class="text-sm text-muted-foreground">Room ID</label>
+                            <Input id="room-id" bind:value={lobbyJoinRoomId} placeholder="Enter room ID" />
+                        </div>
+                        {#if lobbyJoinError}<p class="text-sm text-destructive">{lobbyJoinError}</p>{/if}
+                        <Button onclick={lobbyJoinRoom} disabled={lobbyJoining || !lobbyJoinRoomId.trim()}>
+                            {lobbyJoining ? "Joining..." : "Join Room"}
+                        </Button>
+                    </CardContent>
+                </Card>
+            {/if}
+        {:else}
+            <!-- Lobby View (waiting room) -->
+            <Card>
+                <CardHeader>
+                    <CardTitle>Game Lobby</CardTitle>
+                    <CardDescription>Share the room ID below with friends to invite them.</CardDescription>
+                </CardHeader>
+                <CardContent class="flex flex-col gap-4">
+                    <div class="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/50">
+                        <span class="text-sm font-mono text-muted-foreground flex-1 truncate">{lobbyRoomId}</span>
+                        <Button onclick={lobbyCopyRoomId} variant="outline" size="sm">Copy</Button>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <h3 class="text-sm font-medium text-foreground">Players ({lobbyPlayers.length})</h3>
+                        {#if lobbyPlayers.length === 0}
+                            <p class="text-sm text-muted-foreground">Waiting for players...</p>
+                        {:else}
+                            <div class="flex flex-col gap-1">
+                                {#each lobbyPlayers as p}
+                                    <div class="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-card">
+                                        <div class="w-2 h-2 rounded-full {p.isBot ? 'bg-muted-foreground/40' : 'bg-green-500'}"></div>
+                                        <span class="text-sm text-foreground">{p.name}</span>
+                                        {#if p.isBot}<span class="text-xs text-muted-foreground">(bot)</span>{/if}
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                    {#if lobbyIsHost}
+                        <Button onclick={lobbyStartGame} class="w-full mt-2" size="lg">Start Game</Button>
+                    {:else}
+                        <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
+                    {/if}
+                </CardContent>
+            </Card>
+        {/if}
+    </div>
 {/if}
 </div>
