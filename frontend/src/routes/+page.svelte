@@ -14,12 +14,14 @@
 
     import {
         createOnlineGame,
+        getRoomState,
         doAdvance,
         doBid,
         doPlay,
         doSelectPartner,
         apiStateToGame,
     } from "$lib/game/api-game";
+    import { page } from "$app/state";
 
     let { data } = $props()
     let { username, userID, token } = $state(data)
@@ -34,10 +36,16 @@
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
 
-    // Auto-start online game when logged in
+    // Auto-start online game or join existing room when logged in
     $effect(() => {
         if (loggedIn && onlineToken && !isOnline && !isOnlineLoading) {
-            startOnlineGame()
+            // Check if we have a roomId from URL (lobby flow)
+            const urlRoomId = page.url.searchParams.get("room")
+            if (urlRoomId) {
+                loadExistingRoom(urlRoomId)
+            } else {
+                startOnlineGame()
+            }
         }
     })
 
@@ -90,6 +98,27 @@
         } catch (e) {
             console.error("Failed to start online game:", e)
             alert("Failed to start online game. Is the backend running at http://127.0.0.1:3000?")
+        } finally {
+            isOnlineLoading = false
+        }
+    }
+
+    /** Load an existing room's state (from lobby flow). */
+    async function loadExistingRoom(existingRoomId: string) {
+        if (!onlineToken) return
+        isOnlineLoading = true
+        try {
+            roomId = existingRoomId
+            const gameState = await getRoomState(existingRoomId, onlineToken)
+            game = gameState
+            isOnline = true
+            // Start polling if it's not the human's turn
+            if (game.WhoseTurn !== 1 && game.Winner === "") {
+                startPolling()
+            }
+        } catch (e) {
+            console.error("Failed to load existing room:", e)
+            alert("Failed to load game state for this room.")
         } finally {
             isOnlineLoading = false
         }

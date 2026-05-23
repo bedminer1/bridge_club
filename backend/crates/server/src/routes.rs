@@ -20,6 +20,28 @@ use game_core::Call;
 #[derive(Serialize)]
 pub struct CreateRoomResponse {
     pub room_id: Uuid,
+    pub player_id: Uuid,
+    pub seat_index: usize,
+}
+
+#[derive(Deserialize)]
+pub struct CreateRoomRequest {
+    pub player_name: String,
+}
+
+#[derive(Serialize)]
+pub struct RoomInfoResponse {
+    pub room_id: Uuid,
+    pub is_started: bool,
+    pub phase: String,
+    pub players: Vec<RoomPlayerInfo>,
+}
+
+#[derive(Serialize)]
+pub struct RoomPlayerInfo {
+    pub name: String,
+    pub seat_index: usize,
+    pub is_bot: bool,
 }
 
 #[derive(Deserialize)]
@@ -271,10 +293,11 @@ pub fn routes(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { "Bridge Club API v0.1" }))
         // Game room routes
-        .route("/room", post(create_room))
-        .route("/room/{room_id}/join", post(join_room))
-        .route("/room/{room_id}/leave/{player_id}", post(leave_room))
-        .route("/room/{room_id}/start", post(start_game))
+        .route("/api/rooms", post(create_room))
+        .route("/api/rooms/{room_id}/join", post(join_room))
+        .route("/api/rooms/{room_id}/leave/{player_id}", post(leave_room))
+        .route("/api/rooms/{room_id}/start", post(start_game))
+        .route("/api/rooms/{room_id}/info", get(get_room_info))
         .route("/room/{room_id}/state", get(get_table_state))
         .route("/room/{room_id}/call", post(make_call))
         .route("/room/{room_id}/select-partner", post(select_partner))
@@ -855,22 +878,49 @@ async fn save_match(
 
 async fn create_room(
     State(state): State<AppState>,
+    Json(payload): Json<CreateRoomRequest>,
 ) -> impl IntoResponse {
-    let room = crate::session::GameRoom::new();
+    let mut room = crate::session::GameRoom::new();
     let room_id = room.room_id;
+
+    // Auto-join the creating player
+    let (player_id, seat_index) = match room.add_player(&payload.player_name) {
+        Ok((pid, si)) => (pid, si),
+        Err(e) => return (
+            StatusCode::BAD_REQUEST,
+            Json(CreateRoomResponse {
+                room_id,
+                player_id: Uuid::nil(),
+                seat_index: 0,
+            }),
+        ),
+    };
 
     let mut rooms = state.rooms.write().await;
     rooms.insert(room_id, room);
 
-    tracing::info!("Created room {}", room_id);
-    (StatusCode::CREATED, Json(CreateRoomResponse { room_id }))
+    tracing::info!("Created room {} with player '{}' at seat {}", room_id, payload.player_name, seat_index);
+    (StatusCode::CREATED, Json(CreateRoomResponse { room_id, player_id, seat_index }))
 }
 
 async fn join_room(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(room_id): Path<Uuid>,
-    Json(payload): Json<JoinRoomRequest>,
 ) -> impl IntoResponse {
+    // Auth check
+    let user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => return (
+            status,
+            Json(JoinRoomResponse {
+                player_id: Uuid::nil(),
+                seat_index: 0,
+                room_id,
+            }),
+        ),
+    };
+
     let mut rooms = state.rooms.write().await;
     let room = match rooms.get_mut(&room_id) {
         Some(r) => r,
@@ -881,11 +931,11 @@ async fn join_room(
         })),
     };
 
-    match room.add_player(&payload.player_name) {
+    match room.add_player(&user.username) {
         Ok((player_id, seat_index)) => {
             tracing::info!(
                 "Player '{}' joined room {} as seat {}",
-                payload.player_name, room_id, seat_index
+                user.username, room_id, seat_index
             );
             (StatusCode::OK, Json(JoinRoomResponse { player_id, seat_index, room_id }))
         }
@@ -928,17 +978,87 @@ async fn start_game(
     let mut rooms = state.rooms.write().await;
     let room = match rooms.get_mut(&room_id) {
         Some(r) => r,
-        None => return StatusCode::NOT_FOUND,
+        None => return (StatusCode::NOT_FOUND, Json(NewGameResponse {
+            ok: false,
+            room_id: None,
+            state: None,
+            error: Some("Room not found".to_string()),
+        })),
     };
 
-    if !room.is_ready() {
-        return StatusCode::BAD_REQUEST;
+    let connected_count = room.sessions.len();
+    if connected_count == 0 {
+        return (StatusCode::BAD_REQUEST, Json(NewGameResponse {
+            ok: false,
+            room_id: None,
+            state: None,
+            error: Some("No players in room".to_string()),
+        }));
     }
 
+    // Fill empty seats with bots
+    let bot_names = ["Bot-Alpha", "Bot-Beta", "Bot-Gamma"];
+    let mut bot_idx = 0;
+    for seat in 0..4 {
+        let has_player = room.sessions.values().any(|s| s.seat_index == seat);
+        if !has_player && bot_idx < bot_names.len() {
+            let name = bot_names[bot_idx];
+            bot_idx += 1;
+            // Set bot name on the table
+            room.table.players[seat].name = name.to_string();
+            // Add a pseudo-session for the bot (no auth, marked by "Bot-" prefix)
+            // The advance endpoint checks for "Bot-" prefix to identify bots
+        }
+    }
+
+    // Deal cards
     room.table.deal();
     room.is_started = true;
-    tracing::info!("Game started in room {}", room_id);
-    StatusCode::OK
+
+    // Process initial bot turns (bidding starts with P1)
+    // P1 (index 0) always starts bidding — if P1 is human, no initial bot actions
+    // The advance endpoint handles bot turns after human actions
+
+    let state_resp = build_table_state(&room.table);
+    tracing::info!("Game started in room {} ({} human players + {} bots)", room_id, connected_count, 4 - connected_count);
+    (StatusCode::OK, Json(NewGameResponse {
+        ok: true,
+        room_id: Some(room_id),
+        state: Some(state_resp),
+        error: None,
+    }))
+}
+
+/// GET /room/{id}/info — lobby info (players, phase, etc.)
+async fn get_room_info(
+    State(state): State<AppState>,
+    Path(room_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let rooms = state.rooms.read().await;
+    let room = match rooms.get(&room_id) {
+        Some(r) => r,
+        None => return (StatusCode::NOT_FOUND, Json(RoomInfoResponse {
+            room_id,
+            is_started: false,
+            phase: String::new(),
+            players: vec![],
+        })),
+    };
+
+    let players: Vec<RoomPlayerInfo> = room.sessions.values().map(|s| {
+        RoomPlayerInfo {
+            name: s.player_name.clone(),
+            seat_index: s.seat_index,
+            is_bot: s.player_name.starts_with("Bot-"),
+        }
+    }).collect();
+
+    (StatusCode::OK, Json(RoomInfoResponse {
+        room_id,
+        is_started: room.is_started,
+        phase: format!("{:?}", room.table.phase),
+        players,
+    }))
 }
 
 async fn get_table_state(
