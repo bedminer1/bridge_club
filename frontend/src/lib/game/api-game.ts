@@ -24,6 +24,8 @@ interface ApiState {
     previousTrickCards: Array<{ suit: string; rank: string }>
     previousTrickWinner: number | null
     previousTrickStartPlayer: number
+    callHistory: Array<any>
+    callHistoryStartPlayer: number
 }
 
 interface ApiNewGameResponse {
@@ -170,22 +172,49 @@ export function apiStateToGame(state: ApiState, roomId: string, betWinnerIdx?: n
         }
     }
 
-    const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
-
-    // Build moves from current trick cards
-    const moves: Move[] = (state.currentTrickCards || []).map((apiCard, i) => {
-        const playerIdx = ((state.currentTrickStartPlayer ?? 0) + i) % 4
-        const value = API_RANK_TO_VALUE[apiCard.rank] ?? 2
-        return {
-            CardPlayed: {
-                Rank: VALUE_TO_RANK[value] ?? String(value),
-                Value: value,
-                Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
-                WonSet: false,
-            },
-            PlayerID: playerIdx + 1,
-        }
-    })
+    // Build moves: from call history during bidding, from trick cards during play
+    const SUIT_PRIORITY: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
+    let moves: Move[]
+    if (isBetting && state.callHistory && state.callHistory.length > 0) {
+        const startPlayer = state.callHistoryStartPlayer ?? 0
+        moves = state.callHistory.map((call: any, i: number) => {
+            const playerIdx = (startPlayer + i) % 4
+            const isPass = call === "Pass" || (typeof call === "string" && call === "Pass")
+            if (isPass) {
+                return {
+                    CardPlayed: { Rank: "", Value: 0, Suit: "", WonSet: false },
+                    PlayerID: playerIdx + 1,
+                }
+            }
+            // It's a bid: {"Bid":{"level":1,"strain":"Spades"}}
+            const bid = call?.Bid
+            const level = bid?.level ?? 1
+            const apiSuit = bid?.strain ?? "Clubs"
+            return {
+                CardPlayed: {
+                    Rank: String(level),
+                    Value: level,
+                    Suit: API_SUIT_TO_FRONTEND[apiSuit] ?? apiSuit,
+                    WonSet: false,
+                },
+                PlayerID: playerIdx + 1,
+            }
+        })
+    } else {
+        moves = (state.currentTrickCards || []).map((apiCard, i) => {
+            const playerIdx = ((state.currentTrickStartPlayer ?? 0) + i) % 4
+            const value = API_RANK_TO_VALUE[apiCard.rank] ?? 2
+            return {
+                CardPlayed: {
+                    Rank: VALUE_TO_RANK[value] ?? String(value),
+                    Value: value,
+                    Suit: API_SUIT_TO_FRONTEND[apiCard.suit] ?? apiCard.suit,
+                    WonSet: false,
+                },
+                PlayerID: playerIdx + 1,
+            }
+        })
+    }
 
     // Build previous moves from completed trick cards
     const prevTrickStartPlayer = state.previousTrickStartPlayer ?? 0

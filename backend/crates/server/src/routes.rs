@@ -64,6 +64,8 @@ pub struct TableStateResponse {
     pub previous_trick_cards: Vec<game_core::Card>,
     pub previous_trick_winner: Option<usize>,
     pub previous_trick_start_player: usize,
+    pub call_history: Vec<game_core::Call>,
+    pub call_history_start_player: usize,
 }
 
 // ── Auth request / response types ─────────────────────────────────────────
@@ -955,6 +957,8 @@ async fn get_table_state(
             previous_trick_cards: Vec::new(),
             previous_trick_winner: None,
             previous_trick_start_player: 0,
+            call_history: Vec::new(),
+            call_history_start_player: 0,
         })),
     };
 
@@ -1091,6 +1095,15 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
             (Vec::new(), None)
         };
 
+    // Call history from the auction
+    let call_history = table
+        .auction
+        .as_ref()
+        .map(|a| a.call_history.clone())
+        .unwrap_or_default();
+    // Player 0 (index 0) always starts bidding in our implementation
+    let call_history_start_player = 0usize;
+
     TableStateResponse {
         phase,
         hands,
@@ -1107,6 +1120,8 @@ fn build_table_state(table: &game_core::Table) -> TableStateResponse {
         previous_trick_cards,
         previous_trick_winner,
         previous_trick_start_player,
+        call_history,
+        call_history_start_player,
     }
 }
 
