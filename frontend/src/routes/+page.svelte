@@ -21,7 +21,6 @@
         doBid,
         doPlay,
         doSelectPartner,
-        parseHandString,
     } from "$lib/game/api-game";
 
     let { data } = $props()
@@ -33,7 +32,6 @@
     let game: any = $state({})
     let roomId = $state("")
     let onlineToken = $state(token ?? "")
-    let initialHandStrings: string[] = $state([])
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -97,7 +95,6 @@
             roomId = result.roomId
             game = result.game
             isOnline = true
-            initialHandStrings = result.initialHands
         } catch (e) {
             console.error("Failed to start online game:", e)
             alert("Failed to start online game. Is the backend running at http://127.0.0.1:3000?")
@@ -206,6 +203,19 @@
         Diamond: "Diamonds",
         Heart: "Hearts",
         Spades: "Spades",
+    }
+
+    /** Build each player's sequence of played cards from completed sets. */
+    function playedCardsFromSets(sets: Array<{ Cards: Card[]; PlayerIDs: number[]; WinnerID: number }>): Card[][] {
+        const played: Card[][] = [[], [], [], []]
+        for (const set of sets) {
+            for (let i = 0; i < set.Cards.length; i++) {
+                const pid = (set.PlayerIDs[i] ?? 1) - 1  // 0-indexed
+                // Card object already has WonSet correctly set
+                played[pid].push(set.Cards[i])
+            }
+        }
+        return played
     }
 </script>
 
@@ -447,12 +457,12 @@
                     <input type="hidden" name={"player" + (i + 1) + "Sets"} value={player.Sets}>
                 {/each}
 
-                <!-- Hands (dealt hands from online game) -->
-                {#each initialHandStrings as handStr, i}
-                    <input type="hidden" name={"player" + (i + 1) + "Hand"} value={JSON.stringify(parseHandString(handStr ?? ""))}>
+                <!-- Hands (played cards per player, in play order, with WonSet flags) -->
+                {#each [0,1,2,3] as pid}
+                    <input type="hidden" name={"player" + (pid + 1) + "Hand"} value={JSON.stringify(playedCardsFromSets(game.CompletedSets ?? [])[pid] ?? [])}>
                 {/each}
 
-                <!-- Completed sets data (set-by-set) -->
+                <!-- Completed sets data (set-by-set, already in Sets Played section) -->
                 <input type="hidden" name="setsData" value={JSON.stringify(game.CompletedSets ?? [])}>
 
                 <Form.Button class="w-[60px] mt-4">
