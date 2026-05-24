@@ -11,6 +11,29 @@
     let { data } = $props()
     let { matchRecords, message, username, userStats } = $state(data)
 
+    // Re-fetch user stats on mount to ensure latest data
+    $effect(() => {
+        if (message === "success") {
+            // Try to get fresh session data from the backend
+            const token = document.cookie.split("; ").find(r => r.startsWith("session="))
+            if (token) {
+                fetch("https://bridge-club.duckdns.org/api/auth/session?token=" + encodeURIComponent(token.split("=")[1]))
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.ok && d.user) {
+                            userStats = {
+                                gamesPlayed: d.user.gamesPlayed,
+                                gamesWon: d.user.gamesWon,
+                                totalSetsWon: d.user.totalSetsWon,
+                                mostSetsWon: d.user.mostSetsWon,
+                            }
+                        }
+                    })
+                    .catch(() => {})
+            }
+        }
+    })
+
     /** Parse the players field from a match record, returning per-player names. */
     function getPlayerName(matchRecord: any, seatIndex: number): string {
         try {
