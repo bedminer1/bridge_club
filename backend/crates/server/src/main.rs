@@ -46,16 +46,15 @@ async fn main() {
             header::CONTENT_TYPE,
             header::AUTHORIZATION,
             HeaderName::from_static("x-session-token"),
-        ]))
-        .allow_credentials(true);
+        ]));
 
     let app = app.layer(cors);
 
     // Bind and serve
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .expect("Failed to bind to 127.0.0.1:3000");
+        .expect("Failed to bind to 0.0.0.0:3000");
 
     tracing::info!("Bridge Club server listening on {}", addr);
 
