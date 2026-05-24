@@ -73,6 +73,17 @@ impl Rank {
         Rank::Jack, Rank::Queen, Rank::King, Rank::Ace,
     ];
 
+    /// Singapore Bridge point value: J=1, Q=2, K=3, A=4, other=0.
+    pub fn points(&self) -> u8 {
+        match self {
+            Rank::Jack => 1,
+            Rank::Queen => 2,
+            Rank::King => 3,
+            Rank::Ace => 4,
+            _ => 0,
+        }
+    }
+
     /// Returns the short display string ("2".."10","J","Q","K","A").
     /// Note: numeric ranks return a `String` rather than `&'static str` because
     /// they're computed. For a truly static version, match each variant.

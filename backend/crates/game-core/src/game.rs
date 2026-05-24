@@ -90,23 +90,38 @@ impl Table {
     }
 
     /// Shuffle and deal 13 cards to each player. Advances to Bidding phase.
+    /// Reshuffles if any player has less than 4 points (J=1, Q=2, K=3, A=4).
     ///
     /// P1 (index 0) starts the bidding.
     pub fn deal(&mut self) {
-        let mut deck = Deck::new();
-        deck.shuffle();
+        let mut final_deck = Deck::new();
+        loop {
+            let mut deck = Deck::new();
+            deck.shuffle();
 
-        // Clear all hands
-        for player in &mut self.players {
-            player.hand.clear();
+            // Clear all hands
+            for player in &mut self.players {
+                player.hand.clear();
+            }
+
+            // Deal 13 cards to each player (1-by-1 bridge style, 4×13 rounds)
+            for i in 0..52 {
+                let card = deck.draw();
+                self.players[i % 4].receive_card(card);
+            }
+
+            // Check Singapore Bridge point minimum (J=1, Q=2, K=3, A=4)
+            let all_have_points = self
+                .players
+                .iter()
+                .all(|p| p.hand.iter().map(|c| c.rank.points() as u32).sum::<u32>() >= 4);
+
+            if all_have_points {
+                final_deck = deck;
+                break; // good deal, proceed
+            }
+            // Otherwise reshuffle and deal again
         }
-
-        // Deal 13 cards to each player (1-by-1 bridge style, 4×13 rounds)
-        for i in 0..52 {
-            let card = deck.draw();
-            self.players[i % 4].receive_card(card);
-        }
-
         // Sort each player's hand
         for player in &mut self.players {
             player.sort_hand();
@@ -130,7 +145,7 @@ impl Table {
         // Start bidding phase — P1 (index 0) starts
         self.phase = GamePhase::Bidding;
         self.auction = Some(AuctionState::new(0));
-        self.deck = deck; // store remaining deck (empty after deal)
+        self.deck = final_deck; // store remaining deck (empty after deal)
     }
 
     /// Process a call from a player during the auction.
