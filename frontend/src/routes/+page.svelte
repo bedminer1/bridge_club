@@ -169,8 +169,11 @@
             }
         } catch (e) {
             console.error("Failed to load existing room:", e)
-            alert("Failed to load game state for this room.")
             try { localStorage.removeItem("bridgeActiveRoom") } catch {}
+            // Redirect to lobby silently (room went away, e.g. server restart)
+            if (page.url.searchParams.get("room")) {
+                goto("/", { replaceState: true })
+            }
         } finally {
             isOnlineLoading = false
         }
