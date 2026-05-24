@@ -52,9 +52,13 @@ impl DbPool {
 
 const SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS users (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    username    TEXT NOT NULL UNIQUE,
-    password    TEXT NOT NULL
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    username        TEXT NOT NULL UNIQUE,
+    password        TEXT NOT NULL,
+    games_played    INTEGER NOT NULL DEFAULT 0,
+    games_won       INTEGER NOT NULL DEFAULT 0,
+    total_sets_won  INTEGER NOT NULL DEFAULT 0,
+    most_sets_won   INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS matches (
@@ -108,6 +112,10 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players TEXT;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN room_id TEXT;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players_int INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN games_played INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN games_won INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN total_sets_won INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN most_sets_won INTEGER DEFAULT 0;").await;
 
     tracing::info!("Database schema up to date");
     Ok(())
@@ -123,6 +131,10 @@ pub struct UserRow {
     pub id: i64,
     pub username: String,
     pub password: String,
+    pub games_played: i64,
+    pub games_won: i64,
+    pub total_sets_won: i64,
+    pub most_sets_won: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

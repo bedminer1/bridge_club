@@ -9,7 +9,7 @@
     import { Switch } from "$lib/components/ui/switch/index.js";
 
     let { data } = $props()
-    let { matchRecords, message, username } = $state(data)
+    let { matchRecords, message, username, userStats } = $state(data)
 
     /** Parse the players field from a match record, returning per-player names. */
     function getPlayerName(matchRecord: any, seatIndex: number): string {
@@ -23,6 +23,9 @@
 
     $effect(() => { headerState.username = username ?? "" })
     $effect(() => { headerState.loggedIn = message === "success" })
+
+    let winrate = $derived(userStats?.gamesPlayed > 0 ? ((userStats.gamesWon / userStats.gamesPlayed) * 100).toFixed(1) : "0.0")
+    let avgSets = $derived(userStats?.gamesPlayed > 0 ? (userStats.totalSetsWon / userStats.gamesPlayed).toFixed(1) : "0.0")
 </script>
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
@@ -32,7 +35,7 @@
         </p>
     {:else}
         <!-- User header -->
-        <div class="flex items-center gap-3 mb-8">
+        <div class="flex items-center gap-3 mb-6">
             <div class="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent font-bold text-lg">
                 {username?.charAt(0).toUpperCase() ?? "?"}
             </div>
@@ -42,8 +45,38 @@
             </div>
         </div>
 
+        <!-- Stats cards -->
+        {#if userStats}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-2xl mb-6">
+                <Card.Root class="rounded-lg border-border p-4 text-center">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Games Played</p>
+                    <p class="text-2xl font-bold text-foreground">{userStats.gamesPlayed}</p>
+                </Card.Root>
+                <Card.Root class="rounded-lg border-border p-4 text-center">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Games Won</p>
+                    <p class="text-2xl font-bold text-green">{userStats.gamesWon}</p>
+                </Card.Root>
+                <Card.Root class="rounded-lg border-border p-4 text-center">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Win Rate</p>
+                    <p class="text-2xl font-bold text-foreground">{winrate}%</p>
+                </Card.Root>
+                <Card.Root class="rounded-lg border-border p-4 text-center">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Avg Sets</p>
+                    <p class="text-2xl font-bold text-foreground">{avgSets}</p>
+                </Card.Root>
+                <Card.Root class="rounded-lg border-border p-4 text-center">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Sets Won</p>
+                    <p class="text-2xl font-bold text-foreground">{userStats.totalSetsWon}</p>
+                </Card.Root>
+                <Card.Root class="rounded-lg border-border p-4 text-center">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Most Sets (Best)</p>
+                    <p class="text-2xl font-bold text-accent">{userStats.mostSetsWon}</p>
+                </Card.Root>
+            </div>
+        {/if}
+
         <!-- Logout -->
-        <form action="?/logout" method="POST" class="mb-10">
+        <form action="?/logout" method="POST" class="mb-4">
             <button class="text-xs text-muted-foreground hover:text-destructive transition-colors underline underline-offset-2">
                 logout
             </button>

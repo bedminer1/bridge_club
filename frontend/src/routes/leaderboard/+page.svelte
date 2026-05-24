@@ -1,48 +1,84 @@
 <script lang="ts">
-    /** Dummy leaderboard data — replace with real API later */
-    const entries = [
-        { rank: 1, username: "cardcounter", games: 142, winRate: 68, avgSets: 7.3, best: 9 },
-        { rank: 2, username: "trumpKing", games: 98, winRate: 65, avgSets: 7.1, best: 9 },
-        { rank: 3, username: "spadeAce", games: 211, winRate: 62, avgSets: 6.9, best: 8 },
-        { rank: 4, username: "bridgeBot", games: 56, winRate: 59, avgSets: 6.7, best: 8 },
-        { rank: 5, username: "dummyHand", games: 173, winRate: 57, avgSets: 6.6, best: 8 },
-        { rank: 6, username: "grandSlam", games: 34, winRate: 55, avgSets: 6.5, best: 7 },
-        { rank: 7, username: "finesse", games: 87, winRate: 53, avgSets: 6.4, best: 7 },
-        { rank: 8, username: "noTrump", games: 42, winRate: 50, avgSets: 6.2, best: 7 },
-        { rank: 9, username: "oakLeaf", games: 25, winRate: 48, avgSets: 6.0, best: 7 },
-        { rank: 10, username: "caliburACE", games: 19, winRate: 42, avgSets: 5.8, best: 6 },
-    ]
+    let entries: Array<{
+        rank: number;
+        username: string;
+        gamesPlayed: number;
+        gamesWon: number;
+        winrate: number;
+        totalSetsWon: number;
+        mostSetsWon: number;
+    }> = $state([]);
+    let loading = $state(true);
+    let error = $state<string | null>(null);
+
+    async function loadLeaderboard() {
+        try {
+            const res = await fetch("https://bridge-club.duckdns.org/api/leaderboard");
+            const data = await res.json();
+            if (data.ok && data.entries) {
+                // Sort by winrate descending for display
+                const sorted = [...data.entries].sort((a, b) => b.winrate - a.winrate || b.gamesPlayed - a.gamesPlayed);
+                entries = sorted.map((e: any, i: number) => ({
+                    rank: i + 1,
+                    username: e.username,
+                    gamesPlayed: e.gamesPlayed,
+                    gamesWon: e.gamesWon,
+                    winrate: e.winrate,
+                    totalSetsWon: e.totalSetsWon,
+                    mostSetsWon: e.mostSetsWon,
+                }));
+            } else {
+                error = "Failed to load leaderboard";
+            }
+        } catch (e) {
+            error = "Could not connect to server";
+        } finally {
+            loading = false;
+        }
+    }
+
+    $effect(() => { loadLeaderboard(); });
 </script>
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
     <h1 class="text-2xl font-bold mb-1">Leaderboard</h1>
     <p class="text-sm text-muted-foreground mb-8">Top players by win rate</p>
 
-    <div class="w-full max-w-2xl">
-        <!-- Header row -->
-        <div class="flex items-center px-4 py-2 text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
-            <span class="w-10 text-center">#</span>
-            <span class="flex-1">Player</span>
-            <span class="w-16 text-right">Games</span>
-            <span class="w-16 text-right">Win%</span>
-            <span class="w-16 text-right">Avg</span>
-            <span class="w-16 text-right">Best</span>
-        </div>
-
-        <!-- Data rows -->
-        {#each entries as entry (entry.rank)}
-            <div class="flex items-center px-4 py-3 border-b border-border/50 hover:bg-accent/5 transition-colors text-sm">
-                <span class="w-10 text-center font-bold {entry.rank <= 3 ? 'text-accent' : 'text-muted-foreground'}">
-                    {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : entry.rank}
-                </span>
-                <span class="flex-1 text-foreground">{entry.username}</span>
-                <span class="w-16 text-right text-muted-foreground">{entry.games}</span>
-                <span class="w-16 text-right {entry.winRate >= 60 ? 'text-green' : 'text-muted-foreground'}">
-                    {entry.winRate}%
-                </span>
-                <span class="w-16 text-right text-muted-foreground">{entry.avgSets.toFixed(1)}</span>
-                <span class="w-16 text-right text-accent">{entry.best}</span>
+    {#if loading}
+        <p class="text-sm text-muted-foreground">Loading...</p>
+    {:else if error}
+        <p class="text-sm text-red">{error}</p>
+    {:else}
+        <div class="w-full max-w-2xl">
+            <!-- Header row -->
+            <div class="flex items-center px-4 py-2 text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
+                <span class="w-10 text-center">#</span>
+                <span class="flex-1">Player</span>
+                <span class="w-16 text-right">Games</span>
+                <span class="w-16 text-right">Won</span>
+                <span class="w-16 text-right">Win%</span>
+                <span class="w-16 text-right">Avg Sets</span>
+                <span class="w-16 text-right">Best</span>
             </div>
-        {/each}
-    </div>
+
+            <!-- Data rows -->
+            {#each entries as entry (entry.rank)}
+                <div class="flex items-center px-4 py-3 border-b border-border/50 hover:bg-accent/5 transition-colors text-sm">
+                    <span class="w-10 text-center font-bold {entry.rank <= 3 ? 'text-accent' : 'text-muted-foreground'}">
+                        {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : entry.rank}
+                    </span>
+                    <span class="flex-1 text-foreground">{entry.username}</span>
+                    <span class="w-16 text-right text-muted-foreground">{entry.gamesPlayed}</span>
+                    <span class="w-16 text-right text-muted-foreground">{entry.gamesWon}</span>
+                    <span class="w-16 text-right {entry.winrate >= 0.6 ? 'text-green' : 'text-muted-foreground'}">
+                        {(entry.winrate * 100).toFixed(0)}%
+                    </span>
+                    <span class="w-16 text-right text-muted-foreground">
+                        {entry.gamesPlayed > 0 ? (entry.totalSetsWon / entry.gamesPlayed).toFixed(1) : '0.0'}
+                    </span>
+                    <span class="w-16 text-right text-accent">{entry.mostSetsWon}</span>
+                </div>
+            {/each}
+        </div>
+    {/if}
 </div>

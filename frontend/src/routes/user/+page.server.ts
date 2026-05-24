@@ -6,7 +6,8 @@ export async function load({ cookies }) {
     if (!token) {
         return {
             matchRecords: [],
-            message: "Log in to view stats"
+            message: "Log in to view stats",
+            userStats: null
         }
     }
 
@@ -17,7 +18,8 @@ export async function load({ cookies }) {
     if (!sessionData.ok) {
         return {
             matchRecords: [],
-            message: "Session expired"
+            message: "Session expired",
+            userStats: null
         }
     }
 
@@ -30,7 +32,13 @@ export async function load({ cookies }) {
     return {
         matchRecords: matchesData.matches || [],
         message: "success",
-        username: sessionData.user?.username || ""
+        username: sessionData.user?.username || "",
+        userStats: sessionData.user ? {
+            gamesPlayed: sessionData.user.gamesPlayed,
+            gamesWon: sessionData.user.gamesWon,
+            totalSetsWon: sessionData.user.totalSetsWon,
+            mostSetsWon: sessionData.user.mostSetsWon,
+        } : null
     }
 }
 

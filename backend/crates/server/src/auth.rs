@@ -72,7 +72,8 @@ pub async fn validate_session(
     let conn = pool.conn().await?;
 
     let mut rows = conn.query(
-        "SELECT s.id, s.user_id, s.expires_at, u.id, u.username, u.password
+        "SELECT s.id, s.user_id, s.expires_at, u.id, u.username, u.password,
+                u.games_played, u.games_won, u.total_sets_won, u.most_sets_won
          FROM sessions s
          JOIN users u ON u.id = s.user_id
          WHERE s.id = ?1",
@@ -88,6 +89,10 @@ pub async fn validate_session(
             let uid: i64 = row.get(3)?;
             let username: String = row.get(4)?;
             let password: String = row.get(5)?;
+            let games_played: i64 = row.get(6)?;
+            let games_won: i64 = row.get(7)?;
+            let total_sets_won: i64 = row.get(8)?;
+            let most_sets_won: i64 = row.get(9)?;
 
             let now_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
@@ -108,6 +113,10 @@ pub async fn validate_session(
                     id: uid,
                     username,
                     password,
+                    games_played,
+                    games_won,
+                    total_sets_won,
+                    most_sets_won,
                 },
                 SessionRow {
                     id: sid,

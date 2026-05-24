@@ -126,9 +126,14 @@ pub struct SessionResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub id: i64,
     pub username: String,
+    pub games_played: i64,
+    pub games_won: i64,
+    pub total_sets_won: i64,
+    pub most_sets_won: i64,
 }
 
 #[derive(Serialize)]
@@ -165,6 +170,27 @@ pub struct MatchesResponse {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matches: Option<Vec<MatchRow>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardEntry {
+    pub id: i64,
+    pub username: String,
+    pub games_played: i64,
+    pub games_won: i64,
+    pub winrate: f64,
+    pub total_sets_won: i64,
+    pub most_sets_won: i64,
+}
+
+#[derive(Serialize)]
+pub struct LeaderboardResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entries: Option<Vec<LeaderboardEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -307,6 +333,8 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/auth/logout", post(logout))
         // Match history routes
         .route("/api/matches", get(get_matches).post(save_match))
+        // Leaderboard
+        .route("/api/leaderboard", get(get_leaderboard))
         // Single-player game routes
         .route("/api/game/new", post(create_single_player_game))
         .route("/api/game/{room_id}/action", post(single_player_action))
@@ -509,7 +537,7 @@ async fn login(
 
     let mut rows = match conn
         .query(
-            "SELECT id, username, password FROM users WHERE username = ?1",
+            "SELECT id, username, password, games_played, games_won, total_sets_won, most_sets_won FROM users WHERE username = ?1",
             libsql::params![payload.username.clone()],
         )
         .await
@@ -549,6 +577,10 @@ async fn login(
                 id: row.get::<i64>(0).unwrap(),
                 username: row.get::<String>(1).unwrap(),
                 password: db_password,
+                games_played: row.get::<i64>(3).unwrap_or(0),
+                games_won: row.get::<i64>(4).unwrap_or(0),
+                total_sets_won: row.get::<i64>(5).unwrap_or(0),
+                most_sets_won: row.get::<i64>(6).unwrap_or(0),
             }
         }
         Ok(None) => {
@@ -622,6 +654,10 @@ async fn get_session(
                 user: Some(UserInfo {
                     id: user.id,
                     username: user.username,
+                    games_played: user.games_played,
+                    games_won: user.games_won,
+                    total_sets_won: user.total_sets_won,
+                    most_sets_won: user.most_sets_won,
                 }),
                 error: None,
             }),
@@ -908,6 +944,24 @@ async fn save_match(
     match result {
         Ok(_) => {
             tracing::info!("Match saved for user_id={}", user.id);
+
+            // Update user stats after successful match save
+            let won = payload.won_match.unwrap_or(0);
+            let max_sets = payload.player1_sets.max(payload.player2_sets)
+                .max(payload.player3_sets).max(payload.player4_sets);
+            let total_sets = payload.player1_sets + payload.player2_sets
+                + payload.player3_sets + payload.player4_sets;
+
+            let _ = conn.execute(
+                "UPDATE users SET
+                    games_played = games_played + 1,
+                    games_won = games_won + ?1,
+                    total_sets_won = total_sets_won + ?2,
+                    most_sets_won = MAX(most_sets_won, ?3)
+                 WHERE id = ?4",
+                libsql::params![won, total_sets, max_sets, user.id],
+            ).await;
+
             (
                 StatusCode::CREATED,
                 Json(AuthResponse {
@@ -933,6 +987,84 @@ async fn save_match(
             )
         }
     }
+}
+
+// ── Leaderboard ──────────────────────────────────────────────────────────
+
+async fn get_leaderboard(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let conn = match state.db.conn().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("DB connection error: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(LeaderboardResponse {
+                    ok: false,
+                    entries: None,
+                    error: Some("Internal server error".to_string()),
+                }),
+            );
+        }
+    };
+
+    let mut rows = match conn
+        .query(
+            "SELECT id, username, games_played, games_won, total_sets_won, most_sets_won
+             FROM users ORDER BY games_won DESC, games_played DESC",
+            libsql::params![],
+        )
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("Leaderboard query error: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(LeaderboardResponse {
+                    ok: false,
+                    entries: None,
+                    error: Some("Internal server error".to_string()),
+                }),
+            );
+        }
+    };
+
+    let mut entries = Vec::new();
+    loop {
+        match rows.next().await {
+            Ok(Some(row)) => {
+                let id: i64 = row.get::<i64>(0).unwrap_or(0);
+                let username: String = row.get::<String>(1).unwrap_or_default();
+                let games_played: i64 = row.get::<i64>(2).unwrap_or(0);
+                let games_won: i64 = row.get::<i64>(3).unwrap_or(0);
+                let total_sets_won: i64 = row.get::<i64>(4).unwrap_or(0);
+                let most_sets_won: i64 = row.get::<i64>(5).unwrap_or(0);
+                let winrate = if games_played > 0 {
+                    (games_won as f64) / (games_played as f64)
+                } else {
+                    0.0
+                };
+                entries.push(LeaderboardEntry {
+                    id,
+                    username,
+                    games_played,
+                    games_won,
+                    winrate,
+                    total_sets_won,
+                    most_sets_won,
+                });
+            }
+            Ok(None) => break,
+            Err(e) => {
+                tracing::error!("Leaderboard row read error: {}", e);
+                break;
+            }
+        }
+    }
+
+    (StatusCode::OK, Json(LeaderboardResponse { ok: true, entries: Some(entries), error: None }))
 }
 
 // ── Game Room Handlers ────────────────────────────────────────────────────
