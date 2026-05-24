@@ -1,9 +1,9 @@
 <script lang="ts">
-    import * as Card from "$lib/components/ui/card/index.js"
     import ScoreDisplay from "./ScoreDisplay.svelte";
     import HandDisplay from "$lib/components/hand-display.svelte";
     import PokerCard from "$lib/components/poker-card.svelte";
     import { formatDate } from "$lib/utils";
+    import { Separator } from "$lib/components/ui/separator/index.js";
     import { headerState } from "$lib/game/header-state.svelte";
     import { toggleMode } from "mode-watcher";
     import { Switch } from "$lib/components/ui/switch/index.js";
@@ -68,33 +68,18 @@
             </div>
         </div>
 
-        <!-- Stats cards -->
+        <!-- Stats strip -->
         {#if userStats}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-2xl mb-6">
-                <Card.Root class="rounded-lg border-border p-4 text-center">
-                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Games Played</p>
-                    <p class="text-2xl font-bold text-foreground">{userStats.gamesPlayed}</p>
-                </Card.Root>
-                <Card.Root class="rounded-lg border-border p-4 text-center">
-                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Games Won</p>
-                    <p class="text-2xl font-bold text-green">{userStats.gamesWon}</p>
-                </Card.Root>
-                <Card.Root class="rounded-lg border-border p-4 text-center">
-                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Win Rate</p>
-                    <p class="text-2xl font-bold text-foreground">{winrate}%</p>
-                </Card.Root>
-                <Card.Root class="rounded-lg border-border p-4 text-center">
-                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Avg Sets</p>
-                    <p class="text-2xl font-bold text-foreground">{avgSets}</p>
-                </Card.Root>
-                <Card.Root class="rounded-lg border-border p-4 text-center">
-                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Sets Won</p>
-                    <p class="text-2xl font-bold text-foreground">{userStats.totalSetsWon}</p>
-                </Card.Root>
-                <Card.Root class="rounded-lg border-border p-4 text-center">
-                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Most Sets (Best)</p>
-                    <p class="text-2xl font-bold text-accent">{userStats.mostSetsWon}</p>
-                </Card.Root>
+            <div class="w-full max-w-2xl">
+                <Separator class="mb-3" />
+                <div class="flex justify-center gap-4 sm:gap-6 text-sm text-muted-foreground flex-wrap">
+                    <span><strong class="text-foreground">{userStats.gamesPlayed}</strong> played</span>
+                    <span><strong class="text-green">{userStats.gamesWon}</strong> won</span>
+                    <span><strong class="text-foreground">{winrate}%</strong> win rate</span>
+                    <span><strong class="text-foreground">{avgSets}</strong> avg sets</span>
+                    <span><strong class="text-accent">{userStats.mostSetsWon}</strong> best sets</span>
+                </div>
+                <Separator class="mt-3" />
             </div>
         {/if}
 
