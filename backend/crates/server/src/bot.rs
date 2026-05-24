@@ -872,35 +872,46 @@ fn num_to_rank(val: u8) -> Option<Rank> {
 
 // ── Main entry point ───────────────────────────────────────────────────────
 
-/// Read the current table state and automatically perform the appropriate
-/// action for the current player (bot).
+/// A decision made by the bot: what action to take.
+/// The bot only recommends — actual game state mutation happens in the caller.
+#[derive(Debug, Clone, Copy)]
+pub enum BotAction {
+    /// Place a bid (pass or bid)
+    Call(Call),
+    /// Select a partner card
+    SelectPartner(Card),
+    /// Play a card during the playing phase
+    PlayCard(Card),
+}
+
+/// Read the current table state and automatically decide what action to take.
 ///
-/// Returns `Ok(())` on success, or an error string if the action was rejected.
-pub fn auto_decide_and_act(
-    table: &mut Table,
+/// Returns a `BotAction` — the caller is responsible for applying it to the table.
+/// This keeps the game state mutation logic out of the bot layer, ensuring the
+/// bot can never accidentally perform illegal moves; the `Table` methods enforce
+/// legality when the caller invokes them.
+pub fn auto_decide(
+    table: &Table,
     difficulty: BotDifficulty,
-) -> Result<(), &'static str> {
+) -> Result<BotAction, &'static str> {
     match table.phase {
         GamePhase::Bidding => {
             let call = decide_bid(table);
-            table.make_call(call)?;
+            Ok(BotAction::Call(call))
         }
         GamePhase::PartnerSelection => {
             let card = decide_partner_card(table);
-            table.select_partner(card)?;
+            Ok(BotAction::SelectPartner(card))
         }
         GamePhase::Playing => {
             let card = match difficulty {
                 BotDifficulty::Easy => decide_card_easy(table),
                 BotDifficulty::Medium => decide_card_medium(table),
             };
-            table.play_card(card)?;
+            Ok(BotAction::PlayCard(card))
         }
-        _ => {
-            return Err("No action defined for this phase");
-        }
+        _ => Err("No action defined for this phase"),
     }
-    Ok(())
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────

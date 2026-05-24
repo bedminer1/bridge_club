@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use game_core::{Call, Card, GamePhase, Table};
 
-use crate::bot::{auto_decide_and_act, BotDifficulty};
+use crate::bot::{auto_decide, BotAction, BotDifficulty};
 use crate::session::GameRoom;
 
 // ── SinglePlayerSession ────────────────────────────────────────────────────
@@ -90,14 +90,27 @@ pub fn process_bot_turns(table: &mut Table, human_seat: usize, difficulty: BotDi
         }
 
         // Run the bot
-        if let Err(e) = auto_decide_and_act(table, difficulty) {
-            tracing::warn!(
-                "Bot error at phase {:?}, player {}: {}",
-                table.phase,
-                current,
-                e
-            );
-            break;
+        match auto_decide(table, difficulty) {
+            Ok(action) => {
+                if let Err(e) = apply_bot_action(table, action) {
+                    tracing::warn!(
+                        "Bot action rejected at phase {:?}, player {}: {}",
+                        table.phase,
+                        current,
+                        e
+                    );
+                    break;
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Bot decision error at phase {:?}, player {}: {}",
+                    table.phase,
+                    current,
+                    e
+                );
+                break;
+            }
         }
     }
 }
@@ -171,16 +184,38 @@ pub fn advance_one_turn(
     }
 
     // Run one bot action
-    auto_decide_and_act(table, difficulty)
-        .map_err(|e| {
+    match auto_decide(table, difficulty) {
+        Ok(action) => {
+            apply_bot_action(table, action).map_err(|e| {
+                tracing::warn!(
+                    "Bot action rejected at phase {:?}, player {}: {}",
+                    table.phase,
+                    current,
+                    e
+                );
+                "Bot action failed"
+            })?;
+            Ok(true)
+        }
+        Err(e) => {
             tracing::warn!(
-                "Bot error at phase {:?}, player {}: {}",
+                "Bot decision error at phase {:?}, player {}: {}",
                 table.phase,
                 current,
                 e
             );
-            "Bot action failed"
-        })?;
+            Ok(false)
+        }
+    }
+}
 
-    Ok(true)
+/// Apply a bot's decision to the table, letting the Table's own methods
+/// enforce legality. This is the only place where bot decisions touch
+/// game state.
+fn apply_bot_action(table: &mut Table, action: BotAction) -> Result<(), &'static str> {
+    match action {
+        BotAction::Call(call) => table.make_call(call),
+        BotAction::SelectPartner(card) => table.select_partner(card),
+        BotAction::PlayCard(card) => table.play_card(card),
+    }
 }
