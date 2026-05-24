@@ -845,17 +845,34 @@ async fn save_match(
         }
     }
 
-    // Compute players_int from players JSON: pack 4 IDs into bytes
-    let players_int: i64 = payload.players.as_deref().and_then(|p| {
-        serde_json::from_str::<Vec<serde_json::Value>>(p).ok().map(|arr| {
-            let mut val: i64 = 0;
+    // Compute players_int by mapping usernames to real database user IDs
+    // Frontend sends seat-based IDs (1-4) which are useless for queries.
+    let mut player_ids: [i64; 4] = [0; 4];
+    if let Some(ref players_json) = payload.players {
+        if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(players_json) {
             for (i, entry) in arr.iter().enumerate().take(4) {
-                let id = entry["id"].as_i64().unwrap_or(0);
-                val |= (id & 0xFF) << (i * 8);
+                let name = entry["username"].as_str().unwrap_or("");
+                if name == user.username {
+                    player_ids[i] = user.id;
+                } else if name.starts_with("Bot-") {
+                    player_ids[i] = 0;
+                } else {
+                    // Look up other human players in the users table
+                    if let Ok(mut rows) = conn
+                        .query("SELECT id FROM users WHERE username = ?1", libsql::params![name])
+                        .await
+                    {
+                        if let Ok(Some(row)) = rows.next().await {
+                            player_ids[i] = row.get::<i64>(0).unwrap_or(0);
+                        }
+                    }
+                }
             }
-            val
-        })
-    }).unwrap_or(0);
+        }
+    }
+    let players_int: i64 = player_ids.iter().enumerate().fold(0i64, |acc, (i, id)| {
+        acc | ((id & 0xFF) << (i * 8))
+    });
 
     let result = conn
         .execute(
