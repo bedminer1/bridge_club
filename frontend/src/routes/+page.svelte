@@ -471,7 +471,7 @@
         }
 
         try {
-            const res = await fetch(`http://127.0.0.1:3000/api/matches`, {
+            const res = await fetch(`${API_URL}/api/matches`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

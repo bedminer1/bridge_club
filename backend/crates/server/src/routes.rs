@@ -713,7 +713,8 @@ async fn get_matches(
             "SELECT id, user_id, date, bot_difficulty, trump_suit, bet_size, bet_winner, \
              partner, won_match, player1_sets, player2_sets, player3_sets, player4_sets, \
              player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id \
-             FROM matches WHERE user_id = ?1 ORDER BY date DESC",
+             FROM matches WHERE ?1 IN (json_extract(players, '$[0].id'), json_extract(players, '$[1].id'), \
+             json_extract(players, '$[2].id'), json_extract(players, '$[3].id')) ORDER BY date DESC",
             libsql::params![user.id],
         )
         .await
