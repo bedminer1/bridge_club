@@ -34,12 +34,9 @@ async fn main() {
     // Build the router
     let app = routes::routes(state);
 
-    // CORS: allow the SvelteKit dev server with credentials
+    // CORS: allow any origin (Vercel preview URLs vary)
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::list([
-            HeaderValue::from_static("http://localhost:5173"),
-            HeaderValue::from_static("http://127.0.0.1:5173"),
-        ]))
+        .allow_origin(AllowOrigin::any())
         .allow_methods(AllowMethods::list([
             axum::http::Method::GET,
             axum::http::Method::POST,
