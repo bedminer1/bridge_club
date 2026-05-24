@@ -4,7 +4,7 @@
 import type { Game, Card, Player, Move, CompletedSet } from "./types"
 import { SUIT_ENUM, VALUE_TO_RANK, SUIT_SORT_ORDER } from "./cards"
 
-const API_URL = "http://127.0.0.1:3000"
+const API_URL = "https://bridge-club.duckdns.org"
 
 // ── API Type Definitions ───────────────────────────────────────────
 
