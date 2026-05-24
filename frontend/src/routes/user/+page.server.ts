@@ -7,7 +7,8 @@ export async function load({ cookies }) {
         return {
             matchRecords: [],
             message: "Log in to view stats",
-            userStats: null
+            userStats: null,
+            rank: 0
         }
     }
 
@@ -19,7 +20,8 @@ export async function load({ cookies }) {
         return {
             matchRecords: [],
             message: "Session expired",
-            userStats: null
+            userStats: null,
+            rank: 0
         }
     }
 
@@ -29,10 +31,22 @@ export async function load({ cookies }) {
     })
     const matchesData = await matchesRes.json()
 
+    // Fetch leaderboard to compute rank
+    let rank = 0
+    try {
+        const lbRes = await fetch(`${API_URL}/api/leaderboard`)
+        const lbData = await lbRes.json()
+        if (lbData.ok && lbData.entries) {
+            const idx = lbData.entries.findIndex((e: any) => e.id === sessionData.user?.id)
+            if (idx !== -1) rank = idx + 1
+        }
+    } catch {}
+
     return {
         matchRecords: matchesData.matches || [],
         message: "success",
         username: sessionData.user?.username || "",
+        rank,
         userStats: sessionData.user ? {
             gamesPlayed: sessionData.user.gamesPlayed,
             gamesWon: sessionData.user.gamesWon,

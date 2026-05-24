@@ -2,6 +2,7 @@
     import ScoreDisplay from "./ScoreDisplay.svelte";
     import HandDisplay from "$lib/components/hand-display.svelte";
     import PokerCard from "$lib/components/poker-card.svelte";
+    import * as Card from "$lib/components/ui/card/index"
     import { formatDate } from "$lib/utils";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import { headerState } from "$lib/game/header-state.svelte";
@@ -9,7 +10,10 @@
     import { Switch } from "$lib/components/ui/switch/index.js";
 
     let { data } = $props()
-    let { matchRecords, message, username, userStats } = $state(data)
+    let { matchRecords, message, username, rank, userStats } = $state(data)
+
+    // Default stats to 0 when null (not logged in)
+    let s = $derived(userStats ?? { gamesPlayed: 0, gamesWon: 0, totalSetsWon: 0, mostSetsWon: 0 })
 
     // Re-fetch user stats on mount to ensure latest data
     $effect(() => {
@@ -22,10 +26,10 @@
                     .then(d => {
                         if (d.ok && d.user) {
                             userStats = {
-                                gamesPlayed: d.user.gamesPlayed,
-                                gamesWon: d.user.gamesWon,
-                                totalSetsWon: d.user.totalSetsWon,
-                                mostSetsWon: d.user.mostSetsWon,
+                                gamesPlayed: d.user.gamesPlayed ?? 0,
+                                gamesWon: d.user.gamesWon ?? 0,
+                                totalSetsWon: d.user.totalSetsWon ?? 0,
+                                mostSetsWon: d.user.mostSetsWon ?? 0,
                             }
                         }
                     })
@@ -47,8 +51,8 @@
     $effect(() => { headerState.username = username ?? "" })
     $effect(() => { headerState.loggedIn = message === "success" })
 
-    let winrate = $derived(userStats?.gamesPlayed > 0 ? ((userStats.gamesWon / userStats.gamesPlayed) * 100).toFixed(1) : "0.0")
-    let avgSets = $derived(userStats?.gamesPlayed > 0 ? (userStats.totalSetsWon / userStats.gamesPlayed).toFixed(1) : "0.0")
+    let winrate = $derived(s.gamesPlayed > 0 ? ((s.gamesWon / s.gamesPlayed) * 100).toFixed(1) : "0.0")
+    let avgSets = $derived(s.gamesPlayed > 0 ? (s.totalSetsWon / s.gamesPlayed).toFixed(1) : "0.0")
 </script>
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
@@ -64,7 +68,7 @@
             </div>
             <div>
                 <h1 class="text-xl font-bold">{username}</h1>
-                <p class="text-xs text-muted-foreground">{matchRecords.length} match{matchRecords.length !== 1 ? "es" : ""} played</p>
+                <p class="text-xs text-muted-foreground">{rank > 0 ? `#${rank} Global` : ""}</p>
             </div>
         </div>
 
@@ -73,11 +77,9 @@
             <div class="w-full max-w-2xl">
                 <Separator class="mb-3" />
                 <div class="flex justify-center gap-4 sm:gap-6 text-sm text-muted-foreground flex-wrap">
-                    <span><strong class="text-foreground">{userStats.gamesPlayed}</strong> played</span>
-                    <span><strong class="text-green">{userStats.gamesWon}</strong> won</span>
+                    <span><strong class="text-foreground">{s.gamesPlayed}</strong> played</span>
+                    <span><strong class="text-green">{s.gamesWon}</strong> won</span>
                     <span><strong class="text-foreground">{winrate}%</strong> win rate</span>
-                    <span><strong class="text-foreground">{avgSets}</strong> avg sets</span>
-                    <span><strong class="text-accent">{userStats.mostSetsWon}</strong> best sets</span>
                 </div>
                 <Separator class="mt-3" />
             </div>
