@@ -287,7 +287,6 @@ impl TeamModel {
         self.my_partner = table.partner_idx;
 
         // Replay completed sets to track feeding behavior
-        // We do this from scratch each time for simplicity
         self.feed_counts = [[0u8; 4]; 4];
         self.tricks_observed = 0;
 
@@ -295,37 +294,64 @@ impl TeamModel {
             return;
         }
 
-        // Determine each set's leader and winner
+        // Track ALL cards played before the current trick
+        let mut played_so_far: Vec<Card> = Vec::new();
+
         let mut leader = (table.bet_winner.unwrap_or(0) + 1) % 4;
         for set in &table.completed_sets {
             self.tricks_observed += 1;
 
-            // For each player in the set, determine if they fed the winner
+            // For each non-winner, check if they fed the winner
             for (i, card) in set.cards.iter().enumerate() {
                 let player = (leader + i) % 4;
-
-                // Skip the winner — they didn't feed, they won
                 if player == set.winner {
                     continue;
                 }
 
-                // Check if this card was the weakest possible play for this player
-                // given the cards they hold. We approximate: if the card has a
-                // lower strength than the suit average, it's "feeding".
-                // More precisely: if this player could have played a card that
-                // would have beaten the current winner, but didn't, that's feeding.
-                let could_have_beaten = self.player_could_beat(
-                    table, set, player, i, set.winner,
+                // Only count feeding if the player followed suit
+                // (if they were void, they had no choice)
+                if card.suit != set.lead_suit {
+                    continue;
+                }
+
+                // Get the winner's card in the led suit
+                let winner_card = &set.cards[set.winner % set.cards.len()];
+
+                // If the played card already beats the winner, they weren't feeding
+                if card_beats(card, winner_card, table.trump_suit, Some(set.lead_suit)) {
+                    continue;
+                }
+
+                // Now check: was there ANY card stronger than the winner's card
+                // in the led suit, that was still unplayed before this trick?
+                let strongest_remaining = strongest_unplayed_in_suit(
+                    &played_so_far,
+                    &set.cards,
+                    set.lead_suit,
                 );
-                if !could_have_beaten {
-                    // Player played a card that can't beat the winner — possible feed
-                    // Check if they're following suit (not void-forced)
-                    let following_suit = card.suit == set.lead_suit;
-                    if following_suit {
-                        self.feed_counts[player][set.winner] =
-                            self.feed_counts[player][set.winner].saturating_add(1);
+
+                match strongest_remaining {
+                    Some(highest_unplayed) => {
+                        // If the strongest unplayed card is higher rank than the winner's card,
+                        // someone COULD have beaten the winner → possible feeding
+                        if highest_unplayed.rank > winner_card.rank {
+                            // The player chose not to play that stronger card → feeding
+                            self.feed_counts[player][set.winner] =
+                                self.feed_counts[player][set.winner].saturating_add(1);
+                        }
+                        // Otherwise highest unplayed ≤ winner_card → nobody could beat winner
+                        // → not feeding
+                    }
+                    None => {
+                        // All cards in this suit have been played already
+                        // → winner's card is the best there was → not feeding
                     }
                 }
+            }
+
+            // Add this trick's cards to the played set
+            for card in &set.cards {
+                played_so_far.push(*card);
             }
 
             leader = set.winner;
@@ -333,6 +359,7 @@ impl TeamModel {
     }
 
     /// Check if a player could have beaten the set winner with a different card.
+    /// Now checks against actually playable cards, not just what was played.
     fn player_could_beat(
         &self,
         table: &Table,
@@ -794,6 +821,53 @@ fn find_current_winner(cards: &[Card], trump: Option<Suit>, lead_suit: Option<Su
         }
     }
     winner
+}
+
+/// Given cards played before a trick and the cards in the current trick,
+/// find the strongest card in `suit` that hasn't been played yet.
+/// Returns `None` if all cards in that suit have been played.
+fn strongest_unplayed_in_suit(
+    played_before: &[Card],
+    current_trick: &[Card],
+    suit: Suit,
+) -> Option<Card> {
+    // Check all ranks from Ace (14) down to Two (2)
+    for rank_val in (2..=14u8).rev() {
+        let rank = num_to_rank(rank_val)?;
+        let candidate = Card::new(suit, rank);
+
+        // Skip if it's been played before this trick
+        if played_before.iter().any(|c| c.suit == suit && c.rank == rank) {
+            continue;
+        }
+        // Skip if it's in the current trick
+        if current_trick.iter().any(|c| c.suit == suit && c.rank == rank) {
+            continue;
+        }
+        // Found the strongest unplayed card
+        return Some(candidate);
+    }
+    None
+}
+
+/// Convert a numeric rank (2..=14) to a `Rank`. Returns None for invalid values.
+fn num_to_rank(val: u8) -> Option<Rank> {
+    match val {
+        2 => Some(Rank::Two),
+        3 => Some(Rank::Three),
+        4 => Some(Rank::Four),
+        5 => Some(Rank::Five),
+        6 => Some(Rank::Six),
+        7 => Some(Rank::Seven),
+        8 => Some(Rank::Eight),
+        9 => Some(Rank::Nine),
+        10 => Some(Rank::Ten),
+        11 => Some(Rank::Jack),
+        12 => Some(Rank::Queen),
+        13 => Some(Rank::King),
+        14 => Some(Rank::Ace),
+        _ => None,
+    }
 }
 
 // ── Main entry point ───────────────────────────────────────────────────────
