@@ -156,6 +156,7 @@ pub struct SaveMatchRequest {
     pub player4_hand: String,
     pub sets_data: Option<String>,
     pub players: Option<String>,
+    pub players_int: Option<i64>,
     pub room_id: Option<String>,
 }
 
@@ -712,9 +713,11 @@ async fn get_matches(
         .query(
             "SELECT id, user_id, date, bot_difficulty, trump_suit, bet_size, bet_winner, \
              partner, won_match, player1_sets, player2_sets, player3_sets, player4_sets, \
-             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id \
-             FROM matches WHERE ?1 IN (json_extract(players, '$[0].id'), json_extract(players, '$[1].id'), \
-             json_extract(players, '$[2].id'), json_extract(players, '$[3].id')) ORDER BY date DESC",
+             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int \
+             FROM matches WHERE (players_int & 0xFF) = ?1 \
+             OR ((players_int >> 8) & 0xFF) = ?1 \
+             OR ((players_int >> 16) & 0xFF) = ?1 \
+             OR ((players_int >> 24) & 0xFF) = ?1 ORDER BY date DESC",
             libsql::params![user.id],
         )
         .await
@@ -758,6 +761,7 @@ async fn get_matches(
                     sets_data: row.get::<Option<String>>(17).unwrap_or(None),
                     players: row.get::<Option<String>>(18).unwrap_or(None),
                     room_id: row.get::<Option<String>>(19).unwrap_or(None),
+                    players_int: row.get::<i64>(20).unwrap_or(0),
                 });
             }
             Ok(None) => break,
@@ -841,12 +845,24 @@ async fn save_match(
         }
     }
 
+    // Compute players_int from players JSON: pack 4 IDs into bytes
+    let players_int: i64 = payload.players.as_deref().and_then(|p| {
+        serde_json::from_str::<Vec<serde_json::Value>>(p).ok().map(|arr| {
+            let mut val: i64 = 0;
+            for (i, entry) in arr.iter().enumerate().take(4) {
+                let id = entry["id"].as_i64().unwrap_or(0);
+                val |= (id & 0xFF) << (i * 8);
+            }
+            val
+        })
+    }).unwrap_or(0);
+
     let result = conn
         .execute(
             "INSERT INTO matches (user_id, date, bot_difficulty, trump_suit, bet_size, \
              bet_winner, partner, won_match, player1_sets, player2_sets, player3_sets, \
-             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             libsql::params![
                 user.id,
                 payload.date,
@@ -867,6 +883,7 @@ async fn save_match(
                 payload.sets_data,
                 payload.players,
                 payload.room_id,
+                players_int,
             ],
         )
         .await;
