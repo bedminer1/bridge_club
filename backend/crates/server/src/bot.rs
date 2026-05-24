@@ -249,6 +249,182 @@ fn decide_partner_card(table: &Table) -> Card {
     Card::new(Suit::Clubs, Rank::Two)
 }
 
+// ── Team Model ─────────────────────────────────────────────────────────────
+
+/// Maps out the two teams (bots and humans) and tracks observed feeding behavior.
+///
+/// After partner selection, teams are known exactly (`bet_winner` + `partner_idx`
+/// vs the other two). This struct also tracks **feeding observations** — how often
+/// each player appears to feed another player by dumping their weakest card when
+/// that player was winning. These observations cross-validate the known teams and
+/// help the bot decide which opponent is the real threat.
+#[derive(Debug, Clone, Default)]
+struct TeamModel {
+    /// Which player index this bot is (0..3).
+    pub bot_idx: usize,
+    /// My known partner (None = not yet selected / no partner).
+    pub my_partner: Option<usize>,
+    /// The bet winner (always known after bidding).
+    pub bet_winner: Option<usize>,
+    /// Feed matrix: feed_counts[a][b] = how many times player a played their
+    /// weakest card when player b was winning. High values suggest a is b's partner.
+    pub feed_counts: [[u8; 4]; 4],
+    /// Number of tricks fully completed (for normalizing percentages).
+    pub tricks_observed: u8,
+}
+
+impl TeamModel {
+    pub fn new(bot_idx: usize) -> Self {
+        TeamModel {
+            bot_idx,
+            ..Default::default()
+        }
+    }
+
+    /// Update the model from the current table state.
+    pub fn observe(&mut self, table: &Table) {
+        self.bet_winner = table.bet_winner;
+        self.my_partner = table.partner_idx;
+
+        // Replay completed sets to track feeding behavior
+        // We do this from scratch each time for simplicity
+        self.feed_counts = [[0u8; 4]; 4];
+        self.tricks_observed = 0;
+
+        if table.completed_sets.is_empty() {
+            return;
+        }
+
+        // Determine each set's leader and winner
+        let mut leader = (table.bet_winner.unwrap_or(0) + 1) % 4;
+        for set in &table.completed_sets {
+            self.tricks_observed += 1;
+
+            // For each player in the set, determine if they fed the winner
+            for (i, card) in set.cards.iter().enumerate() {
+                let player = (leader + i) % 4;
+
+                // Skip the winner — they didn't feed, they won
+                if player == set.winner {
+                    continue;
+                }
+
+                // Check if this card was the weakest possible play for this player
+                // given the cards they hold. We approximate: if the card has a
+                // lower strength than the suit average, it's "feeding".
+                // More precisely: if this player could have played a card that
+                // would have beaten the current winner, but didn't, that's feeding.
+                let could_have_beaten = self.player_could_beat(
+                    table, set, player, i, set.winner,
+                );
+                if !could_have_beaten {
+                    // Player played a card that can't beat the winner — possible feed
+                    // Check if they're following suit (not void-forced)
+                    let following_suit = card.suit == set.lead_suit;
+                    if following_suit {
+                        self.feed_counts[player][set.winner] =
+                            self.feed_counts[player][set.winner].saturating_add(1);
+                    }
+                }
+            }
+
+            leader = set.winner;
+        }
+    }
+
+    /// Check if a player could have beaten the set winner with a different card.
+    fn player_could_beat(
+        &self,
+        table: &Table,
+        set: &game_core::Set,
+        player: usize,
+        card_order_in_set: usize,
+        winner: usize,
+    ) -> bool {
+        let winner_card = &set.cards[winner.min(set.cards.len() - 1)];
+        let played_card = &set.cards[card_order_in_set];
+
+        // If the card already beats the winner, they weren't feeding
+        if card_beats(played_card, winner_card, table.trump_suit, Some(set.lead_suit)) {
+            return true;
+        }
+
+        false
+    }
+
+    /// Probability that player a is the partner of player b (based on feeding observations).
+    /// Returns a value 0.0..1.0. Higher = more likely partners.
+    pub fn partner_probability(&self, a: usize, b: usize) -> f64 {
+        if self.tricks_observed == 0 {
+            return 0.0;
+        }
+        // If a feeds b, they're likely partners
+        let feed_ab = self.feed_counts[a][b] as f64;
+        let feed_ba = self.feed_counts[b][a] as f64;
+
+        // Combined feed score normalized by tricks observed
+        let total_feeds = feed_ab + feed_ba;
+        let max_possible = self.tricks_observed as f64;
+
+        if max_possible == 0.0 {
+            return 0.0;
+        }
+        (total_feeds / max_possible).min(1.0)
+    }
+
+    /// Who I should aggressively compete against (the real threat).
+    /// Returns the opponent I should prioritize beating: the bet winner if known,
+    /// otherwise the opponent with the most tricks won.
+    pub fn primary_threat(&self) -> Option<usize> {
+        self.bet_winner
+    }
+
+    /// Who I should let have tricks (feed to).
+    /// If I know my partner, feed to them. Otherwise, feed to whoever the
+    /// observations suggest is most likely my partner.
+    pub fn feed_target(&self) -> Option<usize> {
+        if let Some(p) = self.my_partner {
+            return Some(p);
+        }
+        // No known partner — infer from feeds
+        let mut best_target = None;
+        let mut best_score = 0f64;
+        for other in 0..4 {
+            if other == self.bot_idx {
+                continue;
+            }
+            let prob = self.partner_probability(self.bot_idx, other);
+            if prob > best_score {
+                best_score = prob;
+                best_target = Some(other);
+            }
+        }
+        best_target
+    }
+
+    /// Is the player at `idx` on my team?
+    pub fn is_teammate(&self, idx: usize) -> bool {
+        idx == self.bot_idx || self.my_partner.map_or(false, |p| idx == p)
+    }
+
+    /// Is the player at `idx` the bet winner (primary threat)?
+    pub fn is_bet_winner(&self, idx: usize) -> bool {
+        self.bet_winner.map_or(false, |b| idx == b)
+    }
+
+    /// Estimate how much we want to beat this player's trick (0.0 = don't try, 1.0 = must beat).
+    pub fn threat_level(&self, player_idx: usize) -> f64 {
+        if self.is_teammate(player_idx) {
+            return 0.0; // Never beat teammate
+        }
+        if self.is_bet_winner(player_idx) {
+            return 1.0; // Always beat the bet winner
+        }
+        // The bet winner's partner: moderate threat
+        0.5
+    }
+}
+
 // ── Card play decision ─────────────────────────────────────────────────────
 
 /// Decide which card to play during the playing phase (Easy difficulty).
@@ -375,6 +551,13 @@ fn decide_card_medium(table: &Table) -> Card {
     let partner = table.partner_idx;
     let num_cards = table.current_set_cards.len();
 
+    // Build team model from observed play
+    let mut team = TeamModel::new(0); // bot_idx will be set properly below
+    // Find this bot's index by checking which player has the current bot's name
+    // We approximate: the current player is us since the bot is being asked to play
+    team.bot_idx = table.current_player;
+    team.observe(table);
+
     // ── Leading ─────────────────────────────────────────────────────
     if table.current_set_cards.is_empty() {
         return decide_lead_medium(table, &legal, &legal_refs, partner);
@@ -400,7 +583,33 @@ fn decide_card_medium(table: &Table) -> Card {
         return legal[idx];
     }
 
-    // Opponent winning and I'm last to play: win with minimal card
+    // Opponent winning — check if this opponent is a threat
+    let threat = team.threat_level(current_winner_player);
+
+    // High threat (bet winner): try harder to beat them
+    if threat >= 1.0 && is_last_to_play {
+        // Last to play against the bet winner: win with minimal card
+        let current_best = &table.current_set_cards[current_winner_idx];
+        let winning_cards: Vec<&Card> = legal_refs
+            .iter()
+            .filter(|c| card_beats(c, current_best, trump, lead_suit))
+            .copied()
+            .collect();
+
+        if !winning_cards.is_empty() {
+            let idx = weakest_card_index(&winning_cards, trump, lead_suit);
+            return *winning_cards[idx];
+        }
+    }
+
+    // Low threat (bet winner's partner): let them have it if we can't beat cheaply
+    if threat < 1.0 && !is_last_to_play {
+        // Not last to play, opponent is the weak one — dump weakest and conserve
+        let idx = weakest_card_index(&legal_refs, trump, lead_suit);
+        return legal[idx];
+    }
+
+    // Opponent winning and I'm last to play: win with minimal card if possible
     if is_last_to_play {
         let current_best = &table.current_set_cards[current_winner_idx];
         let winning_cards: Vec<&Card> = legal_refs
