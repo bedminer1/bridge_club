@@ -49,8 +49,30 @@
     // Load a room if the URL has a ?room= param; otherwise show the lobby
     $effect(() => {
         const urlRoomId = page.url.searchParams.get("room")
-        if (loggedIn && onlineToken && !isOnline && !isOnlineLoading && urlRoomId) {
-            loadExistingRoom(urlRoomId)
+        if (urlRoomId) {
+            // Save active room to localStorage so we can resume after navigation
+            try { localStorage.setItem("bridgeActiveRoom", JSON.stringify({ roomId: urlRoomId, seat: page.url.searchParams.get("seat") })) } catch {}
+            if (loggedIn && onlineToken && !isOnline && !isOnlineLoading) {
+                loadExistingRoom(urlRoomId)
+            }
+        }
+    })
+
+    // Resume active room from localStorage when returning to page without ?room=
+    $effect(() => {
+        if (!page.url.searchParams.get("room") && loggedIn && onlineToken && !isOnline && !isOnlineLoading) {
+            try {
+                const saved = localStorage.getItem("bridgeActiveRoom")
+                if (saved) {
+                    const { roomId, seat } = JSON.parse(saved)
+                    if (roomId) {
+                        const params = new URLSearchParams()
+                        params.set("room", roomId)
+                        if (seat) params.set("seat", seat)
+                        goto(`/?${params.toString()}`, { replaceState: true })
+                    }
+                }
+            } catch {}
         }
     })
 
@@ -148,6 +170,7 @@
         } catch (e) {
             console.error("Failed to load existing room:", e)
             alert("Failed to load game state for this room.")
+            try { localStorage.removeItem("bridgeActiveRoom") } catch {}
         } finally {
             isOnlineLoading = false
         }
@@ -315,10 +338,11 @@
         return game.Players?.find((p: any) => p.ID === playerId)?.Username ?? `P${playerId}`
     }
 
-    // Win detection — auto-save match immediately
+    // Win detection — auto-save match immediately, clear saved room
     $effect(() => {
         if (isOnline && game.Winner !== "" && loggedIn && game.Players) {
             autoSaveMatch()
+            try { localStorage.removeItem("bridgeActiveRoom") } catch {}
         }
     })
 
@@ -385,6 +409,7 @@
         } catch (e) { console.error("Leave error:", e) }
         lobbyStopPolling()
         lobbyRoomId = ""; lobbyPlayerId = ""; lobbyMySeatIndex = 0; lobbyIsHost = false; lobbyPlayers = []
+        try { localStorage.removeItem("bridgeActiveRoom") } catch {}
     }
 
     async function lobbyStartGame() {
@@ -530,7 +555,7 @@
             {/if}
             {#if game.IsBettingPhase && game.BetSize > 0}
             <span class="text-muted-foreground/40">|</span>
-            <span class="whitespace-nowrap">Bet winner <strong class="text-foreground font-medium">{playerName(game.BetWinner.ID)}</strong> + partner need <strong class="text-accent font-medium">{6 + game.BetSize}</strong> sets</span>
+            <span class="whitespace-nowrap"><strong class="text-foreground font-medium">{playerName(game.BetWinner.ID)}</strong> + partner need <strong class="text-accent font-medium">{6 + game.BetSize}</strong> sets</span>
             <span class="whitespace-nowrap">Opponents need <strong class="text-foreground font-medium">{8 - game.BetSize}</strong> sets</span>
             {/if}
             {#if !game.IsBettingPhase}
@@ -566,22 +591,24 @@
         {/if}
     </div>
     {:else}
-    <div class="flex justify-center relative h-28 w-full">
-        <div class="flex gap-2 mx-auto items-start">
+    <div class="flex justify-between w-full min-h-28 relative">
+        <div class="flex gap-1.5 sm:gap-2 ml-2 sm:ml-4 items-start flex-shrink-0">
             {#each game.Moves as move, i}
             <div class="flex flex-col {i % 2 === 0 ? 'items-center mb-8' : 'items-center mt-8'}">
                 <PokerCard card={move.CardPlayed} isIllegal={false} minify={false} />
-                <p class="text-{playerIDToColor.get(move.PlayerID)} text-xs whitespace-nowrap">{playerName(move.PlayerID)}</p>
+                <p class="text-{playerIDToColor.get(move.PlayerID)} text-2xs sm:text-xs whitespace-nowrap">{playerName(move.PlayerID)}</p>
             </div>
             {/each}
         </div>
     
         {#if game.PreviousMoves.length !== 0} 
-        <div class="absolute right-2 bottom-2 flex flex-col" style="gap: {6 - game.PreviousMoves.length * 1.5}px;">
+        <div class="relative mr-7 flex-shrink-0" style="width: {game.PreviousMoves.length * 12 + 40}px; min-height: {game.PreviousMoves.length * 8 + 40}px;">
             {#each game.PreviousMoves as move, i}
-                <div class="flex items-center gap-1" style="margin-left: {i * 5}px;">
-                    <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
-                    <p class="text-xs text-{playerIDToColor.get(move.PlayerID)} whitespace-nowrap">{playerName(move.PlayerID)}</p>
+                <div class="absolute flex-col items-center gap-4" style="top: {i * 16}px; left: {i * 16}px; z-index: {i};">
+                    <p class="text-2xs text-right text-{playerIDToColor.get(move.PlayerID)} whitespace-nowrap">P{move.PlayerID}</p>
+                    <div>
+                        <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
+                    </div>
                 </div>
             {/each}
         </div>

@@ -76,17 +76,14 @@
 
                                     <!-- Info -->
                                     <div class="flex-1 min-w-0">
-                                        <div class="flex gap-3 mb-2 text-xs text-muted-foreground">
+                                        <div class="flex gap-3 mb-5 text-xs text-muted-foreground">
                                             <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>
                                             <span>|</span>
                                             <span>{matchRecord.botDifficulty}</span>
                                             <span>|</span>
                                             <span>{formatDate(matchRecord.date)}</span>
                                         </div>
-                                        <div class="text-xs text-muted-foreground mb-1">
-                                            {getPlayerName(matchRecord, 0)} vs {getPlayerName(matchRecord, 2)}, {getPlayerName(matchRecord, 3)}
-                                        </div>
-                                        <div class="flex">
+                                        <div class="flex ml-4">
                                             {#each JSON.parse(matchRecord.player1Hand) as card, index}
                                                 <HandDisplay {index}>
                                                     <PokerCard card={card} isIllegal={false} minify={true} />
