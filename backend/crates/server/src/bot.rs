@@ -351,6 +351,14 @@ fn unplayed_strengths_by_suit(table: &Table) -> [u8; 4] {
 }
 
 /// Decide which card to play during the playing phase (Medium difficulty).
+///
+/// Team-aware strategy:
+/// - Tracks which suits each player has played (void detection)
+/// - If partner is winning the current trick: dumps weakest card (feed)
+/// - If opponent winning and last to play: wins with minimal card
+/// - If leading: prefers to lead a suit partner hasn't played (void-feed for trump),
+///   otherwise plays strongest unplayed card
+/// - Default: tries to win with strongest card, else dumps weakest
 fn decide_card_medium(table: &Table) -> Card {
     let legal = legal_plays(table);
     if legal.is_empty() {
@@ -367,57 +375,15 @@ fn decide_card_medium(table: &Table) -> Card {
     let partner = table.partner_idx;
     let num_cards = table.current_set_cards.len();
 
+    // ── Leading ─────────────────────────────────────────────────────
     if table.current_set_cards.is_empty() {
-        // Leading: play strongest card from a suit where we hold the
-        // strongest remaining card
-        let strengths = unplayed_strengths_by_suit(table);
-
-        // Try to find a suit where our strongest card is the top remaining
-        let _player_hand = &table.players[table.current_player].hand;
-
-        // Sort legal cards by strength descending
-        let mut card_strengths: Vec<(usize, u16)> = legal_refs
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let suit_idx = match c.suit {
-                    Suit::Clubs => 0,
-                    Suit::Diamonds => 1,
-                    Suit::Hearts => 2,
-                    Suit::Spades => 3,
-                };
-                let is_top = (c.rank as u8) >= strengths[suit_idx];
-                let bonus = if is_top { 100u16 } else { 0u16 };
-                (i, bonus + card_strength(c, trump, None))
-            })
-            .collect();
-
-        card_strengths.sort_by(|a, b| b.1.cmp(&a.1));
-        let best_idx = card_strengths[0].0;
-        return legal[best_idx];
+        return decide_lead_medium(table, &legal, &legal_refs, partner);
     }
 
-    // Following: determine who is winning the current trick so far
-    let set_cards_refs: Vec<&Card> = table.current_set_cards.iter().collect();
-    let current_winner_idx = if set_cards_refs.is_empty() {
-        0usize
-    } else {
-        let mut winner = 0usize;
-        for i in 1..set_cards_refs.len() {
-            if card_beats(
-                set_cards_refs[i],
-                set_cards_refs[winner],
-                trump,
-                lead_suit,
-            ) {
-                winner = i;
-            }
-        }
-        winner
-    };
+    // ── Following ───────────────────────────────────────────────────
 
-    // Convert card-index-within-trick to absolute player index
-    // Leader = (current_player + 4 - num_cards) % 4
+    // Determine who is currently winning the trick
+    let current_winner_idx = find_current_winner(&table.current_set_cards, trump, lead_suit);
     let leader = if num_cards == 0 {
         table.current_player
     } else {
@@ -425,20 +391,17 @@ fn decide_card_medium(table: &Table) -> Card {
     };
     let current_winner_player = (leader + current_winner_idx) % 4;
 
-    // Am I last to play? (3 cards already in the trick)
     let is_last_to_play = num_cards == 3;
-
-    // Is partner currently winning?
     let partner_winning = partner.map_or(false, |p| current_winner_player == p);
 
+    // Partner is winning: dump the weakest legal card (feed)
     if partner_winning {
-        // Partner is winning: dump the weakest legal card
         let idx = weakest_card_index(&legal_refs, trump, lead_suit);
         return legal[idx];
     }
 
+    // Opponent winning and I'm last to play: win with minimal card
     if is_last_to_play {
-        // Last to play and opponent is winning: try to win with minimal card
         let current_best = &table.current_set_cards[current_winner_idx];
         let winning_cards: Vec<&Card> = legal_refs
             .iter()
@@ -456,7 +419,6 @@ fn decide_card_medium(table: &Table) -> Card {
     let current_best = if current_winner_idx < table.current_set_cards.len() {
         &table.current_set_cards[current_winner_idx]
     } else {
-        // Should not happen
         let idx = weakest_card_index(&legal_refs, trump, lead_suit);
         return legal[idx];
     };
@@ -475,6 +437,154 @@ fn decide_card_medium(table: &Table) -> Card {
         let idx = weakest_card_index(&legal_refs, trump, lead_suit);
         legal[idx]
     }
+}
+
+/// Medium bot leading decision.
+///
+/// Strategy:
+/// 1. If partner is known, prefer to lead a suit the partner has NOT played yet
+///    (partner is void in that suit and can trump).
+/// 2. If holding the strongest remaining card in a suit, lead it.
+/// 3. Otherwise play the weakest led-legal card.
+fn decide_lead_medium(
+    table: &Table,
+    legal: &[Card],
+    legal_refs: &[&Card],
+    partner: Option<usize>,
+) -> Card {
+    let trump = table.trump_suit;
+
+    // Compute which suits each player has played so far (void tracking)
+    let player_suits_played = compute_player_suits_played(table);
+
+    // Strategy 1: Lead a suit partner hasn't played (void feed for trump)
+    if let Some(partner_idx) = partner {
+        // Check each legal lead — prefer a suit partner is void in
+        // (hasn't played any card of that suit yet)
+        let partner_void_suit = find_partner_void_suit(
+            table, partner_idx, &player_suits_played, legal, trump
+        );
+        if let Some(partner_void_card) = partner_void_suit {
+            return partner_void_card;
+        }
+    }
+
+    // Strategy 2: Play strongest card from unplayed strengths
+    let strengths = unplayed_strengths_by_suit(table);
+    let mut card_strengths: Vec<(usize, u16)> = legal_refs
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let suit_idx = match c.suit {
+                Suit::Clubs => 0,
+                Suit::Diamonds => 1,
+                Suit::Hearts => 2,
+                Suit::Spades => 3,
+            };
+            let is_top = (c.rank as u8) >= strengths[suit_idx];
+            let bonus = if is_top { 100u16 } else { 0u16 };
+            (i, bonus + card_strength(c, trump, None))
+        })
+        .collect();
+
+    card_strengths.sort_by(|a, b| b.1.cmp(&a.1));
+    let best_idx = card_strengths[0].0;
+    legal[best_idx]
+}
+
+/// Find which suits each player has played so far (from completed sets and current trick).
+/// Returns a Vec of 4 Sets, one per player, containing the suits they've played.
+fn compute_player_suits_played(table: &Table) -> [Vec<Suit>; 4] {
+    let mut suits: [Vec<Suit>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+
+    // First set is led by (bet_winner + 1) % 4, subsequent by the previous set's winner
+    let mut leader = (table.bet_winner.unwrap_or(0) + 1) % 4;
+
+    for set in &table.completed_sets {
+        for (i, card) in set.cards.iter().enumerate() {
+            let player_idx = (leader + i) % 4;
+            if !suits[player_idx].contains(&card.suit) {
+                suits[player_idx].push(card.suit);
+            }
+        }
+        // Next set is led by the winner of this set
+        leader = set.winner;
+    }
+
+    // Also check the current trick
+    let current_leader = if table.current_set_cards.is_empty() {
+        table.current_player
+    } else {
+        (table.current_player + 4 - table.current_set_cards.len()) % 4
+    };
+    for (i, card) in table.current_set_cards.iter().enumerate() {
+        let player_idx = (current_leader + i) % 4;
+        if !suits[player_idx].contains(&card.suit) {
+            suits[player_idx].push(card.suit);
+        }
+    }
+
+    suits
+}
+
+/// If partner hasn't played a suit yet, they might be void there.
+/// Try to find a legal card in a suit partner hasn't played.
+/// Prefer non-trump suits first (to not waste partner's trump).
+fn find_partner_void_suit(
+    table: &Table,
+    partner_idx: usize,
+    player_suits_played: &[Vec<Suit>; 4],
+    legal: &[Card],
+    trump: Option<Suit>,
+) -> Option<Card> {
+    let partner_played = &player_suits_played[partner_idx];
+    let all_suits = [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades];
+
+    // First pass: prefer non-trump suits partner is void in
+    for &suit in &all_suits {
+        if Some(suit) == trump {
+            continue; // Skip trump in first pass
+        }
+        if partner_played.contains(&suit) {
+            continue; // Partner has played this suit, not void
+        }
+        // This suit — partner hasn't played it, they might be void
+        // Find our strongest card in this suit (from legal leads)
+        let suit_cards: Vec<&Card> = legal.iter().filter(|c| c.suit == suit).collect();
+        if !suit_cards.is_empty() {
+            // Play our strongest card in this void suit
+            let idx = strongest_card_index(&suit_cards, trump, None);
+            return Some(*suit_cards[idx]);
+        }
+    }
+
+    // Second pass: try trump suit partner is void in
+    if let Some(tr) = trump {
+        if !partner_played.contains(&tr) {
+            let suit_cards: Vec<&Card> = legal.iter().filter(|c| c.suit == tr).collect();
+            if !suit_cards.is_empty() {
+                // Play our weakest trump — partner can over-trump if needed
+                let idx = weakest_card_index(&suit_cards, trump, None);
+                return Some(*suit_cards[idx]);
+            }
+        }
+    }
+
+    None
+}
+
+/// Find the index of the currently winning card in a trick (0-based within the trick).
+fn find_current_winner(cards: &[Card], trump: Option<Suit>, lead_suit: Option<Suit>) -> usize {
+    if cards.is_empty() {
+        return 0;
+    }
+    let mut winner = 0usize;
+    for i in 1..cards.len() {
+        if card_beats(&cards[i], &cards[winner], trump, lead_suit) {
+            winner = i;
+        }
+    }
+    winner
 }
 
 // ── Main entry point ───────────────────────────────────────────────────────
