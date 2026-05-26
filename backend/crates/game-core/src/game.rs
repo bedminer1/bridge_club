@@ -165,11 +165,7 @@ impl Table {
         // Validate the call against auction rules
         match call {
             Call::Bid(bid) => {
-                // Check bid is valid for Singapore Bridge (NoTrump not allowed)
-                if bid.strain == Strain::NoTrump {
-                    return Err("NoTrump not allowed in Singapore Bridge");
-                }
-                // Check bid outranks current
+                // Update Singapore Bridge state
                 if let Some(last) = auction.last_bid {
                     if bid <= last {
                         return Err("Bid must outrank current bid");

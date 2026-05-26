@@ -14,7 +14,6 @@ pub enum Strain {
     Diamonds,
     Hearts,
     Spades,
-    NoTrump,
 }
 
 impl Strain {
@@ -35,7 +34,6 @@ impl Strain {
             Strain::Diamonds => "♦",
             Strain::Hearts => "♥",
             Strain::Spades => "♠",
-            Strain::NoTrump => "NT",
         }
     }
 }
@@ -82,7 +80,6 @@ impl Bid {
             "d" | "♦" | "diamonds" => Strain::Diamonds,
             "h" | "♥" | "hearts" => Strain::Hearts,
             "s" | "♠" | "spades" => Strain::Spades,
-            "nt" | "notrump" | "no trump" => Strain::NoTrump,
             _ => return None,
         };
         Some(Bid { level, strain })
@@ -96,7 +93,6 @@ fn strain_cmp_rank(strain: Strain) -> u8 {
         Strain::Diamonds => 1,
         Strain::Hearts => 2,
         Strain::Spades => 3,
-        Strain::NoTrump => 4,
     }
 }
 
