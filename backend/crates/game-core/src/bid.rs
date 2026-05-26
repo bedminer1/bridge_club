@@ -60,7 +60,7 @@ impl Bid {
         Bid { level, strain }
     }
 
-    /// Parse a bid string like "3NT", "4H", "1C", "2♥".
+    /// Parse a bid string like "4hearts", "1C", "2♥".
     /// Level is the first char (digit 1-7). The rest is the strain.
     /// Returns None on parse failure.
     pub fn parse(s: &str) -> Option<Self> {
@@ -86,7 +86,7 @@ impl Bid {
     }
 }
 
-/// Strain rank for comparison: NT > Spades > Hearts > Diamonds > Clubs.
+/// Strain rank for comparison: Spades > Hearts > Diamonds > Clubs.
 fn strain_cmp_rank(strain: Strain) -> u8 {
     match strain {
         Strain::Clubs => 0,
@@ -131,12 +131,6 @@ pub enum Call {
     Bid(Bid),
     /// Pass.
     Pass,
-    /// Double the opponents' current contract. Only legal if the opponents
-    /// made the last non-pass call.
-    Double,
-    /// Redouble a doubled contract. Only legal if we were doubled by
-    /// the opponents.
-    Redouble,
 }
 
 impl Call {
@@ -148,13 +142,11 @@ impl Call {
         }
     }
 
-    /// Human-readable short string: "Pass", "X", "XX", or the bid itself.
+    /// Human-readable short string: "Pass" or the bid itself.
     pub fn abbreviation(&self) -> String {
         match self {
             Call::Bid(b) => b.to_string(),
             Call::Pass => "Pass".into(),
-            Call::Double => "X".into(),
-            Call::Redouble => "XX".into(),
         }
     }
 }
@@ -171,9 +163,7 @@ impl fmt::Display for Call {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Contract {
     pub bid: Bid,
-    pub doubled: bool,     // was the contract doubled?
-    pub redoubled: bool,   // was it redoubled?
-    pub declarer: usize,   // index of the declaring player (0..3)
+    pub declarer: usize, // index of the declaring player (0..3)
 }
 
 impl Contract {
@@ -181,11 +171,6 @@ impl Contract {
     /// Contract level + 6 (e.g. 4♥ → 10 tricks).
     pub fn tricks_required(&self) -> u8 {
         self.bid.level + 6
-    }
-
-    /// Returns whether the contract is doubled or redoubled.
-    pub fn is_doubled(&self) -> bool {
-        self.doubled || self.redoubled
     }
 }
 
@@ -204,12 +189,6 @@ pub struct AuctionState {
     pub consecutive_passes: u8,
     /// Full history of calls in order.
     pub call_history: Vec<Call>,
-    /// Whether the current contract is doubled.
-    pub doubled: bool,
-    /// Which side doubled (true = NS doubled EW, false = EW doubled NS).
-    pub doubling_side: Option<bool>,
-    /// Whether doubled contract has been redoubled.
-    pub redoubled: bool,
 }
 
 impl AuctionState {
@@ -221,9 +200,6 @@ impl AuctionState {
             last_bidder: None,
             consecutive_passes: 0,
             call_history: Vec::new(),
-            doubled: false,
-            doubling_side: None,
-            redoubled: false,
         }
     }
 
@@ -251,7 +227,6 @@ impl AuctionState {
             Call::Pass => {
                 self.consecutive_passes += 1;
             }
-            _ => return Err("Double/Redouble not allowed in Singapore Bridge auction"),
         }
         self.call_history.push(call);
         self.current_player = (self.current_player + 1) % 4;
@@ -281,8 +256,6 @@ impl AuctionState {
         let bid = self.last_bid?;
         Some(Contract {
             bid,
-            doubled: self.doubled,
-            redoubled: self.redoubled,
             declarer: self.last_bidder?,
         })
     }

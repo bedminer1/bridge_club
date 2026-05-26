@@ -185,9 +185,6 @@ impl Table {
             Call::Pass => {
                 // Just a pass — no additional validation needed
             }
-            _ => {
-                return Err("Double/Redouble not supported in Singapore Bridge");
-            }
         }
 
         auction.make_call(call)?;
@@ -205,8 +202,6 @@ impl Table {
             if let Some(bid) = auction.last_bid {
                 self.contract = Some(Contract {
                     bid,
-                    doubled: false,
-                    redoubled: false,
                     declarer: self.bet_winner.unwrap_or(0),
                 });
             }
