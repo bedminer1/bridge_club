@@ -173,7 +173,9 @@
                     headerState.hiddenMode = info.hiddenMode ?? true
                 }
             } catch {}
-            // Start polling if it's not the human's turn
+            // Always start chat polling when entering the game
+            chatStartPolling()
+            // Start game polling if it's not the human's turn
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
@@ -365,12 +367,7 @@
         Spades: "Spades",
     }
 
-    let API_URL: string
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-        API_URL = "http://127.0.0.1:3000"
-    } else {
-        API_URL = "https://bridge-club.duckdns.org"
-    }
+    const API_URL = "https://bridge-club.duckdns.org"
 
     // ── Lobby State ─────────────────────────────────────────────
     let lobbyMode = $state<"" | "create" | "join">("create")
@@ -815,8 +812,8 @@
     </div>
 
     <!-- Chat card (in-game, side panel) -->
-    <div class="w-80 flex flex-col">
-        <Card class="flex-1 flex flex-col">
+    <div class="w-80 flex flex-col mt-4">
+        <Card class="h-full flex flex-col">
             <CardContent class="flex flex-col gap-2 p-3 flex-1">
                 <div class="text-xs font-medium text-muted-foreground">Chat</div>
                 <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin">
@@ -985,7 +982,7 @@
         {#if lobbyRoomId}
         <!-- Chat card (lobby, side panel) -->
         <div class="w-64 shrink-0 flex flex-col">
-            <Card class="flex-1 flex flex-col">
+            <Card class="h-full flex flex-col">
                 <CardContent class="flex flex-col gap-2 p-3 flex-1">
                     <div class="text-xs font-medium text-muted-foreground">Chat</div>
                     <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin" style="min-height:120px">
