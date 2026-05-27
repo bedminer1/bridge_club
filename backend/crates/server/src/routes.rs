@@ -961,6 +961,11 @@ async fn save_match(
             ).await;
 
             // ── Elo computation ───────────────────────────────────────────────
+            tracing::info!(
+                "Elo: winning_team={}, bet_winner_seat={}, partner={:?}, player_ids={:?}",
+                winning_team, bet_winner_seat, payload.partner, player_ids
+            );
+
             // Team 1 = bet winner's seat + partner seat
             // Team 2 = the other two seats
             let k: f64 = 32.0;
@@ -972,6 +977,8 @@ async fn save_match(
             // Identify team 1 and team 2 seat indices
             let team1_seats = [bet_seat, partner_seat];
             let team2_seats: Vec<usize> = (0..4).filter(|s| *s != bet_seat && *s != partner_seat).collect();
+
+            tracing::info!("Elo: team1_seats={:?}, team2_seats={:?}", team1_seats, team2_seats);
 
             // Fetch current Elo for all 4 participants
             let mut elos: [f64; 4] = [500.0; 4];
@@ -987,6 +994,8 @@ async fn save_match(
                     }
                 }
             }
+
+            tracing::info!("Elo: elos={:?}, partner_seat={}", elos, partner_seat);
 
             // Team average Elo
             let team1_avg = (team1_seats.iter().map(|&s| elos[s]).sum::<f64>()) / team1_seats.len() as f64;
@@ -1007,12 +1016,18 @@ async fn save_match(
             let delta1 = k * (if team1_won { 1.0 } else { 0.0 } - expected_team1);
             let delta2 = k * (if team1_won { 0.0 } else { 1.0 } - expected_team2);
 
+            tracing::info!(
+                "Elo: team1_avg={:.1}, team2_avg={:.1}, expected1={:.3}, expected2={:.3}, delta1={:.1}, delta2={:.1}, team1_won={}",
+                team1_avg, team2_avg, expected_team1, expected_team2, delta1, delta2, team1_won
+            );
+
             // Update Elo for all participants
             let mut elo_delta_for_user: i64 = 0;
             for (seat, &pid) in player_ids.iter().enumerate() {
                 if pid > 0 {
                     let delta = if seat == bet_seat || seat == partner_seat { delta1 } else { delta2 };
                     let delta_int = delta.round() as i64;
+                    tracing::info!("Elo: seat={}, pid={}, team={}, delta={}", seat, pid, if seat == bet_seat || seat == partner_seat { 1 } else { 2 }, delta_int);
                     if pid == user.id {
                         elo_delta_for_user = delta_int;
                     }
