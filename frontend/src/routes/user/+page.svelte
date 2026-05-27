@@ -10,10 +10,20 @@
     import { Switch } from "$lib/components/ui/switch/index.js";
 
     let { data } = $props()
-    let { matchRecords, message, username, rank, userStats } = $state(data)
+    let { matchRecords, message, username, userID, rank, userStats } = $state(data)
 
-    // Default stats to 0 when null (not logged in)
+    // Default stats to 0 when not logged in
     let s = $derived(userStats ?? { gamesPlayed: 0, gamesWon: 0, totalSetsWon: 0, mostSetsWon: 0 })
+
+    // Determine match result for the current user
+    let matchResult = $derived.by(() => {
+        return (m: any) => {
+            const viewerOnTeam1 = m.betWinnerUserId === userID || m.partnerUserId === userID
+            const viewerTeam = viewerOnTeam1 ? 1 : 2
+            const didWin = viewerTeam === m.winningTeam
+            return { viewerTeam, didWin }
+        }
+    })
 
     // Re-fetch user stats on mount to ensure latest data
     $effect(() => {
@@ -104,21 +114,18 @@
 
             {#if matchRecords.length > 0}
                 <div class="flex flex-col gap-3">
-                    {#each matchRecords as matchRecord}
-                        <a href="/user/{matchRecord.id}" class="block">
-                            <Card.Root class="w-full rounded-lg border-border hover:border-accent/30 transition-colors">
-                                <div class="flex items-center justify-between p-4 gap-4">
-                                    <!-- Result badge -->
-                                    <div class="w-16 shrink-0">
-                                        <span
-                                            class="text-sm font-bold {matchRecord.winningTeam === 1 && (matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID) ? 'text-green' : (!matchRecord.winningTeam || matchRecord.winningTeam === 2 && (matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID) || matchRecord.winningTeam === 1 && matchRecord.betWinnerUserId !== userID && matchRecord.partnerUserId !== userID) ? 'text-red' : ''}"
-                                        >
-                                            {#if matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID}
-                                                {matchRecord.winningTeam === 1 ? "Victory" : "Defeat"}
-                                            {:else}
-                                                {matchRecord.winningTeam === 2 ? "Victory" : "Defeat"}
-                                            {/if}
-                                        </span>
+                            {#each matchRecords as matchRecord}
+                                {@const { didWin } = matchResult(matchRecord)}
+                                <a href="/user/{matchRecord.id}" class="block">
+                                    <Card.Root class="w-full rounded-lg border-border hover:border-accent/30 transition-colors">
+                                        <div class="flex items-center justify-between p-4 gap-4">
+                                            <!-- Result badge -->
+                                            <div class="w-16 shrink-0">
+                                                <span
+                                                    class="text-sm font-bold {didWin ? 'text-green' : 'text-red'}"
+                                                >
+                                                    {didWin ? "Victory" : "Defeat"}
+                                                </span>
                                     </div>
 
                                     <!-- Info -->

@@ -46,6 +46,7 @@ export async function load({ cookies }) {
         matchRecords: matchesData.matches || [],
         message: "success",
         username: sessionData.user?.username || "",
+        userID: sessionData.user?.id ?? 0,
         rank,
         userStats: sessionData.user ? {
             gamesPlayed: sessionData.user.gamesPlayed,
