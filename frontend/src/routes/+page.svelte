@@ -635,7 +635,7 @@
         </div>
     {:else}
     <!-- Play area table -->
-    <div class="flex gap-4 w-full mx-auto items-start">
+    <div class="flex gap-4 w-full justify-center">
     <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl">
         <!-- Game info strip -->
         <div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-xs text-muted-foreground px-1 overflow-x-auto scrollbar-none">
@@ -810,8 +810,8 @@
     </div>
 
     <!-- Chat card (in-game, side panel) -->
-    <div class="w-64 shrink-0 flex flex-col">
-        <Card class="h-full flex flex-col">
+    <div class="w-80 flex flex-col">
+        <Card class="flex-1 flex flex-col">
             <CardContent class="flex flex-col gap-2 p-3 flex-1">
                 <div class="text-xs font-medium text-muted-foreground">Chat</div>
                 <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin">
@@ -980,7 +980,7 @@
         {#if lobbyRoomId}
         <!-- Chat card (lobby, side panel) -->
         <div class="w-64 shrink-0 flex flex-col">
-            <Card class="h-full flex flex-col">
+            <Card class="flex-1 flex flex-col">
                 <CardContent class="flex flex-col gap-2 p-3 flex-1">
                     <div class="text-xs font-medium text-muted-foreground">Chat</div>
                     <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin" style="min-height:120px">

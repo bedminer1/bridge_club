@@ -52,7 +52,7 @@ impl GameRoom {
             table: Table::new(["North", "East", "South", "West"]),
             sessions: HashMap::new(),
             is_started: false,
-            hidden_mode: false,
+            hidden_mode: true,
             messages: Vec::new(),
             next_msg_id: 1,
         }
