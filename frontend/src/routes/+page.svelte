@@ -195,6 +195,7 @@
     function startPolling() {
         stopPolling()
         _pollActive = true
+        chatStartPolling()
         const delay = (headerState.botSpeed ?? 2) * 1000
         pollTimeout = setTimeout(() => {
             if (_pollActive) tick()
@@ -202,6 +203,12 @@
     }
 
     let _pollActive = $state(false)
+
+    function stopPolling() {
+        chatStopPolling()
+        _pollActive = false
+        if (pollTimeout !== null) { clearTimeout(pollTimeout); pollTimeout = null }
+    }
 
     async function tick() {
         if (!isOnline || !roomId || !onlineToken) {
@@ -226,14 +233,6 @@
         pollTimeout = setTimeout(() => {
             if (_pollActive) tick()
         }, delay)
-    }
-
-    function stopPolling() {
-        _pollActive = false
-        if (pollTimeout !== null) {
-            clearTimeout(pollTimeout)
-            pollTimeout = null
-        }
     }
 
     // React to bot speed changes during active polling
@@ -474,6 +473,55 @@
     }
     async function lobbyCopyRoomId() { try { await navigator.clipboard.writeText(lobbyRoomId) } catch {} }
     $effect(() => { return () => lobbyStopPolling() })
+
+    // ── Chat ────────────────────────────────────────────────────────
+    interface ChatMsg { id: number; playerName: string; text: string }
+    let chatMessages = $state<ChatMsg[]>([])
+    let chatText = $state("")
+    let chatLastId = $state(0)
+    let chatPollInterval: ReturnType<typeof setInterval> | null = null
+    let chatContainer: HTMLDivElement | undefined = $state(undefined)
+
+    function chatStartPolling() {
+        chatStopPolling(); chatPoll()
+        chatPollInterval = setInterval(chatPoll, 2000)
+    }
+    function chatStopPolling() {
+        if (chatPollInterval !== null) { clearInterval(chatPollInterval); chatPollInterval = null }
+    }
+    async function chatPoll() {
+        if (!roomId) return
+        try {
+            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(roomId)}/chat?after=${chatLastId}`, {
+                headers: { "X-Session-Token": onlineToken },
+            })
+            if (!res.ok) return
+            const d = await res.json()
+            if (d.messages && d.messages.length > 0) {
+                for (const m of d.messages) {
+                    chatMessages = [...chatMessages, m]
+                    if (m.id > chatLastId) chatLastId = m.id
+                }
+                // Scroll to bottom
+                if (chatContainer) setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
+            }
+        } catch {}
+    }
+    async function chatSend() {
+        const text = chatText.trim()
+        if (!text || !roomId || !lobbyPlayerId) return
+        chatText = ""
+        try {
+            await fetch(`${API_URL}/api/rooms/${encodeURIComponent(roomId)}/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
+                body: JSON.stringify({ playerId: lobbyPlayerId, text }),
+            })
+        } catch {}
+    }
+    function chatHandleKey(e: KeyboardEvent) {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatSend() }
+    }
 
     /** Build each player's sequence of played cards from completed sets. */
     function playedCardsFromSets(sets: Array<{ Cards: Card[]; PlayerIDs: number[]; WinnerID: number }>): Card[][] {
@@ -884,5 +932,31 @@
             </Card>
         {/if}
     </div>
+{/if}
+
+<!-- Chat panel (online games only) -->
+{#if isOnline && roomId}
+<div class="fixed right-0 top-20 bottom-20 w-72 border-l border-border bg-background/95 backdrop-blur-sm flex flex-col z-40">
+    <div bind:this={chatContainer} class="flex-1 overflow-y-auto p-3 space-y-2 text-sm">
+        {#each chatMessages as msg (msg.id)}
+            <div class="flex flex-col gap-0.5">
+                <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
+                <span class="text-foreground/90 break-words">{msg.text}</span>
+            </div>
+        {/each}
+        {#if chatMessages.length === 0}
+            <p class="text-xs text-muted-foreground text-center mt-20">No messages yet</p>
+        {/if}
+    </div>
+    <div class="border-t border-border p-2">
+        <input
+            bind:value={chatText}
+            onkeydown={chatHandleKey}
+            placeholder="Chat..."
+            maxlength={500}
+            class="w-full px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+    </div>
+</div>
 {/if}
 </div>

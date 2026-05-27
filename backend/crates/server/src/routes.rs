@@ -326,6 +326,7 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/rooms", post(create_room))
         .route("/api/rooms/{room_id}/join", post(join_room))
         .route("/api/rooms/{room_id}/hidden-mode", post(set_hidden_mode))
+        .route("/api/rooms/{room_id}/chat", get(get_chat).post(send_chat))
         .route("/api/rooms/{room_id}/leave/{player_id}", post(leave_room))
         .route("/api/rooms/{room_id}/start", post(start_game))
         .route("/api/rooms/{room_id}/info", get(get_room_info))
@@ -1260,6 +1261,59 @@ async fn set_hidden_mode(
     }
 
     (StatusCode::OK, Json(serde_json::json!({"ok": true, "hiddenMode": enabled})))
+}
+
+
+async fn send_chat(
+    State(state): State<AppState>,
+    Path(room_id): Path<Uuid>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let player_id = payload.get("playerId").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
+    let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if text.trim().is_empty() || text.len() > 500 {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"ok": false, "error": "Invalid message"})));
+    }
+
+    let rooms = state.rooms.read().await;
+    let room = match rooms.get(&room_id) {
+        Some(r) => r,
+        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Room not found"}))),
+    };
+
+    // Find the player's name from their session
+    let player_name = player_id.and_then(|pid| room.sessions.get(&pid)).map(|s| s.player_name.clone()).unwrap_or_default();
+    if player_name.is_empty() {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "Not in this room"})));
+    }
+
+    drop(rooms);
+    let mut rooms = state.rooms.write().await;
+    let msg = if let Some(room) = rooms.get_mut(&room_id) {
+        room.add_message(&player_name, &text)
+    } else {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Room not found"})));
+    };
+
+    (StatusCode::OK, Json(serde_json::json!({"ok": true, "message": msg})))
+}
+
+/// GET /api/rooms/{room_id}/chat?after=0
+async fn get_chat(
+    State(state): State<AppState>,
+    Path(room_id): Path<Uuid>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let after = params.get("after").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+
+    let rooms = state.rooms.read().await;
+    let room = match rooms.get(&room_id) {
+        Some(r) => r,
+        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "messages": []}))),
+    };
+
+    let messages: Vec<&crate::session::ChatMessage> = room.messages.iter().filter(|m| m.id > after).collect();
+    (StatusCode::OK, Json(serde_json::json!({"ok": true, "messages": messages})))
 }
 
 async fn leave_room(

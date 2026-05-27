@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -6,6 +7,17 @@ use uuid::Uuid;
 use game_core::Table;
 
 use crate::db::DbPool;
+
+// ── Chat Message ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessage {
+    pub id: u64,
+    pub player_name: String,
+    pub text: String,
+    pub timestamp: i64,
+}
 
 // ── Session ────────────────────────────────────────────────────────────────
 
@@ -29,6 +41,8 @@ pub struct GameRoom {
     pub sessions: HashMap<Uuid, PlayerSession>,
     pub is_started: bool,
     pub hidden_mode: bool,
+    pub messages: Vec<ChatMessage>,
+    next_msg_id: u64,
 }
 
 impl GameRoom {
@@ -39,7 +53,29 @@ impl GameRoom {
             sessions: HashMap::new(),
             is_started: false,
             hidden_mode: false,
+            messages: Vec::new(),
+            next_msg_id: 0,
         }
+    }
+
+    /// Add a chat message. Returns the message with assigned ID and timestamp.
+    pub fn add_message(&mut self, player_name: &str, text: &str) -> ChatMessage {
+        let msg = ChatMessage {
+            id: self.next_msg_id,
+            player_name: player_name.to_string(),
+            text: text.to_string(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64,
+        };
+        self.next_msg_id += 1;
+        self.messages.push(msg.clone());
+        // Keep only last 200 messages
+        if self.messages.len() > 200 {
+            self.messages.remove(0);
+        }
+        msg
     }
 
     /// Add a player to this room. Returns their seat index (0..3) or error
