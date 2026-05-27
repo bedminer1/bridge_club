@@ -1,25 +1,22 @@
 //! Turso/libSQL database connection and schema.
 //!
-//! Serializes all database access through a Mutex to prevent hrana
-//! protocol race conditions from concurrent tokio tasks.
+//! Serializes all database access through a Mutex. Auto-reconnects when the
+//! hrana stream is closed by the Turso server.
 
 use libsql::{Connection, Database};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Shared database handle with serialized connection access.
-/// All queries go through a Mutex to prevent hrana protocol races.
+/// Shared database handle with auto-reconnecting connection.
 #[derive(Clone)]
 pub struct DbPool {
+    db: Arc<Database>,
     conn: Arc<Mutex<Connection>>,
 }
 
 impl DbPool {
     /// Connect to database from environment variables.
-    ///
-    /// Reads `DATABASE_URL` and (for remote) `DATABASE_AUTH_TOKEN`.
-    /// Falls back to `file:local.db` if `DATABASE_URL` is not set.
     pub async fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         let url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "file:local.db".into());
@@ -27,42 +24,41 @@ impl DbPool {
         let db = if url.starts_with("libsql://") || url.starts_with("https://") {
             let auth_token = std::env::var("DATABASE_AUTH_TOKEN")
                 .map_err(|_| "DATABASE_AUTH_TOKEN required for remote Turso connection".to_string())?;
-
             Database::open_remote(url.clone(), auth_token)?
         } else {
             Database::open(url.clone())?
         };
 
-        // Create a single connection and wrap in Mutex
         let conn = db.connect()?;
         tracing::info!(
             "Connected to database: {}",
-            if url.starts_with("libsql://") || url.starts_with("https://") {
-                "Turso remote"
-            } else {
-                "local SQLite"
-            }
+            if url.starts_with("libsql://") || url.starts_with("https://") { "Turso remote" } else { "local SQLite" }
         );
         Ok(DbPool {
+            db: Arc::new(db),
             conn: Arc::new(Mutex::new(conn)),
         })
     }
 
-    /// Get a locked connection for executing queries.
-    /// This serializes all DB access, preventing hrana protocol races.
+    /// Get a serialized, fresh connection for executing queries.
+    /// Creates a new hrana connection each call (serialized via Mutex) so
+    /// that stale/closed streams are never reused.
     pub async fn conn(&self) -> tokio::sync::MutexGuard<'_, Connection> {
+        // Always create a fresh connection to avoid "stream not found" errors
+        if let Ok(new_conn) = self.db.connect() {
+            let mut guard = self.conn.lock().await;
+            *guard = new_conn;
+        }
         self.conn.lock().await
     }
-}
 
-/// Create a test pool backed by a temporary SQLite file.
-/// The file at `path` will be created.
-pub fn new_temp(path: &str) -> Result<DbPool, Box<dyn std::error::Error>> {
-    let db = Database::open(path.to_string())?;
-    let conn = db.connect()?;
-    Ok(DbPool {
-        conn: Arc::new(Mutex::new(conn)),
-    })
+    /// Replace the current connection with a fresh one (for error recovery).
+    pub async fn reconnect(&self) {
+        if let Ok(new_conn) = self.db.connect() {
+            let mut guard = self.conn.lock().await;
+            *guard = new_conn;
+        }
+    }
 }
 
 // ── Schema Migration ─────────────────────────────────────────────────────────
@@ -84,29 +80,19 @@ CREATE TABLE IF NOT EXISTS matches (
     user_id         INTEGER NOT NULL REFERENCES users(id),
     date            INTEGER NOT NULL,
     bot_difficulty  TEXT NOT NULL,
-
-    -- Betting info
     trump_suit      TEXT NOT NULL,
     bet_size        INTEGER NOT NULL,
     bet_winner      INTEGER NOT NULL,
-
-    -- Match result
     partner         INTEGER,
     won_match       INTEGER,
-
-    -- Sets won per player
     player1_sets    INTEGER NOT NULL DEFAULT 0,
     player2_sets    INTEGER NOT NULL DEFAULT 0,
     player3_sets    INTEGER NOT NULL DEFAULT 0,
     player4_sets    INTEGER NOT NULL DEFAULT 0,
-
-    -- Serialized hands (JSON array of cards)
     player1_hand    TEXT NOT NULL DEFAULT '[]',
     player2_hand    TEXT NOT NULL DEFAULT '[]',
     player3_hand    TEXT NOT NULL DEFAULT '[]',
     player4_hand    TEXT NOT NULL DEFAULT '[]',
-
-    -- Completed sets data (JSON)
     sets_data       TEXT,
     players         TEXT,
     players_int     INTEGER DEFAULT 0,
@@ -121,12 +107,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 ";
 
-/// Run the initial schema migration.
 pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
     let conn = pool.conn().await;
     conn.execute_batch(SCHEMA_SQL).await?;
 
-    // Safe migration: add columns if they don't exist yet
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN sets_data TEXT;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players TEXT;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN room_id TEXT;").await;
@@ -141,7 +125,6 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN elo INTEGER DEFAULT 500;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN elo_change INTEGER DEFAULT 0;").await;
 
-    // Seed bot users (standard bots: Alpha, Beta, Gamma)
     let _ = conn.execute(
         "INSERT OR IGNORE INTO users (id, username, password, games_played, games_won, total_sets_won, most_sets_won, elo) VALUES (?1, ?2, '', 0, 0, 0, 0, 500)",
         libsql::params![1i64, "Bot-Alpha"],
@@ -157,6 +140,16 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
 
     tracing::info!("Database schema up to date");
     Ok(())
+}
+
+/// Create a test pool backed by a temporary SQLite file.
+pub fn new_temp(path: &str) -> Result<DbPool, Box<dyn std::error::Error>> {
+    let db = Database::open(path.to_string())?;
+    let conn = db.connect()?;
+    Ok(DbPool {
+        db: Arc::new(db),
+        conn: Arc::new(Mutex::new(conn)),
+    })
 }
 
 // ── Row Types ────────────────────────────────────────────────────────────────
