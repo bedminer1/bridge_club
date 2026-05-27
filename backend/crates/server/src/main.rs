@@ -1,10 +1,3 @@
-mod auth;
-mod bot;
-mod db;
-mod game_session;
-mod routes;
-mod session;
-
 use std::net::SocketAddr;
 
 use axum::http::{header, HeaderName, HeaderValue};
@@ -19,20 +12,20 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     // Initialize the database pool
-    let db_pool = db::DbPool::from_env()
+    let db_pool = bridge_server::db::DbPool::from_env()
         .await
         .expect("Failed to connect to database");
 
     // Run schema migrations
-    db::run_migrations(&db_pool)
+    bridge_server::db::run_migrations(&db_pool)
         .await
         .expect("Failed to run database migrations");
 
     // Create shared application state
-    let state = session::new_app_state(db_pool).await;
+    let state = bridge_server::session::new_app_state(db_pool).await;
 
     // Build the router
-    let app = routes::routes(state);
+    let app = bridge_server::routes::routes(state);
 
     // CORS: allow any origin (Vercel preview URLs vary)
     let cors = CorsLayer::new()

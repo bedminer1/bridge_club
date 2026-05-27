@@ -55,6 +55,16 @@ impl DbPool {
     }
 }
 
+/// Create a test pool backed by a temporary SQLite file.
+/// The file at `path` will be created.
+pub fn new_temp(path: &str) -> Result<DbPool, Box<dyn std::error::Error>> {
+    let db = Database::open(path.to_string())?;
+    let conn = db.connect()?;
+    Ok(DbPool {
+        conn: Arc::new(Mutex::new(conn)),
+    })
+}
+
 // ── Schema Migration ─────────────────────────────────────────────────────────
 
 const SCHEMA_SQL: &str = "

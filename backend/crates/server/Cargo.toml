@@ -20,3 +20,7 @@ dotenvy = "0.15"
 # Auth
 sha2 = "0.10"
 base64 = "0.22"
+
+[dev-dependencies]
+tower = "0.5"
+tempfile = "3"
