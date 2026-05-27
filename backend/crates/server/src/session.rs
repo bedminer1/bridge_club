@@ -54,7 +54,7 @@ impl GameRoom {
             is_started: false,
             hidden_mode: false,
             messages: Vec::new(),
-            next_msg_id: 0,
+            next_msg_id: 1,
         }
     }
 

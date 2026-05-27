@@ -512,11 +512,19 @@
         if (!text || !roomId || !lobbyPlayerId) return
         chatText = ""
         try {
-            await fetch(`${API_URL}/api/rooms/${encodeURIComponent(roomId)}/chat`, {
+            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(roomId)}/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
                 body: JSON.stringify({ playerId: lobbyPlayerId, text }),
             })
+            if (res.ok) {
+                const d = await res.json()
+                if (d.ok && d.message) {
+                    chatMessages = [...chatMessages, d.message]
+                    chatLastId = d.message.id
+                    if (chatContainer) setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
+                }
+            }
         } catch {}
     }
     function chatHandleKey(e: KeyboardEvent) {
@@ -825,6 +833,35 @@
     {/if}
     {/if}
 
+    <!-- Chat card (in-game) -->
+    {#if chatMessages.length > 0 || chatText !== ""}
+    <div class="w-full max-w-3xl mx-auto">
+        <Card>
+            <CardContent class="flex flex-col gap-2 p-3">
+                <div class="text-xs font-medium text-muted-foreground">Chat</div>
+                <div bind:this={chatContainer} class="h-24 overflow-y-auto space-y-1 text-sm scrollbar-thin">
+                    {#each chatMessages as msg (msg.id)}
+                        <div class="flex flex-col gap-0.5">
+                            <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
+                            <span class="text-foreground/90 break-words text-xs">{msg.text}</span>
+                        </div>
+                    {/each}
+                </div>
+                <div class="flex gap-2">
+                    <Input
+                        bind:value={chatText}
+                        onkeydown={chatHandleKey}
+                        placeholder="Chat..."
+                        maxlength={500}
+                        class="flex-1 h-8 text-xs"
+                    />
+                    <Button onclick={chatSend} size="sm" class="h-8 px-3 text-xs">Send</Button>
+                </div>
+            </CardContent>
+        </Card>
+    </div>
+    {/if}
+
     {:else}
     <!-- Lobby UI -->
     <div class="w-full max-w-md">
@@ -930,33 +967,35 @@
                     <Button onclick={lobbyLeaveRoom} variant="outline" class="w-full mt-1">Leave Room</Button>
                 </CardContent>
             </Card>
-        {/if}
-    </div>
-{/if}
 
-<!-- Chat panel (online games only) -->
-{#if isOnline && roomId}
-<div class="fixed right-0 top-20 bottom-20 w-72 border-l border-border bg-background/95 backdrop-blur-sm flex flex-col z-40">
-    <div bind:this={chatContainer} class="flex-1 overflow-y-auto p-3 space-y-2 text-sm">
-        {#each chatMessages as msg (msg.id)}
-            <div class="flex flex-col gap-0.5">
-                <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
-                <span class="text-foreground/90 break-words">{msg.text}</span>
-            </div>
-        {/each}
-        {#if chatMessages.length === 0}
-            <p class="text-xs text-muted-foreground text-center mt-20">No messages yet</p>
+            <!-- Chat card (lobby) -->
+            <Card class="mt-2">
+                <CardContent class="flex flex-col gap-2 p-3">
+                    <div class="text-xs font-medium text-muted-foreground">Chat</div>
+                    <div bind:this={chatContainer} class="h-28 overflow-y-auto space-y-1 text-sm scrollbar-thin">
+                        {#each chatMessages as msg (msg.id)}
+                            <div class="flex flex-col gap-0.5">
+                                <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
+                                <span class="text-foreground/90 break-words text-xs">{msg.text}</span>
+                            </div>
+                        {/each}
+                        {#if chatMessages.length === 0}
+                            <p class="text-xs text-muted-foreground text-center pt-8">No messages yet</p>
+                        {/if}
+                    </div>
+                    <div class="flex gap-2">
+                        <Input
+                            bind:value={chatText}
+                            onkeydown={chatHandleKey}
+                            placeholder="Chat..."
+                            maxlength={500}
+                            class="flex-1 h-8 text-xs"
+                        />
+                        <Button onclick={chatSend} size="sm" class="h-8 px-3 text-xs">Send</Button>
+                    </div>
+                </CardContent>
+            </Card>
         {/if}
     </div>
-    <div class="border-t border-border p-2">
-        <input
-            bind:value={chatText}
-            onkeydown={chatHandleKey}
-            placeholder="Chat..."
-            maxlength={500}
-            class="w-full px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-        />
-    </div>
-</div>
 {/if}
 </div>
