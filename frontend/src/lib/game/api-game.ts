@@ -4,7 +4,13 @@
 import type { Game, Card, Player, Move, CompletedSet } from "./types"
 import { SUIT_ENUM, VALUE_TO_RANK, SUIT_SORT_ORDER } from "./cards"
 
-const API_URL = "https://bridge-club.duckdns.org"
+function getApiUrl(): string {
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        return "http://127.0.0.1:3000"
+    }
+    return "https://bridge-club.duckdns.org"
+}
+const API_URL = getApiUrl()
 
 // ── API Type Definitions ───────────────────────────────────────────
 
