@@ -635,7 +635,7 @@
         </div>
     {:else}
     <!-- Play area table -->
-    <div class="flex gap-4 w-full items-start">
+    <div class="flex gap-4 w-full mx-auto items-start">
     <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl">
         <!-- Game info strip -->
         <div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-xs text-muted-foreground px-1 overflow-x-auto scrollbar-none">
