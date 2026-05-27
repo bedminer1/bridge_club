@@ -1048,7 +1048,11 @@ async fn get_leaderboard(
     let mut rows = match conn
         .query(
             "SELECT id, username, games_played, games_won, total_sets_won, most_sets_won
-             FROM users ORDER BY games_won DESC, games_played DESC",
+             FROM users ORDER BY
+             CASE WHEN games_played > 0
+               THEN CAST(games_won AS REAL) / CAST(games_played AS REAL)
+               ELSE 0 END DESC,
+             games_played DESC",
             libsql::params![],
         )
         .await
