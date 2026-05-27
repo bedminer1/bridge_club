@@ -5,27 +5,28 @@
         gamesPlayed: number;
         gamesWon: number;
         winrate: number;
-        totalSetsWon: number;
-        mostSetsWon: number;
+        elo: number;
     }> = $state([]);
     let loading = $state(true);
     let error = $state<string | null>(null);
 
+    const API_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? "http://127.0.0.1:3000"
+        : "https://bridge-club.duckdns.org";
+
     async function loadLeaderboard() {
         try {
-            const res = await fetch("https://bridge-club.duckdns.org/api/leaderboard");
+            const res = await fetch(`${API_URL}/api/leaderboard`);
             const data = await res.json();
             if (data.ok && data.entries) {
-                // Sort by winrate descending for display
-                const sorted = [...data.entries].sort((a, b) => b.winrate - a.winrate || b.gamesPlayed - a.gamesPlayed);
-                entries = sorted.map((e: any, i: number) => ({
+                // Backend returns entries sorted by Elo already
+                entries = data.entries.map((e: any, i: number) => ({
                     rank: i + 1,
                     username: e.username,
                     gamesPlayed: e.gamesPlayed,
                     gamesWon: e.gamesWon,
                     winrate: e.winrate,
-                    totalSetsWon: e.totalSetsWon,
-                    mostSetsWon: e.mostSetsWon,
+                    elo: e.elo ?? 500,
                 }));
             } else {
                 error = "Failed to load leaderboard";
@@ -42,7 +43,7 @@
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
     <h1 class="text-2xl font-bold mb-1">Leaderboard</h1>
-    <p class="text-sm text-muted-foreground mb-8">Top players by win rate</p>
+    <p class="text-sm text-muted-foreground mb-8">Ranked by Elo rating</p>
 
     {#if loading}
         <p class="text-sm text-muted-foreground">Loading...</p>
@@ -57,8 +58,7 @@
                 <span class="w-16 text-right">Games</span>
                 <span class="w-16 text-right">Won</span>
                 <span class="w-16 text-right">Win%</span>
-                <span class="w-16 text-right">Avg Sets</span>
-                <span class="w-16 text-right">Best</span>
+                <span class="w-20 text-right font-bold text-accent">Elo</span>
             </div>
 
             <!-- Data rows -->
@@ -73,10 +73,7 @@
                     <span class="w-16 text-right {entry.winrate >= 0.6 ? 'text-green' : 'text-muted-foreground'}">
                         {(entry.winrate * 100).toFixed(0)}%
                     </span>
-                    <span class="w-16 text-right text-muted-foreground">
-                        {entry.gamesPlayed > 0 ? (entry.totalSetsWon / entry.gamesPlayed).toFixed(1) : '0.0'}
-                    </span>
-                    <span class="w-16 text-right text-accent">{entry.mostSetsWon}</span>
+                    <span class="w-20 text-right font-bold text-accent">{entry.elo}</span>
                 </div>
             {/each}
         </div>
