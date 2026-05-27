@@ -440,3 +440,193 @@ impl Table {
         self.score = None;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bid::{Bid, Call, Strain};
+
+    fn make_table() -> Table {
+        Table::new(["Alice", "Bob", "Carol", "Dave"])
+    }
+
+    #[test]
+    fn test_table_new() {
+        let t = make_table();
+        assert_eq!(t.players[0].name, "Alice");
+        assert_eq!(t.players[1].name, "Bob");
+        assert_eq!(t.players[2].name, "Carol");
+        assert_eq!(t.players[3].name, "Dave");
+        assert_eq!(t.phase, GamePhase::Dealing);
+    }
+
+    #[test]
+    fn test_deal_gives_13_cards() {
+        let mut t = make_table();
+        t.deal();
+        for p in &t.players {
+            assert_eq!(p.hand.len(), 13, "{} should have 13 cards", p.name);
+        }
+        assert_eq!(t.phase, GamePhase::Bidding);
+    }
+
+    #[test]
+    fn test_deal_each_player_has_points() {
+        let mut t = make_table();
+        t.deal();
+        for p in &t.players {
+            let pts: u32 = p.hand.iter().map(|c| c.rank.points() as u32).sum();
+            assert!(pts >= 4, "{} has {} points (need >=4)", p.name, pts);
+        }
+    }
+
+    #[test]
+    fn test_bidding_basic_raise() {
+        let mut t = make_table();
+        t.deal();
+
+        // Player 0 bids 2 Hearts
+        t.make_call(Call::Bid(Bid::new(2, Strain::Hearts))).unwrap();
+        assert_eq!(t.bet_size, 2);
+        assert_eq!(t.trump_suit, Some(Suit::Hearts));
+        assert_eq!(t.bet_winner, Some(0));
+        assert_eq!(t.phase, GamePhase::Bidding); // still bidding
+    }
+
+    #[test]
+    fn test_bidding_ends_with_3_passes() {
+        let mut t = make_table();
+        t.deal();
+
+        t.make_call(Call::Bid(Bid::new(2, Strain::Spades))).unwrap(); // P0
+        t.make_call(Call::Pass).unwrap(); // P1
+        t.make_call(Call::Pass).unwrap(); // P2
+        t.make_call(Call::Pass).unwrap(); // P3
+        assert_eq!(t.phase, GamePhase::PartnerSelection);
+        assert_eq!(t.bet_winner, Some(0));
+        assert!(t.contract.is_some());
+        assert_eq!(t.contract.unwrap().bid, Bid::new(2, Strain::Spades));
+    }
+
+    #[test]
+    fn test_bidding_all_pass_forces_1_club() {
+        let mut t = make_table();
+        t.deal();
+
+        t.make_call(Call::Pass).unwrap(); // P0
+        t.make_call(Call::Pass).unwrap(); // P1
+        t.make_call(Call::Pass).unwrap(); // P2
+        t.make_call(Call::Pass).unwrap(); // P3
+        assert_eq!(t.phase, GamePhase::PartnerSelection);
+        assert_eq!(t.bet_size, 1);
+        assert_eq!(t.trump_suit, Some(Suit::Clubs));
+        assert_eq!(t.bet_winner, Some(0));
+    }
+
+    #[test]
+    fn test_bidding_wrong_phase() {
+        let mut t = make_table();
+        // Haven't dealt yet, should be in Dealing phase
+        assert!(t.make_call(Call::Bid(Bid::new(1, Strain::Clubs))).is_err());
+    }
+
+    #[test]
+    fn test_partner_selection_basic() {
+        let mut t = make_table();
+        t.deal();
+
+        // Quick auction: 4 passes (P0 is forced to 1 Club)
+        for _ in 0..4 {
+            t.make_call(Call::Pass).unwrap();
+        }
+        assert_eq!(t.phase, GamePhase::PartnerSelection);
+
+        // Bet winner (P0) picks a card they don't own
+        let not_my_card = t.players[0].hand[0]; // Wait, this IS their card
+        // Find a card P0 does NOT have
+        let partner_card = t.players[1]
+            .hand
+            .iter()
+            .find(|c| !t.players[0].has_card(c))
+            .copied()
+            .unwrap();
+        t.select_partner(partner_card).unwrap();
+        assert_eq!(t.phase, GamePhase::Playing);
+        assert!(t.partner_idx.is_some());
+        assert!(t.partner_idx.unwrap() != 0);
+    }
+
+    #[test]
+    fn test_partner_selection_cannot_use_own_card() {
+        let mut t = make_table();
+        t.deal();
+        for _ in 0..4 {
+            t.make_call(Call::Pass).unwrap();
+        }
+        // P0's own card
+        let own_card = t.players[0].hand[0];
+        assert!(t.select_partner(own_card).is_err());
+    }
+
+    #[test]
+    fn test_next_deal_rotates_dealer() {
+        let mut t = make_table();
+        assert_eq!(t.dealer, Direction::North);
+        t.next_deal();
+        assert_eq!(t.dealer, Direction::East);
+        t.next_deal();
+        assert_eq!(t.dealer, Direction::South);
+        t.next_deal();
+        assert_eq!(t.dealer, Direction::West);
+        t.next_deal();
+        assert_eq!(t.dealer, Direction::North);
+    }
+
+    #[test]
+    fn test_next_deal_resets_phase() {
+        let mut t = make_table();
+        t.deal();
+        t.make_call(Call::Bid(Bid::new(2, Strain::Hearts))).unwrap();
+        t.next_deal();
+        assert_eq!(t.phase, GamePhase::Dealing);
+        assert!(t.auction.is_none());
+    }
+
+    #[test]
+    fn test_winner_detection_team1_reaches_target() {
+        let mut t = make_table();
+        t.deal();
+        // Auction
+        t.make_call(Call::Bid(Bid::new(2, Strain::Spades))).unwrap();
+        t.make_call(Call::Pass).unwrap();
+        t.make_call(Call::Pass).unwrap();
+        t.make_call(Call::Pass).unwrap();
+        // Bet winner = P0, skip partner selection by setting it manually
+        t.partner_idx = Some(2); // P2 is partner
+        t.phase = GamePhase::Playing;
+
+        // Team 1 (P0 + P2) needs 8 sets (6 + 2)
+        t.sets_won[0] = 4;
+        t.sets_won[2] = 4;
+        t.check_win_condition();
+        assert_eq!(t.phase, GamePhase::Finished);
+    }
+
+    #[test]
+    fn test_winner_detection_team2_reaches_target() {
+        let mut t = make_table();
+        t.deal();
+        t.make_call(Call::Bid(Bid::new(1, Strain::Clubs))).unwrap();
+        t.make_call(Call::Pass).unwrap();
+        t.make_call(Call::Pass).unwrap();
+        t.make_call(Call::Pass).unwrap();
+        t.partner_idx = Some(2);
+        t.phase = GamePhase::Playing;
+
+        // Team 2 (P1 + P3) needs 7 sets (8 - 1)
+        t.sets_won[1] = 4;
+        t.sets_won[3] = 3;
+        t.check_win_condition();
+        assert_eq!(t.phase, GamePhase::Finished);
+    }
+}

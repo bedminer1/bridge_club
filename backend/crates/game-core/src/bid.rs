@@ -260,3 +260,181 @@ impl AuctionState {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Bid tests ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_bid_new() {
+        let b = Bid::new(1, Strain::Clubs);
+        assert_eq!(b.level, 1);
+        assert_eq!(b.strain, Strain::Clubs);
+    }
+
+    #[test]
+    fn test_bid_ordering_same_level() {
+        let clubs = Bid::new(3, Strain::Clubs);
+        let diamonds = Bid::new(3, Strain::Diamonds);
+        let hearts = Bid::new(3, Strain::Hearts);
+        let spades = Bid::new(3, Strain::Spades);
+        assert!(clubs < diamonds);
+        assert!(diamonds < hearts);
+        assert!(hearts < spades);
+    }
+
+    #[test]
+    fn test_bid_ordering_different_level() {
+        let low = Bid::new(1, Strain::Spades);
+        let high = Bid::new(2, Strain::Clubs);
+        assert!(low < high);
+    }
+
+    #[test]
+    fn test_bid_parse_valid() {
+        let b = Bid::parse("4hearts").unwrap();
+        assert_eq!(b.level, 4);
+        assert_eq!(b.strain, Strain::Hearts);
+
+        let b = Bid::parse("1c").unwrap();
+        assert_eq!(b.level, 1);
+        assert_eq!(b.strain, Strain::Clubs);
+
+        let b = Bid::parse("7S").unwrap();
+        assert_eq!(b.level, 7);
+        assert_eq!(b.strain, Strain::Spades);
+    }
+
+    #[test]
+    fn test_bid_parse_invalid() {
+        assert!(Bid::parse("0hearts").is_none());
+        assert!(Bid::parse("8c").is_none());
+        assert!(Bid::parse("abc").is_none());
+        assert!(Bid::parse("").is_none());
+    }
+
+    #[test]
+    fn test_bid_display() {
+        let b = Bid::new(4, Strain::Hearts);
+        let s = b.to_string();
+        assert!(s.contains('4'));
+        assert!(s.contains('♥') || s.contains("Hearts"));
+    }
+
+    // ── Call tests ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_call_abbreviation() {
+        let bid = Call::Bid(Bid::new(3, Strain::Spades));
+        assert_eq!(bid.abbreviation(), "3♠");
+        assert_eq!(Call::Pass.abbreviation(), "Pass");
+    }
+
+    #[test]
+    fn test_call_as_bid() {
+        let bid = Call::Bid(Bid::new(2, Strain::Diamonds));
+        assert!(bid.as_bid().is_some());
+        assert_eq!(bid.as_bid().unwrap().level, 2);
+        assert!(Call::Pass.as_bid().is_none());
+    }
+
+    // ── AuctionState tests ────────────────────────────────────────────────
+
+    #[test]
+    fn test_auction_new() {
+        let a = AuctionState::new(0);
+        assert_eq!(a.current_player, 0);
+        assert!(a.last_bid.is_none());
+        assert_eq!(a.consecutive_passes, 0);
+        assert!(!a.is_ended());
+    }
+
+    #[test]
+    fn test_auction_dealer_2() {
+        let a = AuctionState::new(2);
+        assert_eq!(a.current_player, 2);
+    }
+
+    #[test]
+    fn test_auction_bid_advances_player() {
+        let mut a = AuctionState::new(0);
+        a.make_call(Call::Bid(Bid::new(1, Strain::Clubs))).unwrap();
+        assert_eq!(a.current_player, 1);
+        assert_eq!(a.last_bid, Some(Bid::new(1, Strain::Clubs)));
+        assert_eq!(a.last_bidder, Some(0));
+    }
+
+    #[test]
+    fn test_auction_must_outrank() {
+        let mut a = AuctionState::new(0);
+        a.make_call(Call::Bid(Bid::new(2, Strain::Hearts))).unwrap();
+        // Can't bid lower
+        assert!(a.make_call(Call::Bid(Bid::new(1, Strain::Spades))).is_err());
+        // Can't bid same
+        assert!(a.make_call(Call::Bid(Bid::new(2, Strain::Hearts))).is_err());
+        // Can bid higher
+        assert!(a.make_call(Call::Bid(Bid::new(2, Strain::Spades))).is_ok());
+    }
+
+    #[test]
+    fn test_auction_ends_after_3_passes() {
+        let mut a = AuctionState::new(0);
+        a.make_call(Call::Bid(Bid::new(1, Strain::Clubs))).unwrap();
+        assert!(!a.is_ended());
+        a.make_call(Call::Pass).unwrap();
+        assert!(!a.is_ended());
+        a.make_call(Call::Pass).unwrap();
+        assert!(!a.is_ended());
+        a.make_call(Call::Pass).unwrap();
+        assert!(a.is_ended());
+    }
+
+    #[test]
+    fn test_auction_no_moves_after_end() {
+        let mut a = AuctionState::new(0);
+        a.make_call(Call::Bid(Bid::new(1, Strain::Clubs))).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        assert!(a.is_ended());
+        assert!(a.make_call(Call::Bid(Bid::new(2, Strain::Hearts))).is_err());
+    }
+
+    #[test]
+    fn test_auction_final_contract() {
+        let mut a = AuctionState::new(1);
+        a.make_call(Call::Pass).unwrap();
+        a.make_call(Call::Bid(Bid::new(2, Strain::Spades))).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        let contract = a.final_contract().unwrap();
+        assert_eq!(contract.bid, Bid::new(2, Strain::Spades));
+        assert_eq!(contract.declarer, 2);
+        assert_eq!(contract.tricks_required(), 8);
+    }
+
+    #[test]
+    fn test_auction_all_pass_no_contract() {
+        let mut a = AuctionState::new(0);
+        a.make_call(Call::Pass).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        a.make_call(Call::Pass).unwrap();
+        assert!(!a.is_ended()); // only 3 calls, need 4
+        a.make_call(Call::Pass).unwrap();
+        assert!(a.is_ended());
+        assert!(a.final_contract().is_none()); // passed out
+    }
+
+    #[test]
+    fn test_bid_display_roundtrip() {
+        let b = Bid::new(5, Strain::Diamonds);
+        let s = b.to_string();
+        let parsed = Bid::parse(&s);
+        assert!(parsed.is_some());
+        // Display uses symbols; parse handles symbols
+        assert_eq!(parsed.unwrap(), b);
+    }
+}
