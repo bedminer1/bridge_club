@@ -26,8 +26,9 @@ pub struct PlayerSession {
 pub struct GameRoom {
     pub room_id: Uuid,
     pub table: Table,
-    pub sessions: HashMap<Uuid, PlayerSession>, // player_id → session
+    pub sessions: HashMap<Uuid, PlayerSession>,
     pub is_started: bool,
+    pub hidden_mode: bool,
 }
 
 impl GameRoom {
@@ -37,6 +38,7 @@ impl GameRoom {
             table: Table::new(["North", "East", "South", "West"]),
             sessions: HashMap::new(),
             is_started: false,
+            hidden_mode: false,
         }
     }
 

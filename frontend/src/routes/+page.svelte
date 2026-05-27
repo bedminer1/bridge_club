@@ -163,6 +163,16 @@
             fixupPlayerDisplay(gameState)
             game = gameState
             isOnline = true
+            // Fetch room info for hidden mode setting
+            try {
+                const infoRes = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(existingRoomId)}/info`, {
+                    headers: { "X-Session-Token": onlineToken },
+                })
+                if (infoRes.ok) {
+                    const info = await infoRes.json()
+                    headerState.hiddenMode = info.hiddenMode ?? true
+                }
+            } catch {}
             // Start polling if it's not the human's turn
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
@@ -369,6 +379,7 @@
     let lobbyJoinError = $state("")
     let lobbyMySeatIndex = $state(0)
     let lobbyPlayers = $state<Array<{ name: string; seatIndex: number; isBot: boolean }>>([])
+    let lobbyHiddenMode = $state(true)
     let lobbyPollInterval: ReturnType<typeof setInterval> | null = null
 
     async function lobbyCreateRoom() {
@@ -423,7 +434,7 @@
             })
             if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Start failed: ${res.status} ${t}`); return }
             const d = await res.json()
-            if (d.ok) { lobbyStopPolling(); goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`) }
+            if (d.ok) { lobbyStopPolling(); headerState.hiddenMode = lobbyHiddenMode; goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`) }
             else { alert("Start failed: " + JSON.stringify(d)) }
         } catch (e) { console.error("Start error:", e); alert("Failed. Is the backend running?") }
     }
@@ -443,9 +454,23 @@
             })
             if (!res.ok) return
             const d = await res.json()
-            if (d.isStarted) { lobbyStopPolling(); goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`); return }
+            if (d.isStarted) { lobbyStopPolling(); headerState.hiddenMode = d.hiddenMode ?? true; goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`); return }
             lobbyPlayers = d.players || []
+            lobbyHiddenMode = d.hiddenMode ?? true
         } catch (e) { console.error("Poll error:", e) }
+    }
+
+    async function lobbyToggleHiddenMode() {
+        if (!lobbyRoomId || !lobbyPlayerId) return
+        const newVal = !lobbyHiddenMode
+        try {
+            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/hidden-mode`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
+                body: JSON.stringify({ enabled: newVal, playerId: lobbyPlayerId }),
+            })
+            if (res.ok) lobbyHiddenMode = newVal
+        } catch (e) { console.error("Toggle hidden mode error:", e) }
     }
     async function lobbyCopyRoomId() { try { await navigator.clipboard.writeText(lobbyRoomId) } catch {} }
     $effect(() => { return () => lobbyStopPolling() })
@@ -837,8 +862,21 @@
                         {/if}
                     </div>
                     {#if lobbyIsHost}
+                        <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
+                            <span class="text-sm text-foreground">Hidden Mode</span>
+                            <button
+                                onclick={lobbyToggleHiddenMode}
+                                class="relative w-10 h-5 rounded-full transition-colors {lobbyHiddenMode ? 'bg-accent' : 'bg-muted-foreground/30'}"
+                            >
+                                <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {lobbyHiddenMode ? 'translate-x-5' : ''}" />
+                            </button>
+                        </div>
                         <Button onclick={lobbyStartGame} class="w-full mt-2" size="lg">Start Game</Button>
                     {:else}
+                        <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
+                            <span class="text-sm text-foreground">Hidden Mode</span>
+                            <span class="text-xs text-muted-foreground">{lobbyHiddenMode ? 'On' : 'Off'}</span>
+                        </div>
                         <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
                     {/if}
                     <Button onclick={lobbyLeaveRoom} variant="outline" class="w-full mt-1">Leave Room</Button>

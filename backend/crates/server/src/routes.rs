@@ -32,6 +32,7 @@ pub struct RoomInfoResponse {
     pub is_started: bool,
     pub phase: String,
     pub players: Vec<RoomPlayerInfo>,
+    pub hidden_mode: bool,
 }
 
 #[derive(Serialize)]
@@ -324,6 +325,7 @@ pub fn routes(state: AppState) -> Router {
         // Game room routes
         .route("/api/rooms", post(create_room))
         .route("/api/rooms/{room_id}/join", post(join_room))
+        .route("/api/rooms/{room_id}/hidden-mode", post(set_hidden_mode))
         .route("/api/rooms/{room_id}/leave/{player_id}", post(leave_room))
         .route("/api/rooms/{room_id}/start", post(start_game))
         .route("/api/rooms/{room_id}/info", get(get_room_info))
@@ -1227,6 +1229,39 @@ async fn join_room(
     }
 }
 
+async fn set_hidden_mode(
+    State(state): State<AppState>,
+    Path(room_id): Path<Uuid>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let enabled = payload.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let player_id = payload.get("playerId").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
+
+    let rooms = state.rooms.read().await;
+    let room = match rooms.get(&room_id) {
+        Some(r) => r,
+        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Room not found"}))),
+    };
+
+    // Only the host (first player to join) can toggle hidden mode
+    let is_host = match (&player_id, room.sessions.iter().min_by_key(|(_, s)| s.seat_index)) {
+        (Some(pid), Some((host_id, _))) => *pid == *host_id,
+        _ => false,
+    };
+
+    if !is_host {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "Only the host can toggle hidden mode"})));
+    }
+
+    drop(rooms);
+    let mut rooms = state.rooms.write().await;
+    if let Some(room) = rooms.get_mut(&room_id) {
+        room.hidden_mode = enabled;
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({"ok": true, "hiddenMode": enabled})))
+}
+
 async fn leave_room(
     State(state): State<AppState>,
     Path((room_id, player_id)): Path<(Uuid, Uuid)>,
@@ -1319,6 +1354,7 @@ async fn get_room_info(
             is_started: false,
             phase: String::new(),
             players: vec![],
+            hidden_mode: false,
         })),
     };
 
@@ -1335,6 +1371,7 @@ async fn get_room_info(
         is_started: room.is_started,
         phase: format!("{:?}", room.table.phase),
         players,
+        hidden_mode: room.hidden_mode,
     }))
 }
 
