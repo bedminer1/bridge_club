@@ -486,6 +486,10 @@
             setsData: saveCompletedSetsJson,
             players: JSON.stringify((game.Players ?? []).map((p: any) => ({ id: p.ID, username: p.Username }))),
             roomId,
+            // Required by backend SaveMatchRequest (computed server-side from seat data)
+            betWinnerUserId: 0,
+            partnerUserId: 0,
+            winningTeam: userIsTeam1 ? 1 : 2,
         }
 
         // Player sets counts
