@@ -472,8 +472,8 @@
         // Use ID comparison, not reference equality (Team1/Team2 arrays are always different instances)
         const userIsTeam1 = game.Team1?.some((p: any) => p.ID === humanPlayerId) ?? false
         const wonMatch = (game.Winner === "Team 1" && userIsTeam1) || (game.Winner === "Team 2" && !userIsTeam1) ? 1 : 0
-        const userTeam = userIsTeam1 ? game.Team1 : game.Team2
-        const partner = (userTeam ?? [])?.find((p: any) => p.ID !== humanPlayerId)?.ID ?? 0
+        // Partner is the bet winner's partner (in-game player ID), not the human player's teammate
+        const partner = game.BetWinner?.Partner?.ID ?? 0
 
         const body: Record<string, unknown> = {
             date: Date.now(),
