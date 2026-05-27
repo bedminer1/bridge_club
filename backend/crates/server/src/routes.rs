@@ -1066,7 +1066,7 @@ async fn get_leaderboard(
     let mut rows = match conn
         .query(
             "SELECT id, username, games_played, games_won, total_sets_won, most_sets_won, elo
-             FROM users ORDER BY elo DESC, games_played DESC",
+             FROM users WHERE id NOT IN (1, 2, 3) ORDER BY elo DESC, games_played DESC",
             libsql::params![],
         )
         .await
