@@ -1,17 +1,18 @@
 //! Turso/libSQL database connection and schema.
 //!
-//! Uses a single database connection (no pool) to prevent hrana
-//! protocol race conditions that occur with concurrent connections.
+//! Serializes all database access through a Mutex to prevent hrana
+//! protocol race conditions from concurrent tokio tasks.
 
 use libsql::{Connection, Database};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
-/// Shared database handle with a single pre-created connection.
-/// Clone is cheap (Arc).
+/// Shared database handle with serialized connection access.
+/// All queries go through a Mutex to prevent hrana protocol races.
 #[derive(Clone)]
 pub struct DbPool {
-    pub conn: Arc<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl DbPool {
@@ -32,25 +33,25 @@ impl DbPool {
             Database::open(url.clone())?
         };
 
-        // Create a single connection at startup and reuse it for all requests.
-        // This avoids hrana protocol race conditions from concurrent connections.
+        // Create a single connection and wrap in Mutex
         let conn = db.connect()?;
         tracing::info!(
             "Connected to database: {}",
             if url.starts_with("libsql://") || url.starts_with("https://") {
-                "Turso remote (single connection)"
+                "Turso remote"
             } else {
                 "local SQLite"
             }
         );
         Ok(DbPool {
-            conn: Arc::new(conn),
+            conn: Arc::new(Mutex::new(conn)),
         })
     }
 
-    /// Get the shared connection for executing queries.
-    pub async fn conn(&self) -> &Connection {
-        &self.conn
+    /// Get a locked connection for executing queries.
+    /// This serializes all DB access, preventing hrana protocol races.
+    pub async fn conn(&self) -> tokio::sync::MutexGuard<'_, Connection> {
+        self.conn.lock().await
     }
 }
 
