@@ -112,6 +112,9 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players TEXT;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN room_id TEXT;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players_int INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN bet_winner_user_id INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN partner_user_id INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN winning_team INTEGER DEFAULT 1;").await;
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN games_played INTEGER DEFAULT 0;").await;
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN games_won INTEGER DEFAULT 0;").await;
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN total_sets_won INTEGER DEFAULT 0;").await;
@@ -150,6 +153,9 @@ pub struct MatchRow {
     pub bet_winner: i64,
     pub partner: Option<i64>,
     pub won_match: Option<i64>,
+    pub bet_winner_user_id: i64,
+    pub partner_user_id: i64,
+    pub winning_team: i64,
     pub player1_sets: i64,
     pub player2_sets: i64,
     pub player3_sets: i64,

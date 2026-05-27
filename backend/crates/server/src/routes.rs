@@ -151,6 +151,9 @@ pub struct SaveMatchRequest {
     pub bet_winner: i64,
     pub partner: Option<i64>,
     pub won_match: Option<i64>,
+    pub bet_winner_user_id: i64,
+    pub partner_user_id: i64,
+    pub winning_team: i64,
     pub player1_sets: i64,
     pub player2_sets: i64,
     pub player3_sets: i64,
@@ -748,7 +751,8 @@ async fn get_matches(
     let mut rows = match conn
         .query(
             "SELECT id, user_id, date, bot_difficulty, trump_suit, bet_size, bet_winner, \
-             partner, won_match, player1_sets, player2_sets, player3_sets, player4_sets, \
+             partner, won_match, bet_winner_user_id, partner_user_id, winning_team, \
+             player1_sets, player2_sets, player3_sets, player4_sets, \
              player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int \
              FROM matches WHERE (players_int & 0xFF) = ?1 \
              OR ((players_int >> 8) & 0xFF) = ?1 \
@@ -786,18 +790,21 @@ async fn get_matches(
                     bet_winner: row.get::<i64>(6).unwrap_or(0),
                     partner: row.get::<Option<i64>>(7).unwrap_or(None),
                     won_match: row.get::<Option<i64>>(8).unwrap_or(None),
-                    player1_sets: row.get::<i64>(9).unwrap_or(0),
-                    player2_sets: row.get::<i64>(10).unwrap_or(0),
-                    player3_sets: row.get::<i64>(11).unwrap_or(0),
-                    player4_sets: row.get::<i64>(12).unwrap_or(0),
-                    player1_hand: row.get::<String>(13).unwrap_or_default(),
-                    player2_hand: row.get::<String>(14).unwrap_or_default(),
-                    player3_hand: row.get::<String>(15).unwrap_or_default(),
-                    player4_hand: row.get::<String>(16).unwrap_or_default(),
-                    sets_data: row.get::<Option<String>>(17).unwrap_or(None),
-                    players: row.get::<Option<String>>(18).unwrap_or(None),
-                    room_id: row.get::<Option<String>>(19).unwrap_or(None),
-                    players_int: row.get::<i64>(20).unwrap_or(0),
+                    bet_winner_user_id: row.get::<i64>(9).unwrap_or(0),
+                    partner_user_id: row.get::<i64>(10).unwrap_or(0),
+                    winning_team: row.get::<i64>(11).unwrap_or(1),
+                    player1_sets: row.get::<i64>(12).unwrap_or(0),
+                    player2_sets: row.get::<i64>(13).unwrap_or(0),
+                    player3_sets: row.get::<i64>(14).unwrap_or(0),
+                    player4_sets: row.get::<i64>(15).unwrap_or(0),
+                    player1_hand: row.get::<String>(16).unwrap_or_default(),
+                    player2_hand: row.get::<String>(17).unwrap_or_default(),
+                    player3_hand: row.get::<String>(18).unwrap_or_default(),
+                    player4_hand: row.get::<String>(19).unwrap_or_default(),
+                    sets_data: row.get::<Option<String>>(20).unwrap_or(None),
+                    players: row.get::<Option<String>>(21).unwrap_or(None),
+                    room_id: row.get::<Option<String>>(22).unwrap_or(None),
+                    players_int: row.get::<i64>(23).unwrap_or(0),
                 });
             }
             Ok(None) => break,
@@ -910,12 +917,38 @@ async fn save_match(
         acc | ((id & 0xFF) << (i * 8))
     });
 
+    // Derive new fields from existing data
+    let bet_winner_seat = payload.bet_winner.max(1).min(4) as usize - 1;
+    let bet_winner_user_id = player_ids[bet_winner_seat];
+    let partner_user_id = payload.partner
+        .map(|p| player_ids.get((p.max(1).min(4) - 1) as usize).copied().unwrap_or(0))
+        .unwrap_or(0);
+
+    // Determine winning team from won_match + who the saving user is
+    // won_match = 1 means the saving user's team won
+    // Team 1 = bet winner's team (bet winner + partner)
+    // Team 2 = everyone else
+    let user_on_team1 = bet_winner_seat == player_ids.iter().position(|&id| id == user.id).unwrap_or(99)
+        || payload.partner.map_or(false, |p| (p as usize - 1) == player_ids.iter().position(|&id| id == user.id).unwrap_or(99));
+    // Simplified: find user's seat from players JSON, check if it's bet_winner or partner seat
+    let user_seat = payload.players.as_ref().and_then(|pj| {
+        serde_json::from_str::<Vec<serde_json::Value>>(pj).ok().and_then(|arr| {
+            arr.iter().position(|v| v["username"].as_str() == Some(&user.username))
+        })
+    });
+    let user_is_team1 = user_seat.map_or(false, |seat| {
+        seat == bet_winner_seat || payload.partner.map_or(false, |p| seat == p as usize - 1)
+    });
+    let won = payload.won_match.unwrap_or(0);
+    let winning_team: i64 = if (user_is_team1 && won == 1) || (!user_is_team1 && won == 0) { 1 } else { 2 };
+
     let result = conn
         .execute(
             "INSERT INTO matches (user_id, date, bot_difficulty, trump_suit, bet_size, \
-             bet_winner, partner, won_match, player1_sets, player2_sets, player3_sets, \
+             bet_winner, partner, won_match, bet_winner_user_id, partner_user_id, winning_team, \
+             player1_sets, player2_sets, player3_sets, \
              player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
             libsql::params![
                 user.id,
                 payload.date,
@@ -925,6 +958,9 @@ async fn save_match(
                 payload.bet_winner,
                 payload.partner,
                 payload.won_match,
+                bet_winner_user_id,
+                partner_user_id,
+                winning_team,
                 payload.player1_sets,
                 payload.player2_sets,
                 payload.player3_sets,

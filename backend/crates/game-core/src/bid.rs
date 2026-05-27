@@ -167,7 +167,7 @@ pub struct Contract {
 }
 
 impl Contract {
-    /// Returns the number of tricks the declaring side must take.
+    /// Returns the number of sets the declaring side must take.
     /// Contract level + 6 (e.g. 4♥ → 10 tricks).
     pub fn tricks_required(&self) -> u8 {
         self.bid.level + 6

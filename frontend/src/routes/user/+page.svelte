@@ -111,9 +111,13 @@
                                     <!-- Result badge -->
                                     <div class="w-16 shrink-0">
                                         <span
-                                            class="text-sm font-bold {matchRecord.wonMatch ? 'text-green' : 'text-red'}"
+                                            class="text-sm font-bold {matchRecord.winningTeam === 1 && (matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID) ? 'text-green' : (!matchRecord.winningTeam || matchRecord.winningTeam === 2 && (matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID) || matchRecord.winningTeam === 1 && matchRecord.betWinnerUserId !== userID && matchRecord.partnerUserId !== userID) ? 'text-red' : ''}"
                                         >
-                                            {matchRecord.wonMatch ? "Victory" : "Defeat"}
+                                            {#if matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID}
+                                                {matchRecord.winningTeam === 1 ? "Victory" : "Defeat"}
+                                            {:else}
+                                                {matchRecord.winningTeam === 2 ? "Victory" : "Defeat"}
+                                            {/if}
                                         </span>
                                     </div>
 
