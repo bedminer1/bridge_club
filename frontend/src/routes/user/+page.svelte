@@ -18,10 +18,15 @@
     // Determine match result for the current user
     let matchResult = $derived.by(() => {
         return (m: any) => {
-            const viewerOnTeam1 = m.betWinnerUserId === userID || m.partnerUserId === userID
-            const viewerTeam = viewerOnTeam1 ? 1 : 2
-            const didWin = viewerTeam === m.winningTeam
-            return { viewerTeam, didWin }
+            // New multiplayer fields
+            if (m.betWinnerUserId != null && m.betWinnerUserId !== 0 && m.winningTeam != null) {
+                const viewerOnTeam1 = m.betWinnerUserId === userID || m.partnerUserId === userID
+                const viewerTeam = viewerOnTeam1 ? 1 : 2
+                const didWin = viewerTeam === m.winningTeam
+                return { viewerTeam, didWin }
+            }
+            // Fallback to old single-player field
+            return { viewerTeam: 0, didWin: !!m.wonMatch }
         }
     })
 

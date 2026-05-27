@@ -5,21 +5,37 @@
     import { formatDate, suitToSymbol } from "$lib/utils";
 
     let { data } = $props()
-    let { matchRecord } = $state(data)
+    let { matchRecord, userID } = $state(data)
+
+    /** Determine match result for the current user */
+    let didWin = $derived.by(() => {
+        if (!matchRecord) return false
+        // New fields (multiplayer): use betWinnerUserId / partnerUserId / winningTeam
+        if (matchRecord.betWinnerUserId != null && matchRecord.betWinnerUserId !== 0 && matchRecord.winningTeam != null) {
+            const viewerOnTeam1 = matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID
+            const viewerTeam = viewerOnTeam1 ? 1 : 2
+            return viewerTeam === matchRecord.winningTeam
+        }
+        // Fallback to old single-player field
+        return !!matchRecord.wonMatch
+    })
 
     /** Parse each player's played cards from DB (JSON array of Card objects) */
     const playerPlayedCards: Card[][] = []
-    for (let i = 1; i <= 4; i++) {
-        const cardsStr = matchRecord[`player${i}Hand` as keyof MatchRecord] as string
-        try {
-            playerPlayedCards.push(JSON.parse(cardsStr))
-        } catch {
-            playerPlayedCards.push([])
+    if (matchRecord) {
+        for (let i = 1; i <= 4; i++) {
+            const cardsStr = matchRecord[`player${i}Hand` as keyof typeof matchRecord] as string
+            try {
+                playerPlayedCards.push(JSON.parse(cardsStr))
+            } catch {
+                playerPlayedCards.push([])
+            }
         }
     }
 
     /** Parse the players field: JSON array of { id, username } */
     const playersMeta: Array<{ id: number; username: string }> = (() => {
+        if (!matchRecord) return []
         try {
             return JSON.parse(matchRecord.players || "[]")
         } catch {
@@ -53,32 +69,33 @@
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <span
-                    class="text-lg font-bold {matchRecord.wonMatch ? 'text-[var(--green)]' : 'text-[var(--red)]'}"
+                    class="text-lg font-bold {didWin ? 'text-[var(--green)]' : 'text-[var(--red)]'}"
                 >
-                    {matchRecord.wonMatch ? "Victory" : "Defeat"}
+                    {didWin ? "Victory" : "Defeat"}
                 </span>
                 <span class="text-xs text-muted-foreground">|</span>
-                <span class="text-xs text-muted-foreground">{formatDate(matchRecord.date)}</span>
+                <span class="text-xs text-muted-foreground">{formatDate(matchRecord?.date)}</span>
             </div>
             <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                <span class="rounded border border-border px-1.5 py-0.5">{matchRecord.betSize}{suitToSymbol.get(matchRecord.trumpSuit)}</span>
-                <span>{matchRecord.botDifficulty}</span>
+                <span class="rounded border border-border px-1.5 py-0.5">{matchRecord?.betSize}{suitToSymbol.get(matchRecord?.trumpSuit)}</span>
+                <span>{matchRecord?.botDifficulty}</span>
             </div>
         </div>
 
         <!-- Score display -->
         <div class="rounded-lg w-auto border border-border bg-card/60 p-3 text-sm">
-            <ScoreDisplay {matchRecord} />
+            <ScoreDisplay matchRecord={matchRecord ?? {}} />
         </div>
 
         <!-- Played cards per player (in play order, with WonSet crowns) -->
+        {#if matchRecord}
         <div class="flex flex-col gap-3 rounded-lg w-auto border border-border bg-card/40 p-3 text-sm">
             {#each playerPlayedCards as playedCards, playerID}
                 {@const pid = playerID + 1}
                 {@const colorVar = pid === 1 ? '--red' : pid === 2 ? '--blue' : pid === 3 ? '--yellow' : '--green'}
                 {@const playerMeta = playersMeta[playerID]}
                 {@const playerName = playerMeta?.username ?? `P${pid}`}
-                {@const sets = matchRecord[`player${pid}Sets` as keyof MatchRecord] as number}
+                {@const sets = matchRecord[`player${pid}Sets` as keyof typeof matchRecord] as number}
                 <div class="p-3">
                     <div class="flex items-center gap-2 mb-4 text-xs">
                         <span class="font-medium" style="color: var({colorVar})">{playerName}</span>
@@ -93,5 +110,6 @@
                 </div>
             {/each}
         </div>
+        {/if}
     </div>
 </div>
