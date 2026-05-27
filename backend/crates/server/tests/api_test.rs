@@ -165,7 +165,7 @@ async fn test_login_wrong_password() {
 }
 
 #[tokio::test]
-async fn test_leaderboard_with_bots() {
+async fn test_leaderboard_without_bots() {
     let (app, _dir) = build_test_app().await;
 
     let req = Request::builder()
@@ -177,14 +177,14 @@ async fn test_leaderboard_with_bots() {
     assert_eq!(json["ok"], true);
 
     let entries = json["entries"].as_array().unwrap();
-    assert!(entries.len() >= 3);
+    // Should NOT include bots (ids 1,2,3)
     let usernames: Vec<&str> = entries
         .iter()
         .map(|e| e["username"].as_str().unwrap())
         .collect();
-    assert!(usernames.contains(&"Bot-Alpha"));
-    assert!(usernames.contains(&"Bot-Beta"));
-    assert!(usernames.contains(&"Bot-Gamma"));
+    assert!(!usernames.contains(&"Bot-Alpha"), "Bots should be hidden from leaderboard");
+    assert!(!usernames.contains(&"Bot-Beta"));
+    assert!(!usernames.contains(&"Bot-Gamma"));
 }
 
 #[tokio::test]
