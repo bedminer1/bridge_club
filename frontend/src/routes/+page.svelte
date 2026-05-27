@@ -810,18 +810,17 @@
     </div>
 
     <!-- Chat card (in-game, side panel) -->
-    {#if chatMessages.length > 0 || chatText !== ""}
-    <div class="w-64 shrink-0">
-        <Card>
-            <CardContent class="flex flex-col gap-2 p-3">
+    <div class="w-64 shrink-0 flex flex-col">
+        <Card class="h-full flex flex-col">
+            <CardContent class="flex flex-col gap-2 p-3 flex-1">
                 <div class="text-xs font-medium text-muted-foreground">Chat</div>
-                <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin min-h-0">
+                <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin">
                     {#each chatMessages as msg, i (msg.id)}
                         <div>
                             {#if i === 0 || chatMessages[i-1].playerName !== msg.playerName}
                                 <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
+                                <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
                             {/if}
-                            <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
                             <div class="text-sm text-foreground/90 break-words">{msg.text}</div>
                         </div>
                     {/each}
@@ -839,7 +838,6 @@
             </CardContent>
         </Card>
     </div>
-    {/if}
 
     </div>
     <!-- ^ closes the outer flex wrapper (play area + chat) -->
@@ -981,17 +979,17 @@
 
         {#if lobbyRoomId}
         <!-- Chat card (lobby, side panel) -->
-        <div class="w-64 shrink-0">
-            <Card>
-                <CardContent class="flex flex-col gap-2 p-3">
+        <div class="w-64 shrink-0 flex flex-col">
+            <Card class="h-full flex flex-col">
+                <CardContent class="flex flex-col gap-2 p-3 flex-1">
                     <div class="text-xs font-medium text-muted-foreground">Chat</div>
                     <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin" style="min-height:120px">
                         {#each chatMessages as msg, i (msg.id)}
                             <div>
                                 {#if i === 0 || chatMessages[i-1].playerName !== msg.playerName}
                                     <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
+                                    <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
                                 {/if}
-                                <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
                                 <div class="text-sm text-foreground/90 break-words">{msg.text}</div>
                             </div>
                         {:else}
