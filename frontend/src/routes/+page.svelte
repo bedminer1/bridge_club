@@ -872,38 +872,6 @@
     {/if}
     {/if}
 
-    <!-- Chat card (in-game) -->
-    {#if chatMessages.length > 0 || chatText !== ""}
-    <div class="w-full max-w-3xl mx-auto">
-        <Card>
-            <CardContent class="flex flex-col gap-2 p-3">
-                <div class="text-xs font-medium text-muted-foreground">Chat</div>
-                <div bind:this={chatContainer} class="h-24 overflow-y-auto space-y-0.5 text-sm scrollbar-thin">
-                    {#each chatMessages as msg, i (msg.id)}
-                        <div class="flex gap-1 text-xs items-baseline">
-                            {#if i === 0 || chatMessages[i-1].playerName !== msg.playerName}
-                                <span class="font-semibold text-accent shrink-0">{msg.playerName}</span>
-                            {/if}
-                            <span class="text-muted-foreground shrink-0 tabular-nums">{fmtChatTime(msg.timestamp)}</span>
-                            <span class="text-foreground/90 break-words">{msg.text}</span>
-                        </div>
-                    {/each}
-                </div>
-                <div class="flex gap-2">
-                    <Input
-                        bind:value={chatText}
-                        onkeydown={chatHandleKey}
-                        placeholder="Chat..."
-                        maxlength={500}
-                        class="flex-1 h-8 text-xs"
-                    />
-                    <Button onclick={chatSend} size="sm" class="h-8 px-3 text-xs">Send</Button>
-                </div>
-            </CardContent>
-        </Card>
-    </div>
-    {/if}
-
     {:else}
     <!-- Lobby UI -->
     <div class="flex gap-4 w-full justify-center">
