@@ -366,22 +366,7 @@ async fn signup(
         );
     }
 
-    let conn = match state.db.conn().await {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("DB connection error: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(AuthResponse {
-                    ok: false,
-                    token: None,
-                    user_id: None,
-                    username: None,
-                    error: Some("Internal server error".to_string()),
-                }),
-            );
-        }
-    };
+    let conn = state.db.conn().await;
 
     // Check if username already exists
     let existing = conn
@@ -521,22 +506,7 @@ async fn login(
         );
     }
 
-    let conn = match state.db.conn().await {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("DB connection error: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(AuthResponse {
-                    ok: false,
-                    token: None,
-                    user_id: None,
-                    username: None,
-                    error: Some("Internal server error".to_string()),
-                }),
-            );
-        }
-    };
+    let conn = state.db.conn().await;
 
     let password_hash = auth::hash_password(&payload.password);
 
@@ -737,20 +707,7 @@ async fn get_matches(
         }
     };
 
-    let conn = match state.db.conn().await {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("DB connection error: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(MatchesResponse {
-                    ok: false,
-                    matches: None,
-                    error: Some("Internal server error".to_string()),
-                }),
-            );
-        }
-    };
+    let conn = state.db.conn().await;
 
     let mut rows = match conn
         .query(
@@ -851,22 +808,7 @@ async fn save_match(
         }
     };
 
-    let conn = match state.db.conn().await {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("DB connection error: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(AuthResponse {
-                    ok: false,
-                    token: None,
-                    user_id: None,
-                    username: None,
-                    error: Some("Internal server error".to_string()),
-                }),
-            );
-        }
-    };
+    let conn = state.db.conn().await;
 
     // Dedup: if a match with this room_id already exists, skip save
     if let Some(ref room_id) = payload.room_id {
@@ -1113,20 +1055,7 @@ async fn save_match(
 async fn get_leaderboard(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let conn = match state.db.conn().await {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("DB connection error: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(LeaderboardResponse {
-                    ok: false,
-                    entries: None,
-                    error: Some("Internal server error".to_string()),
-                }),
-            );
-        }
-    };
+    let conn = state.db.conn().await;
 
     let mut rows = match conn
         .query(

@@ -43,7 +43,7 @@ pub async fn create_session(
         .as_millis() as i64;
     let expires_at = now_ms + 30 * 24 * 60 * 60 * 1000; // 30 days in ms
 
-    let conn = pool.conn().await?;
+    let conn = pool.conn().await;
     conn.execute(
         "INSERT INTO sessions (id, user_id, expires_at) VALUES (?1, ?2, ?3)",
         libsql::params![session_id.clone(), user_id, expires_at],
@@ -69,7 +69,7 @@ pub async fn validate_session(
     token: &str,
 ) -> Result<Option<(UserRow, SessionRow)>, Box<dyn std::error::Error>> {
     let session_id = hash_token(token);
-    let conn = pool.conn().await?;
+    let conn = pool.conn().await;
 
     let mut rows = conn.query(
         "SELECT s.id, s.user_id, s.expires_at, u.id, u.username, u.password,
@@ -137,7 +137,7 @@ pub async fn delete_session(
     token: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let session_id = hash_token(token);
-    let conn = pool.conn().await?;
+    let conn = pool.conn().await;
     conn.execute(
         "DELETE FROM sessions WHERE id = ?1",
         libsql::params![session_id],

@@ -1,20 +1,21 @@
 //! Turso/libSQL database connection and schema.
 //!
-//! Mirrors the frontend's Drizzle schema (users, matches, sessions).
-//! Uses the `libsql` crate for async SQLite-over-HTTP or local SQLite.
+//! Uses a single database connection (no pool) to prevent hrana
+//! protocol race conditions that occur with concurrent connections.
 
-use libsql::Database;
+use libsql::{Connection, Database};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// Shared database handle.
-/// Wraps Arc<Database> because libsql::Database is not Clone.
+/// Shared database handle with a single pre-created connection.
+/// Clone is cheap (Arc).
 #[derive(Clone)]
 pub struct DbPool {
-    pub db: Arc<Database>,
+    pub conn: Arc<Connection>,
 }
 
 impl DbPool {
-    /// Connect to Turso from environment variables.
+    /// Connect to database from environment variables.
     ///
     /// Reads `DATABASE_URL` and (for remote) `DATABASE_AUTH_TOKEN`.
     /// Falls back to `file:local.db` if `DATABASE_URL` is not set.
@@ -23,28 +24,33 @@ impl DbPool {
             .unwrap_or_else(|_| "file:local.db".into());
 
         let db = if url.starts_with("libsql://") || url.starts_with("https://") {
-            // Remote Turso connection
             let auth_token = std::env::var("DATABASE_AUTH_TOKEN")
                 .map_err(|_| "DATABASE_AUTH_TOKEN required for remote Turso connection".to_string())?;
 
-            #[allow(deprecated)]
             Database::open_remote(url.clone(), auth_token)?
         } else {
-            // Local SQLite file
-            #[allow(deprecated)]
             Database::open(url.clone())?
         };
 
+        // Create a single connection at startup and reuse it for all requests.
+        // This avoids hrana protocol race conditions from concurrent connections.
+        let conn = db.connect()?;
         tracing::info!(
             "Connected to database: {}",
-            if url.starts_with("libsql://") { "Turso remote" } else { "local SQLite" }
+            if url.starts_with("libsql://") || url.starts_with("https://") {
+                "Turso remote (single connection)"
+            } else {
+                "local SQLite"
+            }
         );
-        Ok(DbPool { db: Arc::new(db) })
+        Ok(DbPool {
+            conn: Arc::new(conn),
+        })
     }
 
-    /// Get a connection from the pool.
-    pub async fn conn(&self) -> Result<libsql::Connection, libsql::Error> {
-        self.db.connect()
+    /// Get the shared connection for executing queries.
+    pub async fn conn(&self) -> &Connection {
+        &self.conn
     }
 }
 
@@ -106,7 +112,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 /// Run the initial schema migration.
 pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
-    let conn = pool.conn().await?;
+    let conn = pool.conn().await;
     conn.execute_batch(SCHEMA_SQL).await?;
 
     // Safe migration: add columns if they don't exist yet
@@ -143,8 +149,6 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
 }
 
 // ── Row Types ────────────────────────────────────────────────────────────────
-
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
