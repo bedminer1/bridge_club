@@ -14,7 +14,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # Database (Turso/libSQL)
-libsql = "0.9"
+libsql = "0.10.0-pre.2"
 serde_json = "1.0"
 dotenvy = "0.15"
 # Auth
