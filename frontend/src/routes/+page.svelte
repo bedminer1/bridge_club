@@ -616,8 +616,7 @@
         <p>{playerName(game.WhoseTurn)}'s turn</p>
     </div>
 
-    {#if game.IsPartnerSelectionPhase}
-        {#if game.BetWinner.ID === humanPlayerId}
+    {#if game.IsPartnerSelectionPhase && game.BetWinner.ID === humanPlayerId}
         <div class="flex flex-col gap-4 items-center">
             <p class="text-xl">Select a partner card</p>
             <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
@@ -630,11 +629,10 @@
                 {/each}
             </div>
         </div>
-        {:else}
+    {:else if game.IsPartnerSelectionPhase}
         <div class="flex flex-col gap-4 items-center">
             <p class="text-xl">{playerName(game.BetWinner.ID)} is selecting a partner...</p>
         </div>
-        {/if}
     {:else}
     <!-- Play area table -->
     <div class="flex gap-4 w-full items-start">
@@ -808,9 +806,8 @@
             </div>
         </div>
     {/if}
-        </div>
     </div>
-    {/if}
+    </div>
 
     <!-- Chat card (in-game, side panel) -->
     {#if chatMessages.length > 0 || chatText !== ""}
@@ -846,6 +843,7 @@
 
     </div>
     <!-- ^ closes the outer flex wrapper (play area + chat) -->
+    {/if}
 
     <!-- Game-over dialog -->
     {#if showGameOverDialog}
