@@ -367,7 +367,12 @@
         Spades: "Spades",
     }
 
-    const API_URL = "https://bridge-club.duckdns.org"
+    let API_URL: string
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        API_URL = "http://127.0.0.1:3000"
+    } else {
+        API_URL = "https://bridge-club.duckdns.org"
+    }
 
     // ── Lobby State ─────────────────────────────────────────────
     let lobbyMode = $state<"" | "create" | "join">("create")
