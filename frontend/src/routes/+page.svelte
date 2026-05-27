@@ -476,10 +476,10 @@
 
     // ── Chat ────────────────────────────────────────────────────────
     interface ChatMsg { id: number; playerName: string; text: string; timestamp: number }
+    let chatMessages = $state<ChatMsg[]>([])
     function fmtChatTime(ts: number): string {
         return new Date(ts).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: false })
     }
-    let chatMessages = $state<ChatMsg[]>([])
     let chatText = $state("")
     let chatLastId = $state(0)
     let chatPollInterval: ReturnType<typeof setInterval> | null = null
@@ -637,7 +637,8 @@
         {/if}
     {:else}
     <!-- Play area table -->
-    <div class="flex flex-col gap-4 w-full max-w-3xl">
+    <div class="flex gap-4 w-full items-start">
+    <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl">
         <!-- Game info strip -->
         <div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-xs text-muted-foreground px-1 overflow-x-auto scrollbar-none">
             {#if game.BetSize > 0 || !game.IsBettingPhase}
@@ -811,6 +812,41 @@
     </div>
     {/if}
 
+    <!-- Chat card (in-game, side panel) -->
+    {#if chatMessages.length > 0 || chatText !== ""}
+    <div class="w-64 shrink-0">
+        <Card>
+            <CardContent class="flex flex-col gap-2 p-3">
+                <div class="text-xs font-medium text-muted-foreground">Chat</div>
+                <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin min-h-0">
+                    {#each chatMessages as msg, i (msg.id)}
+                        <div>
+                            {#if i === 0 || chatMessages[i-1].playerName !== msg.playerName}
+                                <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
+                            {/if}
+                            <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
+                            <div class="text-sm text-foreground/90 break-words">{msg.text}</div>
+                        </div>
+                    {/each}
+                </div>
+                <div class="flex gap-2">
+                    <Input
+                        bind:value={chatText}
+                        onkeydown={chatHandleKey}
+                        placeholder="Chat..."
+                        maxlength={500}
+                        class="flex-1 h-8 text-xs"
+                    />
+                    <Button onclick={chatSend} size="sm" class="h-8 px-3 text-xs">Send</Button>
+                </div>
+            </CardContent>
+        </Card>
+    </div>
+    {/if}
+
+    </div>
+    <!-- ^ closes the outer flex wrapper (play area + chat) -->
+
     <!-- Game-over dialog -->
     {#if showGameOverDialog}
     <Dialog.Root bind:open={showGameOverDialog}>
@@ -870,122 +906,127 @@
 
     {:else}
     <!-- Lobby UI -->
-    <div class="w-full max-w-md">
-        {#if !lobbyRoomId}
-            <!-- Mode Selector (always visible) -->
-            <div class="relative flex justify-center mb-6 items-center">
-                {#if lobbyMode}
-                <button onclick={() => lobbyMode = ""} class="absolute left-0 p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors text-4xl leading-none" title="Back">
-                    ←
-                </button>
-                {/if}
-                <div class="flex gap-2">
-                    <Button onclick={() => { if (lobbyMode === "create") lobbyCreateRoom(); else lobbyMode = "create" }}
-                        variant={lobbyMode === "create" ? "default" : "outline"}>
-                        Create Room
-                    </Button>
-                    <Button onclick={() => { lobbyMode = "join" }}
-                        variant={lobbyMode === "join" ? "default" : "outline"}>
-                        Join Room
-                    </Button>
+    <div class="flex gap-4 w-full justify-center">
+        <div class="w-full max-w-md">
+            {#if !lobbyRoomId}
+                <!-- Mode Selector (always visible) -->
+                <div class="relative flex justify-center mb-6 items-center">
+                    {#if lobbyMode}
+                    <button onclick={() => lobbyMode = ""} class="absolute left-0 p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors text-4xl leading-none" title="Back">
+                        ←
+                    </button>
+                    {/if}
+                    <div class="flex gap-2">
+                        <Button onclick={() => { if (lobbyMode === "create") lobbyCreateRoom(); else lobbyMode = "create" }}
+                            variant={lobbyMode === "create" ? "default" : "outline"}>
+                            Create Room
+                        </Button>
+                        <Button onclick={() => { lobbyMode = "join" }}
+                            variant={lobbyMode === "join" ? "default" : "outline"}>
+                            Join Room
+                        </Button>
+                    </div>
                 </div>
-            </div>
 
-            {#if lobbyMode === "create"}
+                {#if lobbyMode === "create"}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle class="text-center">Create a Room</CardTitle>
+                            <CardDescription class="text-center max-w-[220px] mx-auto">Create a new game room</CardDescription>
+                        </CardHeader>
+                        <CardContent class="flex flex-col gap-4">
+                            <Button onclick={lobbyCreateRoom} disabled={lobbyCreating}>
+                                {lobbyCreating ? "Creating..." : "Create Room"}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                {:else if lobbyMode === "join"}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle class="text-center">Join a Room</CardTitle>
+                            <CardDescription class="text-center max-w-[220px] mx-auto">Paste the room ID from the host</CardDescription>
+                        </CardHeader>
+                        <CardContent class="flex flex-col gap-4">
+                            <div class="flex flex-col gap-2">
+                                <label for="room-id" class="text-sm text-muted-foreground">Room ID</label>
+                                <Input id="room-id" bind:value={lobbyJoinRoomId} placeholder="Enter room ID" />
+                            </div>
+                            {#if lobbyJoinError}<p class="text-sm text-destructive">{lobbyJoinError}</p>{/if}
+                            <Button onclick={lobbyJoinRoom} disabled={lobbyJoining || !lobbyJoinRoomId.trim()}>
+                                {lobbyJoining ? "Joining..." : "Join Room"}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                {/if}
+            {:else}
+                <!-- Lobby View (waiting room) -->
                 <Card>
-                    <CardHeader>
-                        <CardTitle class="text-center">Create a Room</CardTitle>
-                        <CardDescription class="text-center max-w-[220px] mx-auto">Create a new game room</CardDescription>
+                    <CardHeader class="relative">
+                        <button onclick={lobbyLeaveRoom} class="absolute left-3 inset-y-0 flex items-center text-3xl leading-none text-muted-foreground hover:text-foreground transition-colors" title="Leave room">
+                            ←
+                        </button>
+                        <CardTitle class="text-center">Game Lobby</CardTitle>
+                        <CardDescription class="text-center max-w-[220px] mx-auto">Copy Room ID and invite friends</CardDescription>
                     </CardHeader>
                     <CardContent class="flex flex-col gap-4">
-                        <Button onclick={lobbyCreateRoom} disabled={lobbyCreating}>
-                            {lobbyCreating ? "Creating..." : "Create Room"}
-                        </Button>
-                    </CardContent>
-                </Card>
-            {:else if lobbyMode === "join"}
-                <Card>
-                    <CardHeader>
-                        <CardTitle class="text-center">Join a Room</CardTitle>
-                        <CardDescription class="text-center max-w-[220px] mx-auto">Paste the room ID from the host</CardDescription>
-                    </CardHeader>
-                    <CardContent class="flex flex-col gap-4">
-                        <div class="flex flex-col gap-2">
-                            <label for="room-id" class="text-sm text-muted-foreground">Room ID</label>
-                            <Input id="room-id" bind:value={lobbyJoinRoomId} placeholder="Enter room ID" />
+                        <div class="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/50">
+                            <span class="text-sm font-mono text-muted-foreground flex-1 truncate">{lobbyRoomId}</span>
+                            <Button onclick={lobbyCopyRoomId} variant="outline" size="sm">Copy</Button>
                         </div>
-                        {#if lobbyJoinError}<p class="text-sm text-destructive">{lobbyJoinError}</p>{/if}
-                        <Button onclick={lobbyJoinRoom} disabled={lobbyJoining || !lobbyJoinRoomId.trim()}>
-                            {lobbyJoining ? "Joining..." : "Join Room"}
-                        </Button>
+                        <div class="flex flex-col gap-2">
+                            <h3 class="text-sm font-medium text-foreground">Players ({lobbyPlayers.length})</h3>
+                            {#if lobbyPlayers.length === 0}
+                                <p class="text-sm text-muted-foreground">Waiting for players...</p>
+                            {:else}
+                                <div class="flex flex-col gap-1">
+                                    {#each lobbyPlayers as p}
+                                        <div class="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-card">
+                                            <div class="w-2 h-2 rounded-full {p.isBot ? 'bg-muted-foreground/40' : 'bg-green-500'}"></div>
+                                            <span class="text-sm text-foreground">{p.name}</span>
+                                            {#if p.isBot}<span class="text-xs text-muted-foreground">(bot)</span>{/if}
+                                        </div>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </div>
+                        {#if lobbyIsHost}
+                            <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
+                                <span class="text-sm text-foreground">Hidden Mode Only</span>
+                                <button
+                                    onclick={lobbyToggleHiddenMode}
+                                    class="relative w-10 h-5 rounded-full transition-colors {lobbyHiddenMode ? 'bg-accent' : 'bg-muted-foreground/30'}"
+                                >
+                                    <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {lobbyHiddenMode ? 'translate-x-5' : ''}" />
+                                </button>
+                            </div>
+                            <Button onclick={lobbyStartGame} class="w-full mt-2" size="lg">Start Game</Button>
+                        {:else}
+                            <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
+                                <span class="text-sm text-foreground">Hidden Mode Only</span>
+                                <span class="text-xs text-muted-foreground">{lobbyHiddenMode ? 'On' : 'Off'}</span>
+                            </div>
+                            <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
+                        {/if}
+                        <Button onclick={lobbyLeaveRoom} variant="outline" class="w-full mt-1">Leave Room</Button>
                     </CardContent>
                 </Card>
             {/if}
-        {:else}
-            <!-- Lobby View (waiting room) -->
-            <Card>
-                <CardHeader class="relative">
-                    <button onclick={lobbyLeaveRoom} class="absolute left-3 inset-y-0 flex items-center text-3xl leading-none text-muted-foreground hover:text-foreground transition-colors" title="Leave room">
-                        ←
-                    </button>
-                    <CardTitle class="text-center">Game Lobby</CardTitle>
-                    <CardDescription class="text-center max-w-[220px] mx-auto">Copy Room ID and invite friends</CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-4">
-                    <div class="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/50">
-                        <span class="text-sm font-mono text-muted-foreground flex-1 truncate">{lobbyRoomId}</span>
-                        <Button onclick={lobbyCopyRoomId} variant="outline" size="sm">Copy</Button>
-                    </div>
-                    <div class="flex flex-col gap-2">
-                        <h3 class="text-sm font-medium text-foreground">Players ({lobbyPlayers.length})</h3>
-                        {#if lobbyPlayers.length === 0}
-                            <p class="text-sm text-muted-foreground">Waiting for players...</p>
-                        {:else}
-                            <div class="flex flex-col gap-1">
-                                {#each lobbyPlayers as p}
-                                    <div class="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-card">
-                                        <div class="w-2 h-2 rounded-full {p.isBot ? 'bg-muted-foreground/40' : 'bg-green-500'}"></div>
-                                        <span class="text-sm text-foreground">{p.name}</span>
-                                        {#if p.isBot}<span class="text-xs text-muted-foreground">(bot)</span>{/if}
-                                    </div>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-                    {#if lobbyIsHost}
-                        <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                            <span class="text-sm text-foreground">Hidden Mode Only</span>
-                            <button
-                                onclick={lobbyToggleHiddenMode}
-                                class="relative w-10 h-5 rounded-full transition-colors {lobbyHiddenMode ? 'bg-accent' : 'bg-muted-foreground/30'}"
-                            >
-                                <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {lobbyHiddenMode ? 'translate-x-5' : ''}" />
-                            </button>
-                        </div>
-                        <Button onclick={lobbyStartGame} class="w-full mt-2" size="lg">Start Game</Button>
-                    {:else}
-                        <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                            <span class="text-sm text-foreground">Hidden Mode Only</span>
-                            <span class="text-xs text-muted-foreground">{lobbyHiddenMode ? 'On' : 'Off'}</span>
-                        </div>
-                        <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
-                    {/if}
-                    <Button onclick={lobbyLeaveRoom} variant="outline" class="w-full mt-1">Leave Room</Button>
-                </CardContent>
-            </Card>
+        </div>
 
-            <!-- Chat card (lobby) -->
-            <Card class="mt-2">
+        {#if lobbyRoomId}
+        <!-- Chat card (lobby, side panel) -->
+        <div class="w-64 shrink-0">
+            <Card>
                 <CardContent class="flex flex-col gap-2 p-3">
                     <div class="text-xs font-medium text-muted-foreground">Chat</div>
-                    <div bind:this={chatContainer} class="h-28 overflow-y-auto space-y-0.5 text-sm scrollbar-thin">
+                    <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin" style="min-height:120px">
                         {#each chatMessages as msg, i (msg.id)}
-                            <div class="flex gap-1 text-xs items-baseline">
+                            <div>
                                 {#if i === 0 || chatMessages[i-1].playerName !== msg.playerName}
-                                    <span class="font-semibold text-accent shrink-0">{msg.playerName}</span>
+                                    <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
                                 {/if}
-                                <span class="text-muted-foreground shrink-0 tabular-nums">{fmtChatTime(msg.timestamp)}</span>
-                                <span class="text-foreground/90 break-words">{msg.text}</span>
+                                <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
+                                <div class="text-sm text-foreground/90 break-words">{msg.text}</div>
                             </div>
                         {:else}
                             <p class="text-xs text-muted-foreground text-center pt-8">No messages yet</p>
@@ -1003,6 +1044,7 @@
                     </div>
                 </CardContent>
             </Card>
+        </div>
         {/if}
     </div>
 {/if}
