@@ -390,8 +390,8 @@
             })
             if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Failed: ${res.status} ${t}`); return }
             const d = await res.json()
-            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = true; lobbyPlayerId = d.playerId
-            lobbyStartPolling()
+            roomId = d.roomId; lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = true; lobbyPlayerId = d.playerId
+            lobbyStartPolling(); chatStartPolling()
         } catch (e) { console.error("Create room error:", e); alert("Failed. Is the backend running?") }
         finally { lobbyCreating = false }
     }
@@ -406,8 +406,8 @@
             })
             if (!res.ok) { const t = await res.text().catch(() => ""); lobbyJoinError = `Failed: ${res.status} ${t}`; return }
             const d = await res.json()
-            lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = false; lobbyPlayerId = d.playerId
-            lobbyStartPolling()
+            roomId = d.roomId; lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = false; lobbyPlayerId = d.playerId
+            lobbyStartPolling(); chatStartPolling()
         } catch (e) { console.error("Join error:", e); lobbyJoinError = "Failed. Is the backend running?" }
         finally { lobbyJoining = false }
     }
@@ -420,8 +420,8 @@
                 headers: { "X-Session-Token": onlineToken },
             })
         } catch (e) { console.error("Leave error:", e) }
-        lobbyStopPolling()
-        lobbyRoomId = ""; lobbyPlayerId = ""; lobbyMySeatIndex = 0; lobbyIsHost = false; lobbyPlayers = []
+        chatStopPolling(); lobbyStopPolling()
+        roomId = ""; lobbyRoomId = ""; lobbyPlayerId = ""; lobbyMySeatIndex = 0; lobbyIsHost = false; lobbyPlayers = []
         try { localStorage.removeItem("bridgeActiveRoom") } catch {}
     }
 
@@ -911,7 +911,7 @@
                     </div>
                     {#if lobbyIsHost}
                         <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                            <span class="text-sm text-foreground">Hidden Mode</span>
+                            <span class="text-sm text-foreground">Hidden Mode Only</span>
                             <button
                                 onclick={lobbyToggleHiddenMode}
                                 class="relative w-10 h-5 rounded-full transition-colors {lobbyHiddenMode ? 'bg-accent' : 'bg-muted-foreground/30'}"
@@ -922,7 +922,7 @@
                         <Button onclick={lobbyStartGame} class="w-full mt-2" size="lg">Start Game</Button>
                     {:else}
                         <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                            <span class="text-sm text-foreground">Hidden Mode</span>
+                            <span class="text-sm text-foreground">Hidden Mode Only</span>
                             <span class="text-xs text-muted-foreground">{lobbyHiddenMode ? 'On' : 'Off'}</span>
                         </div>
                         <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
