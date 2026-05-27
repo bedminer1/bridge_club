@@ -15,7 +15,25 @@ async fn main() {
     let db = Database::open_remote(url, auth_token).unwrap();
     let conn = db.connect().unwrap();
 
-    // Delete test users
+    // Delete matches referencing test users
+    conn.execute(
+        "DELETE FROM matches WHERE user_id IN (16, 17, 18, 19, 20, 21)",
+        libsql::params![],
+    )
+    .await
+    .unwrap();
+    println!("Deleted orphan matches");
+
+    // Delete sessions referencing test users
+    conn.execute(
+        "DELETE FROM sessions WHERE user_id IN (16, 17, 18, 19, 20, 21)",
+        libsql::params![],
+    )
+    .await
+    .unwrap();
+    println!("Deleted orphan sessions");
+
+    // Now delete the test users themselves
     conn.execute(
         "DELETE FROM users WHERE id IN (16, 17, 18, 19, 20, 21)",
         libsql::params![],
