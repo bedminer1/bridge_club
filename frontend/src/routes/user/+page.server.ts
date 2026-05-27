@@ -53,6 +53,7 @@ export async function load({ cookies }) {
             gamesWon: sessionData.user.gamesWon,
             totalSetsWon: sessionData.user.totalSetsWon,
             mostSetsWon: sessionData.user.mostSetsWon,
+            elo: sessionData.user.elo ?? 500,
         } : null
     }
 }

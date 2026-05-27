@@ -13,7 +13,7 @@
     let { matchRecords, message, username, userID, rank, userStats } = $state(data)
 
     // Default stats to 0 when not logged in
-    let s = $derived(userStats ?? { gamesPlayed: 0, gamesWon: 0, totalSetsWon: 0, mostSetsWon: 0 })
+    let s = $derived(userStats ?? { gamesPlayed: 0, gamesWon: 0, totalSetsWon: 0, mostSetsWon: 0, elo: 500 })
 
     // Determine match result for the current user
     let matchResult = $derived.by(() => {
@@ -40,12 +40,13 @@
                     .then(r => r.json())
                     .then(d => {
                         if (d.ok && d.user) {
-                            userStats = {
-                                gamesPlayed: d.user.gamesPlayed ?? 0,
-                                gamesWon: d.user.gamesWon ?? 0,
-                                totalSetsWon: d.user.totalSetsWon ?? 0,
-                                mostSetsWon: d.user.mostSetsWon ?? 0,
-                            }
+            userStats = {
+                gamesPlayed: d.user.gamesPlayed ?? 0,
+                gamesWon: d.user.gamesWon ?? 0,
+                totalSetsWon: d.user.totalSetsWon ?? 0,
+                mostSetsWon: d.user.mostSetsWon ?? 0,
+                elo: d.user.elo ?? 500,
+            }
                         }
                     })
                     .catch(() => {})
@@ -67,7 +68,6 @@
     $effect(() => { headerState.loggedIn = message === "success" })
 
     let winrate = $derived(s.gamesPlayed > 0 ? ((s.gamesWon / s.gamesPlayed) * 100).toFixed(1) : "0.0")
-    let avgSets = $derived(s.gamesPlayed > 0 ? (s.totalSetsWon / s.gamesPlayed).toFixed(1) : "0.0")
 </script>
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
@@ -95,6 +95,7 @@
                     <span><strong class="text-foreground">{s.gamesPlayed}</strong> played</span>
                     <span><strong class="text-green">{s.gamesWon}</strong> won</span>
                     <span><strong class="text-foreground">{winrate}%</strong> win rate</span>
+                    <span><strong class="text-accent">{s.elo}</strong> elo</span>
                 </div>
                 <Separator class="mt-3" />
             </div>
@@ -141,6 +142,10 @@
                                             <span>{matchRecord.botDifficulty}</span>
                                             <span>|</span>
                                             <span>{formatDate(matchRecord.date)}</span>
+                                            {#if matchRecord.eloChange}
+                                                <span>|</span>
+                                                <span class="{matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">{matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange}</span>
+                                            {/if}
                                         </div>
                                         <div class="flex ml-4">
                                             {#each JSON.parse(matchRecord.player1Hand) as card, index}

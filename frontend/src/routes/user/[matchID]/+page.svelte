@@ -73,6 +73,9 @@
                 >
                     {didWin ? "Victory" : "Defeat"}
                 </span>
+                {#if matchRecord.eloChange}
+                    <span class="text-xs font-bold {matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">({matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange})</span>
+                {/if}
                 <span class="text-xs text-muted-foreground">|</span>
                 <span class="text-xs text-muted-foreground">{formatDate(matchRecord?.date)}</span>
             </div>
