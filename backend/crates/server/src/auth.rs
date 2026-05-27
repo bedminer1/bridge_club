@@ -73,7 +73,7 @@ pub async fn validate_session(
 
     let mut rows = conn.query(
         "SELECT s.id, s.user_id, s.expires_at, u.id, u.username, u.password,
-                u.games_played, u.games_won, u.total_sets_won, u.most_sets_won
+                u.games_played, u.games_won, u.total_sets_won, u.most_sets_won, u.elo
          FROM sessions s
          JOIN users u ON u.id = s.user_id
          WHERE s.id = ?1",
@@ -93,6 +93,7 @@ pub async fn validate_session(
             let games_won: i64 = row.get(7)?;
             let total_sets_won: i64 = row.get(8)?;
             let most_sets_won: i64 = row.get(9)?;
+            let elo: i64 = row.get(10)?;
 
             let now_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
@@ -117,6 +118,7 @@ pub async fn validate_session(
                     games_won,
                     total_sets_won,
                     most_sets_won,
+                    elo,
                 },
                 SessionRow {
                     id: sid,

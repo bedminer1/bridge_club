@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS users (
     games_played    INTEGER NOT NULL DEFAULT 0,
     games_won       INTEGER NOT NULL DEFAULT 0,
     total_sets_won  INTEGER NOT NULL DEFAULT 0,
-    most_sets_won   INTEGER NOT NULL DEFAULT 0
+    most_sets_won   INTEGER NOT NULL DEFAULT 0,
+    elo             INTEGER NOT NULL DEFAULT 500
 );
 
 CREATE TABLE IF NOT EXISTS matches (
@@ -92,7 +93,8 @@ CREATE TABLE IF NOT EXISTS matches (
     sets_data       TEXT,
     players         TEXT,
     players_int     INTEGER DEFAULT 0,
-    room_id         TEXT
+    room_id         TEXT,
+    elo_change      INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -119,6 +121,22 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN games_won INTEGER DEFAULT 0;").await;
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN total_sets_won INTEGER DEFAULT 0;").await;
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN most_sets_won INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN elo INTEGER DEFAULT 500;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN elo_change INTEGER DEFAULT 0;").await;
+
+    // Seed bot users (standard bots: Alpha, Beta, Gamma)
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO users (id, username, password, games_played, games_won, total_sets_won, most_sets_won, elo) VALUES (?1, ?2, '', 0, 0, 0, 0, 500)",
+        libsql::params![1i64, "Bot-Alpha"],
+    ).await;
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO users (id, username, password, games_played, games_won, total_sets_won, most_sets_won, elo) VALUES (?1, ?2, '', 0, 0, 0, 0, 500)",
+        libsql::params![2i64, "Bot-Beta"],
+    ).await;
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO users (id, username, password, games_played, games_won, total_sets_won, most_sets_won, elo) VALUES (?1, ?2, '', 0, 0, 0, 0, 500)",
+        libsql::params![3i64, "Bot-Gamma"],
+    ).await;
 
     tracing::info!("Database schema up to date");
     Ok(())
@@ -138,6 +156,7 @@ pub struct UserRow {
     pub games_won: i64,
     pub total_sets_won: i64,
     pub most_sets_won: i64,
+    pub elo: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +187,7 @@ pub struct MatchRow {
     pub players: Option<String>,
     pub players_int: i64,
     pub room_id: Option<String>,
+    pub elo_change: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
