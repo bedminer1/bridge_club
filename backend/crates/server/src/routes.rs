@@ -458,6 +458,9 @@ async fn signup(
         }
     };
 
+    // Drop connection before creating session to avoid Mutex deadlock
+    drop(conn);
+
     // Create session
     match auth::create_session(&state.db, user_id).await {
         Ok((_session_id, token)) => {
@@ -585,6 +588,9 @@ async fn login(
             );
         }
     };
+
+    // Drop connection before creating session to avoid Mutex deadlock
+    drop(conn);
 
     // Create session
     match auth::create_session(&state.db, user.id).await {
@@ -714,7 +720,7 @@ async fn get_matches(
             "SELECT id, user_id, date, bot_difficulty, trump_suit, bet_size, bet_winner, \
              partner, won_match, bet_winner_user_id, partner_user_id, winning_team, \
              player1_sets, player2_sets, player3_sets, player4_sets, \
-             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int \
+             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int, elo_change \
              FROM matches WHERE (players_int & 0xFF) = ?1 \
              OR ((players_int >> 8) & 0xFF) = ?1 \
              OR ((players_int >> 16) & 0xFF) = ?1 \
