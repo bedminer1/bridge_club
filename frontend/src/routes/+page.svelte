@@ -755,9 +755,11 @@
         {#if headerState.hiddenMode}
         <div class="flex gap-4">
             {#each game.Players.slice(1, 4) as player, index}
-                <div class="flex gap-2">
-                <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
+                <div class="flex flex-col gap-0">
+                <p class="text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
+                <p class="text-sm text-muted-foreground">({player.Sets} sets)</p>
                 </div>
+                
 
                 {#if index < 2}
                 <Separator orientation="vertical" />
