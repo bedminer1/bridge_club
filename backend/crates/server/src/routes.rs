@@ -1968,27 +1968,17 @@ async fn advance_game(
 
 use std::process::Command;
 
-async fn deploy_webhook(
-    Json(payload): Json<serde_json::Value>,
-) -> impl IntoResponse {
-    let secret = payload.get("secret").and_then(|v| v.as_str()).unwrap_or("");
-    if !secret.is_empty() && secret != "hermes123" {
-        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "Invalid secret"})));
-    }
-
-    match Command::new("/root/deploy-bridge-club.sh").output() {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            if output.status.success() {
-                (StatusCode::OK, Json(serde_json::json!({"ok": true, "output": stdout})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"ok": false, "error": stderr})))
-            }
-        }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"ok": false, "error": e.to_string()})),
-        ),
-    }
+async fn deploy_webhook() -> impl IntoResponse {
+    // Fire-and-forget: spawn deploy in background, return immediately
+    tokio::task::spawn_blocking(|| {
+        let _ = Command::new("/root/deploy-bridge-club.sh")
+            .output()
+            .map(|o| {
+                let log = format!("STDOUT:\n{}\nSTDERR:\n{}",
+                    String::from_utf8_lossy(&o.stdout),
+                    String::from_utf8_lossy(&o.stderr));
+                let _ = std::fs::write("/tmp/deploy.log", &log);
+            });
+    });
+    (StatusCode::ACCEPTED, Json(serde_json::json!({"ok": true, "message": "Deploy started"})))
 }
