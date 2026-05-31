@@ -159,3 +159,171 @@ Some important modules and files are listed below:
 
 
 Detailed day-by-day tasks can be found in our project log. 
+
+# System Design: Singapore Bridge Club — Present & Future
+
+A multiplayer browser game for Singapore Bridge (3NT variant). Supports up to 4 humans per room (empty seats → bots) and single-player quick-play.
+
+---
+
+## Current Architecture (Quick Summary)
+
+```
+[Browser] ── HTTP REST ──► [Rust/Axum on Hetzner CX23] ──► [Turso/SQLite]
+               polling                     │
+              2s intervals                HashMap<Uuid, GameRoom>
+                                          in-memory, Arc<RwLock>
+```
+
+- State: in-memory rooms, DB only for users/matches/elo
+- Auth: session tokens, X-Session-Token header
+- Deploy: SSH in, `git pull + cargo build --release + systemctl restart`
+
+---
+
+## Pain Point #1: Polling → WebSockets
+
+### Why polling was chosen initially
+
+| Factor | Polling | WebSockets |
+|--------|---------|------------|
+| Implementation | 10 lines of setInterval | Connection mgmt, reconnection, state sync |
+| Debugging | curl any endpoint, see JSON | Need WebSocket client, stateful |
+| Server restart | Client gets 404, shows error | Client hangs until timeout |
+| Auth | Stateless (token per request) | Need to auth on connect |
+| Traffic | 2 req/s per client (1M reads → ~5 clients) | 1 connection per client, zero overhead when idle |
+
+For a hobby project with 3 concurrent users, polling was the right call.
+
+### Why migrate to WebSockets now
+
+1. **Bot animation is janky.** Each bot turn requires: poll `/advance` → wait response → poll `/state` → re-render. With 3 bot turns between human actions, that's 6 HTTP round trips (12s at 2s intervals).
+2. **Latency for multiplayer real humans.** If 4 humans play, a player's card play should show on everyone's screen in <200ms, not 2s later.
+3. **Mobile browsers throttle setInterval.** iOS Safari kills background tabs' intervals → stale game state on return.
+
+### Migration path
+
+**Phase 1 — WebSocket per room (not per player):**
+```
+Client connects: ws://host/ws?id={room_id}&token={session}
+Server pushes:   {"type":"bot_turn","card":"AS","player":2}
+                 {"type":"state_update","state":{...}}
+Client sends:    {"type":"call","call":"Pass"}
+                 {"type":"play","card":"QH"}
+```
+
+The room's WebSocket acts as a pub/sub channel. When any player acts, the server broadcasts the updated state to all connected clients. Bot turns stream in as individual messages (animatable) instead of one bulk response.
+
+**Phase 2 — Heartbeat + reconnect:**
+- Server sends `{"type":"ping"}` every 10s
+- Client responds with `{"type":"pong"}`
+- On disconnect: client stores last known state, reconnects with `?room={id}&seat={index}&last_state_version=42`
+- Server replays missed messages from an in-memory ring buffer (last 100 messages per room)
+
+---
+
+## Pain Point #2: Observability (Currently Zero)
+
+Current state: `tracing::info!("...")` scattered through the code, no dashboard, no metrics. You only find out the server crashed when someone says "the game is down."
+
+### What to add
+
+**Structured events (JSON, not strings):**
+
+```rust
+// Instead of:
+tracing::info!("Bot action rejected at phase {:?}, player {}", phase, p);
+
+// Do:
+tracing::info!(
+    bot_action_rejected,
+    phase = ?table.phase,
+    player = current,
+    error = %e,
+    room_id = %room_id,
+);
+```
+
+**Three observability pillars:**
+
+| Pillar | Tool | What we track |
+|--------|------|---------------|
+| **Logs** | `tracing` → file or stdout, shipped to Loki/Grafana | Room lifecycle, auth failures, bot errors, game start/end |
+| **Metrics** | `metrics` crate + Prometheus endpoint at `/metrics` | Active rooms, active players, bot decision time p50/p95/p99, HTTP 4xx/5xx count |
+| **Traces** | `tracing` spans with OpenTelemetry | Per-action trace: `handle_call → make_call → persist_state`, measure each step |
+
+**Prometheus endpoint (5 lines):**
+
+```rust
+use axum::routing::get;
+use metrics_exporter_prometheus::PrometheusHandle;
+
+let recorder = PrometheusBuilder::new().install_recorder()?;
+let handle = recorder.handle();
+app.route("/metrics", get(move || async move { handle.render() }));
+
+// Increment counters:
+metrics::counter!("rooms.active").increment(1);
+metrics::histogram!("bot.decision_time_ms", duration.as_millis() as f64);
+```
+
+**Grafana dashboard panels:**
+- Active rooms & players (gauge)
+- Bot decision time (heatmap, p50/p95 lines)
+- Error rate (4xx, 5xx per route)
+- Room lifecycle (creations, starts, finishes per minute)
+
+---
+
+## Pain Point #3: Scaling (Current Limit ~50 Concurrent Games)
+
+**Current bottleneck:** `Arc<RwLock<HashMap<Uuid, GameRoom>>>` — all rooms share one lock. A slow bot turn (shouldn't happen, but) blocks all other rooms.
+
+### Redis for room state
+
+| Approach | What migrates | Trade-off |
+|----------|---------------|-----------|
+| **Redis hash per room** | `GAME:{room_id}` → full state JSON | Simple, but each bot turn = serialize + write + read + deserialize. Plus serialization cost on every turn. |
+| **Local cache + Redis backup** | In-memory HashMap for active rooms, Redis for crash recovery | Best latency, but 2× memory. Only write to Redis after each complete trick (not every card). |
+| **Redis pub/sub for cross-instance** | If we ever need >1 server | Each server instance subscribes to room channels. Players can connect to any instance. |
+
+**Recommended: local cache + Redis backup.** Keep the current in-memory HashMap for speed. After each completed trick (every 4 cards), snapshot the full game state to a Redis hash. If a server restarts, rooms can be recovered from Redis.
+
+**Redis data layout:**
+
+```
+GAME:{room_id} → Hash {
+    "state": JSON-serialized GameRoom,
+    "players": JSON array of {id, name, seat},
+    "ttl": 3600  // 1 hour, rooms expire
+}
+ROOM_PLAYER:{room_id} → Set of player session IDs
+```
+
+---
+
+## Trade-off Matrix for the Presentation
+
+| Dimension | Before (Current) | After (Proposed) |
+|-----------|-----------------|-------------------|
+| **State delivery** | Polling every 2s | WebSocket push, <200ms latency |
+| **Bot animation** | 6 HTTP round trips between turns | Streamed as individual messages |
+| **Reconnection** | Refresh page, re-fetch /state | Reconnect WebSocket, replay missed messages |
+| **Observability** | Scattered tracing::info! | Loki + Prometheus + Grafana, three pillars |
+| **Crash recovery** | All rooms lost | Redis snapshots, recover on restart |
+| **Scaling** | Single CX23, 1 lock for all rooms | Stateless servers, Redis pub/sub for multi-instance |
+| **Cost** | ~€7/month (CX23 + Turso) | ~€12/month (+ Redis at ~€5 or Upstash free) |
+
+---
+
+## Summary for Presentation
+
+1. **Architecture:** Rust/Axum monolith, in-memory rooms, Turso DB, SvelteKit frontend
+2. **Biggest design mistake:** Polling. Fix with WebSocket per room + ring buffer replay
+3. **Biggest ops gap:** Zero observability. Fix with tracing spans + Prometheus metrics + Grafana
+4. **Scaling path:** Local cache + Redis backup → multi-instance via Redis pub/sub if needed
+5. **Cost:** ~€10/month runs a dozen concurrent games comfortably with these upgrades
+
+bots:
+team model - guess who is who's team based of feeding and eating pattern and turn order
+predicting hands - based on bidding phase
