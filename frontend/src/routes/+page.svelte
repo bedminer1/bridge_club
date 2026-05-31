@@ -642,7 +642,7 @@
         </div>
     {:else}
     <!-- Play area table -->
-    <div class="flex gap-4 w-full justify-center">
+    <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
     <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl">
         <!-- Game info strip -->
         <div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-xs text-muted-foreground px-1 overflow-x-auto scrollbar-none">
@@ -819,7 +819,7 @@
     </div>
 
     <!-- Chat card (in-game, side panel) -->
-    <div class="w-80 flex flex-col mt-4">
+    <div class="w-full md:w-80 flex flex-col mt-4">
         <Card class="h-full flex flex-col">
             <CardContent class="flex flex-col gap-2 p-3 flex-1">
                 <div class="text-xs font-medium text-muted-foreground">Chat</div>
@@ -879,7 +879,7 @@
 
     {:else}
     <!-- Lobby UI -->
-    <div class="flex gap-4 w-full justify-center">
+    <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
         <div class="w-full max-w-md">
             {#if !lobbyRoomId}
                 <!-- Mode Selector (always visible) -->
@@ -988,7 +988,7 @@
 
         {#if lobbyRoomId}
         <!-- Chat card (lobby, side panel) -->
-        <div class="w-64 shrink-0 flex flex-col">
+        <div class="w-full md:w-64 shrink-0 flex flex-col">
             <Card class="h-full flex flex-col">
                 <CardContent class="flex flex-col gap-2 p-3 flex-1">
                     <div class="text-xs font-medium text-muted-foreground">Chat</div>
