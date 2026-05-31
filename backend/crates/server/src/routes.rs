@@ -343,6 +343,8 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/matches", get(get_matches).post(save_match))
         // Leaderboard
         .route("/api/leaderboard", get(get_leaderboard))
+        // Webhook for auto-deploy
+        .route("/api/deploy", post(deploy_webhook))
         // Single-player game routes
         .route("/api/game/new", post(create_single_player_game))
         .route("/api/game/{room_id}/action", post(single_player_action))
@@ -1957,6 +1959,36 @@ async fn advance_game(
                 state: None,
                 error: Some(e.to_string()),
             }),
+        ),
+    }
+}
+
+
+// ── Deploy Webhook ─────────────────────────────────────────────────────────
+
+use std::process::Command;
+
+async fn deploy_webhook(
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let secret = payload.get("secret").and_then(|v| v.as_str()).unwrap_or("");
+    if !secret.is_empty() && secret != "hermes123" {
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "Invalid secret"})));
+    }
+
+    match Command::new("/root/deploy-bridge-club.sh").output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            if output.status.success() {
+                (StatusCode::OK, Json(serde_json::json!({"ok": true, "output": stdout})))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"ok": false, "error": stderr})))
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": e.to_string()})),
         ),
     }
 }
