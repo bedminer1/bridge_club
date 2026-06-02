@@ -624,40 +624,7 @@
         Starting game...
     </div>
     {:else if isOnline && game.Players}
-    <div class="text-2xl text-muted-foreground relative">
-        <!-- Settings gear (top-right) -->
-        <div class="absolute -right-2 -top-1 z-10">
-        <Popover.Root>
-            <Popover.Trigger>
-                <button class="p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors">
-                    <Settings class="w-4 h-4" />
-                </button>
-            </Popover.Trigger>
-            <Popover.Content class="border w-64 mr-2 mt-1 text-sm" sideOffset={8}>
-                <div class="flex flex-col gap-3 p-1">
-                    <div class="flex justify-between items-center gap-4">
-                        <Label for="difficulty">Difficulty</Label>
-                        <Select.Root type="single" bind:value={headerState.difficulty} disabled={!headerState.game.IsBettingPhase}>
-                            <Select.Trigger class="w-[100px]">{headerState.difficulty}</Select.Trigger>
-                            <Select.Content>
-                                <Select.Item value="Easy">Easy</Select.Item>
-                                <Select.Item value="Medium">Medium</Select.Item>
-                                <Select.Item value="Hard" disabled>Hard</Select.Item>
-                            </Select.Content>
-                        </Select.Root>
-                    </div>
-                    <div class="flex justify-between items-center gap-4">
-                        <Label for="bot-speed">Bot Speed</Label>
-                        <Input type="number" bind:value={headerState.botSpeed} class="w-[100px]" />
-                    </div>
-                    <div class="flex justify-between items-center gap-4">
-                        <Label for="hidden-mode">Hidden Mode</Label>
-                        <Switch bind:checked={headerState.hiddenMode} />
-                    </div>
-                </div>
-            </Popover.Content>
-        </Popover.Root>
-        </div>
+    <div class="text-2xl text-muted-foreground">
         <p>{playerName(game.WhoseTurn)}'s turn</p>
     </div>
 
@@ -701,7 +668,40 @@
             {/if}
         </div>
 
-    <div class="rounded-xl border border-border bg-card/50 p-4 sm:p-6">
+    <div class="rounded-xl border border-border bg-card/50 p-4 sm:p-6 relative">
+        <!-- Settings gear (top-right) -->
+        <div class="absolute top-2 right-2 z-10">
+        <Popover.Root>
+            <Popover.Trigger>
+                <button class="p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors">
+                    <Settings class="w-4 h-4" />
+                </button>
+            </Popover.Trigger>
+            <Popover.Content class="border w-64 mr-2 mt-1 text-sm" sideOffset={8}>
+                <div class="flex flex-col gap-3 p-1">
+                    <div class="flex justify-between items-center gap-4">
+                        <Label for="difficulty">Difficulty</Label>
+                        <Select.Root type="single" bind:value={headerState.difficulty} disabled={!headerState.game.IsBettingPhase}>
+                            <Select.Trigger class="w-[100px]">{headerState.difficulty}</Select.Trigger>
+                            <Select.Content>
+                                <Select.Item value="Easy">Easy</Select.Item>
+                                <Select.Item value="Medium">Medium</Select.Item>
+                                <Select.Item value="Hard" disabled>Hard</Select.Item>
+                            </Select.Content>
+                        </Select.Root>
+                    </div>
+                    <div class="flex justify-between items-center gap-4">
+                        <Label for="bot-speed">Bot Speed</Label>
+                        <Input type="number" bind:value={headerState.botSpeed} class="w-[100px]" />
+                    </div>
+                    <div class="flex justify-between items-center gap-4">
+                        <Label for="hidden-mode">Hidden Mode</Label>
+                        <Switch bind:checked={headerState.hiddenMode} />
+                    </div>
+                </div>
+            </Popover.Content>
+        </Popover.Root>
+        </div>
     {#if game.IsBettingPhase}
     <div class="flex flex-col items-center gap-1">
         {#each game.Moves.slice(-3) as move}
