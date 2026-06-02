@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
 
 use game_core::Table;
@@ -142,6 +142,8 @@ pub struct AppState {
     /// Persistent database pool for users, matches, sessions.
     #[allow(dead_code)]
     pub db: DbPool,
+    /// WebSocket broadcast channels per room ID.
+    pub room_broadcast: Arc<RwLock<HashMap<Uuid, broadcast::Sender<String>>>>,
 }
 
 /// Create a fresh shared state with a database pool.
@@ -149,5 +151,6 @@ pub async fn new_app_state(db_pool: DbPool) -> AppState {
     AppState {
         rooms: Arc::new(RwLock::new(HashMap::new())),
         db: db_pool,
+        room_broadcast: Arc::new(RwLock::new(HashMap::new())),
     }
 }

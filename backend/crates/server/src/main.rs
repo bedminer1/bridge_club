@@ -1,6 +1,12 @@
 use std::net::SocketAddr;
 
-use axum::http::{header, HeaderName, HeaderValue};
+use axum::{
+    extract::ws::WebSocketUpgrade,
+    extract::Query,
+    http::{header, HeaderName, HeaderValue},
+    routing::get,
+    Router,
+};
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 #[tokio::main]
@@ -24,8 +30,13 @@ async fn main() {
     // Create shared application state
     let state = bridge_server::session::new_app_state(db_pool).await;
 
-    // Build the router
-    let app = bridge_server::routes::routes(state);
+    // Build the router — HTTP + WS routes
+    let app = bridge_server::routes::routes(state.clone())
+        .merge(
+            axum::Router::new()
+                .route("/ws", get(bridge_server::ws::ws_handler))
+                .with_state(state),
+        );
 
     // CORS: allow any origin (Vercel preview URLs vary)
     let cors = CorsLayer::new()

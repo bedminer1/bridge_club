@@ -4,3 +4,5 @@ backend/target/
 *.db
 **/.cache/
 cli_interface/compile_commands.json
+*.log
+*.rustc_info.json

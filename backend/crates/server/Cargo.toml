@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 game-core = { path = "../game-core" }
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
+futures-util = "0.3"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 tower-http = { version = "0.6", features = ["cors"] }

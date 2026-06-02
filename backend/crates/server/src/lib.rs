@@ -4,3 +4,4 @@ pub mod db;
 pub mod game_session;
 pub mod routes;
 pub mod session;
+pub mod ws;

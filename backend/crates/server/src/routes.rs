@@ -63,7 +63,7 @@ pub struct SelectPartnerRequest {
     pub card: game_core::Card,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TableStateResponse {
     pub phase: String,
@@ -1547,7 +1547,7 @@ async fn play_card(
 
 // ── Helper: build TableStateResponse from a Table ─────────────────────────
 
-fn build_table_state(table: &game_core::Table) -> TableStateResponse {
+pub fn build_table_state(table: &game_core::Table) -> TableStateResponse {
     let hands: Vec<String> = table
         .players
         .iter()
