@@ -695,7 +695,7 @@ async fn get_matches(
              OR ((players_int >> 16) & 0xFF) = ?1 \
              OR ((players_int >> 24) & 0xFF) = ?1 \
              ORDER BY date DESC",
-            libsql::params![user.id, user.id],
+            libsql::params![user.id],
         )
         .await
     {
