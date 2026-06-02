@@ -1426,13 +1426,14 @@ async fn get_room_info(
         })),
     };
 
-    let players: Vec<RoomPlayerInfo> = room.sessions.values().map(|s| {
+    let mut players: Vec<RoomPlayerInfo> = room.sessions.values().map(|s| {
         RoomPlayerInfo {
             name: s.player_name.clone(),
             seat_index: s.seat_index,
             is_bot: s.player_name.starts_with("Bot-"),
         }
     }).collect();
+    players.sort_by_key(|p| p.seat_index);
 
     (StatusCode::OK, Json(RoomInfoResponse {
         room_id,
