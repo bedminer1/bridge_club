@@ -51,6 +51,28 @@
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
 
+    // Fallback: if SSR session check failed but cookie exists, retry client-side
+    $effect(() => {
+        if (userID === 0) {
+            const cookie = document.cookie.split("; ").find(r => r.startsWith("session="))
+            if (cookie) {
+                const tokenVal = cookie.split("=")[1]
+                const api = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                    ? "http://127.0.0.1:3000" : "https://bridge-club.duckdns.org"
+                fetch(`${api}/api/auth/session?token=${encodeURIComponent(tokenVal)}`)
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.ok && d.user) {
+                            userID = d.user.id
+                            username = d.user.username
+                            onlineToken = tokenVal
+                        }
+                    })
+                    .catch(() => {})
+            }
+        }
+    })
+
     // Load a room if the URL has a ?room= param; otherwise show the lobby
     $effect(() => {
         const urlRoomId = page.url.searchParams.get("room")

@@ -7,7 +7,7 @@
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
     <h1 class="text-2xl font-bold mb-2">Bridge Club</h1>
-    <p class="text-sm text-muted-foreground mb-8">Singapore Bridge — Hidden Mode Only — Elo ranked</p>
+    <p class="text-sm text-muted-foreground mb-8">Singapore Bridge</p>
 
     <div class="w-full max-w-lg flex flex-col gap-4 text-sm">
         <!-- How to Play -->
@@ -28,7 +28,7 @@
                     <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">3{suitToSymbol.get('Heart')}</span>
                     <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">4{suitToSymbol.get('Heart')}</span>
                     <span class="text-green text-xs ml-1">
-                        <Crown class="inline w-3 h-3" /> won
+                        K♠ won
                     </span>
                 </div>
             </div>
@@ -50,7 +50,7 @@
                     <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">Q{suitToSymbol.get('Club')}</span>
                     <span class="rounded border border-b-2 border-red-500 px-1.5 py-0.5 bg-card font-bold">2{suitToSymbol.get('Heart')} <span class="text-red-500">trump!</span></span>
                     <span class="text-green text-xs ml-1">
-                        <Crown class="inline w-3 h-3" /> won
+                        2♥ won
                     </span>
                 </div>
             </div>
