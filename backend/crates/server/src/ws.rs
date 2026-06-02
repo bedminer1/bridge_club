@@ -208,9 +208,26 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                     .map(|tx| tx.subscribe());
                             }
                         }
+                        // Drain any pending broadcast messages
+                        if let Some(ref mut rx) = broadcast_rx {
+                            while let Ok(msg) = rx.try_recv() {
+                                if sender.send(Message::Text(msg.into())).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
                     }
                     Some(Ok(Message::Close(_))) | None => break,
-                    _ => {}
+                    _ => {
+                        // Also drain broadcast on non-text frames
+                        if let Some(ref mut rx) = broadcast_rx {
+                            while let Ok(msg) = rx.try_recv() {
+                                if sender.send(Message::Text(msg.into())).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             // Read from broadcast channel (if subscribed to a room)
