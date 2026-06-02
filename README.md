@@ -200,7 +200,7 @@ Located in `backend/crates/game-core/src/{bid.rs,game.rs,scoring.rs}`. No databa
 | `game`       | 14 | Deal gives 13 cards each, next deal rotates dealer, bidding phase transitions, partner selection (cannot pick own card), team 1/2 win detection at target sets. |
 | `scoring`    | 7  | Higher rank beats lower, led-suit must be followed, trump beats non-trump, vulnerability state tracking. |
 
-**Example — betting auction must outrank** (`bid.rs`):
+**Example — raised bets must outrank current highest bid** (`bid.rs`):
 
 ```rust
 #[test]
