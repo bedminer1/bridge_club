@@ -247,7 +247,9 @@ async fn handle_client_message(
     state: &AppState,
 ) -> Result<Option<String>, String> {
     let msg: ClientMessage = serde_json::from_str(text).map_err(|e| {
-        format!("{{\"type\":\"error\",\"error\":\"Invalid message: {}\"}}", e)
+        let err = format!("{{\"type\":\"error\",\"error\":\"Invalid message: {}\"}}", e);
+        tracing::warn!(raw = %text, error = %e, "WS deserialization failed");
+        err
     })?;
 
     match msg {
