@@ -683,8 +683,19 @@ async fn get_matches(
              FROM matches m \
              JOIN match_participants mp ON m.id = mp.match_id \
              WHERE mp.user_id = ?1 \
-             ORDER BY m.date DESC",
-            libsql::params![user.id],
+             UNION \
+             SELECT id, date, bot_difficulty, trump_suit, bet_size, \
+             bet_winner_user_id, partner_user_id, winning_team, \
+             won_match, \
+             player1_sets, player2_sets, player3_sets, player4_sets, \
+             players, elo_change, is_hidden, \
+             partner, preview1, preview2, preview3, preview4 \
+             FROM matches WHERE (players_int & 0xFF) = ?1 \
+             OR ((players_int >> 8) & 0xFF) = ?1 \
+             OR ((players_int >> 16) & 0xFF) = ?1 \
+             OR ((players_int >> 24) & 0xFF) = ?1 \
+             ORDER BY date DESC",
+            libsql::params![user.id, user.id],
         )
         .await
     {
@@ -734,62 +745,6 @@ async fn get_matches(
             Err(e) => {
                 tracing::error!("DB row read error: {}", e);
                 break;
-            }
-        }
-    }
-
-    // Fallback: if no matches found via join table, try old players_int bitwise query
-    // for matches saved before the match_participants migration
-    if matches.is_empty() {
-        if let Ok(mut fallback_rows) = conn
-            .query(
-                "SELECT id, date, bot_difficulty, trump_suit, bet_size, \
-                 bet_winner_user_id, partner_user_id, winning_team, \
-                 won_match, \
-                 player1_sets, player2_sets, player3_sets, player4_sets, \
-                 players, elo_change, is_hidden, \
-                 partner, preview1, preview2, preview3, preview4 \
-                 FROM matches WHERE (players_int & 0xFF) = ?1 \
-                 OR ((players_int >> 8) & 0xFF) = ?1 \
-                 OR ((players_int >> 16) & 0xFF) = ?1 \
-                 OR ((players_int >> 24) & 0xFF) = ?1 ORDER BY date DESC",
-                libsql::params![user.id],
-            )
-            .await
-        {
-            loop {
-                match fallback_rows.next().await {
-                    Ok(Some(row)) => {
-                        matches.push(MatchRowLight {
-                            id: row.get::<i64>(0).unwrap_or(0),
-                            date: row.get::<i64>(1).unwrap_or(0),
-                            bot_difficulty: row.get::<String>(2).unwrap_or_default(),
-                            trump_suit: row.get::<String>(3).unwrap_or_default(),
-                            bet_size: row.get::<i64>(4).unwrap_or(0),
-                            bet_winner_user_id: row.get::<i64>(5).unwrap_or(0),
-                            partner_user_id: row.get::<i64>(6).unwrap_or(0),
-                            winning_team: row.get::<i64>(7).unwrap_or(1),
-                            won_match: row.get::<Option<i64>>(8).unwrap_or(None),
-                            player1_sets: row.get::<i64>(9).unwrap_or(0),
-                            player2_sets: row.get::<i64>(10).unwrap_or(0),
-                            player3_sets: row.get::<i64>(11).unwrap_or(0),
-                            player4_sets: row.get::<i64>(12).unwrap_or(0),
-                            players: row.get::<Option<String>>(13).unwrap_or(None),
-                            elo_change: row.get::<i64>(14).unwrap_or(0),
-                            is_hidden: row.get::<bool>(15).unwrap_or(true),
-                            partner: row.get::<Option<i64>>(16).unwrap_or(None),
-                            preview1: row.get::<Option<String>>(17).unwrap_or(None),
-                            preview2: row.get::<Option<String>>(18).unwrap_or(None),
-                            preview3: row.get::<Option<String>>(19).unwrap_or(None),
-                            preview4: row.get::<Option<String>>(20).unwrap_or(None),
-                        });
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        tracing::error!("Fallback DB row read error: {}", e);
-                        break;
-                    }
-                }
             }
         }
     }
