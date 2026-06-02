@@ -1342,9 +1342,13 @@ async fn leave_room(
 async fn start_game(
     State(state): State<AppState>,
     Path(room_id): Path<Uuid>,
-    Json(payload): Json<serde_json::Value>,
+    payload: Option<Json<serde_json::Value>>,
 ) -> impl IntoResponse {
-    let difficulty_str = payload.get("difficulty").and_then(|v| v.as_str()).unwrap_or("easy");
+    let difficulty_str = payload
+        .as_ref()
+        .and_then(|p| p.get("difficulty"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("easy");
     let difficulty = match difficulty_str.to_lowercase().as_str() {
         "easy" => BotDifficulty::Easy,
         "medium" => BotDifficulty::Medium,
