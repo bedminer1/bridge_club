@@ -467,6 +467,17 @@ async fn handle_lobby_start(
         "{\"type\":\"error\",\"error\":\"Room not found\"}".to_string()
     })?;
 
+    // Fill remaining slots with bots
+    let bot_names = ["Bot-Alpha", "Bot-Beta", "Bot-Gamma"];
+    let mut next_bot = 0;
+    while room.sessions.len() < 4 {
+        let bot_name = bot_names[next_bot % bot_names.len()];
+        room.add_player(bot_name).map_err(|e| {
+            format!("{{\"type\":\"error\",\"error\":\"{}\"}}", e)
+        })?;
+        next_bot += 1;
+    }
+
     if !room.is_ready() {
         return Err("{\"type\":\"error\",\"error\":\"Room not ready (need 4 players)\"}".to_string());
     }
@@ -497,7 +508,7 @@ async fn handle_lobby_start(
         let _ = tx.send(started_msg);
     }
 
-    Ok(Some("{\"type\":\"lobby:started\",\"ok\":true}".to_string()))
+    Ok(Some(serde_json::to_string(&ServerMessage::LobbyStarted { room_id }).unwrap()))
 }
 
 async fn handle_lobby_toggle_hidden(
