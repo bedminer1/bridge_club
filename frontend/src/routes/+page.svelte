@@ -578,7 +578,7 @@
                 <div class="flex flex-col gap-3 p-1">
                     <div class="flex justify-between items-center gap-4">
                         <Label for="difficulty">Difficulty</Label>
-                        <Select.Root type="single" bind:value={headerState.difficulty} disabled={!headerState.game.IsBettingPhase}>
+                        <Select.Root type="single" bind:value={headerState.difficulty} disabled={!headerState.game!.IsBettingPhase}>
                             <Select.Trigger class="w-[100px]">{headerState.difficulty}</Select.Trigger>
                             <Select.Content>
                                 <Select.Item value="Easy">Easy</Select.Item>

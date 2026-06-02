@@ -32,6 +32,7 @@ async fn build_test_app() -> (Router, tempfile::TempDir) {
             GameRoom,
         >::new())),
         db: pool,
+        room_broadcast: Arc::new(RwLock::new(std::collections::HashMap::new())),
     };
 
     let app = routes::routes(state);
