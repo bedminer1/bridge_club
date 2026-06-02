@@ -392,8 +392,10 @@
 
         // Connect WebSocket
         wsClient.connect(onlineToken)
+        console.log("[WS] Effect running, onlineToken present")
 
         const unsubCreated = wsClient.on("lobby:created", (data) => {
+            console.log("[WS] lobby:created", data)
             roomId = data.roomId
             lobbyRoomId = data.roomId
             lobbyMySeatIndex = data.seatIndex
