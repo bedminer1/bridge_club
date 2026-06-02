@@ -2,7 +2,6 @@
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
-    import * as Select from "$lib/components/ui/select/index.js";
     import { Switch } from "$lib/components/ui/switch/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
@@ -40,6 +39,9 @@
     let game: any = $state({})
     let roomId = $state("")
     let onlineToken = $state(token ?? "")
+
+    // Lock hidden mode toggle if it was on at game start
+    let hiddenModeLocked = $state(false)
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -346,6 +348,7 @@
 
         const unsubStarted = wsClient.on("lobby:started", (data) => {
             headerState.hiddenMode = lobbyHiddenMode
+            hiddenModeLocked = lobbyHiddenMode
             goto(`/?room=${encodeURIComponent(data.roomId)}&seat=${lobbyMySeatIndex}`)
         })
 
@@ -497,23 +500,12 @@
             <Popover.Content class="border w-64 mr-2 mt-1 text-sm" sideOffset={8}>
                 <div class="flex flex-col gap-3 p-1">
                     <div class="flex justify-between items-center gap-4">
-                        <Label for="difficulty">Difficulty</Label>
-                        <Select.Root type="single" bind:value={headerState.difficulty} disabled={!headerState.game!.IsBettingPhase}>
-                            <Select.Trigger class="w-[100px]">{headerState.difficulty}</Select.Trigger>
-                            <Select.Content>
-                                <Select.Item value="Easy">Easy</Select.Item>
-                                <Select.Item value="Medium">Medium</Select.Item>
-                                <Select.Item value="Hard" disabled>Hard</Select.Item>
-                            </Select.Content>
-                        </Select.Root>
-                    </div>
-                    <div class="flex justify-between items-center gap-4">
                         <Label for="bot-speed">Bot Speed</Label>
                         <Input type="number" bind:value={headerState.botSpeed} class="w-[100px]" />
                     </div>
                     <div class="flex justify-between items-center gap-4">
                         <Label for="hidden-mode">Hidden Mode</Label>
-                        <Switch bind:checked={headerState.hiddenMode} />
+                        <Switch bind:checked={headerState.hiddenMode} disabled={hiddenModeLocked} />
                     </div>
                 </div>
             </Popover.Content>
@@ -571,6 +563,7 @@
             bind:lobbyIsHost
             bind:lobbyPlayers
             bind:lobbyHiddenMode
+            bind:difficulty={headerState.difficulty}
             oncreate={lobbyCreateRoom}
             onjoin={lobbyJoinRoom}
             onleave={lobbyLeaveRoom}

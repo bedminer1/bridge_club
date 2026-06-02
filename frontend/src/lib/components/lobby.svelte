@@ -8,6 +8,8 @@
     } from "$lib/components/ui/card/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
+    import * as Select from "$lib/components/ui/select/index.js";
+    import { Label } from "$lib/components/ui/label/index.js";
 
     let {
         onlineToken = "",
@@ -18,6 +20,7 @@
         lobbyIsHost = $bindable(false),
         lobbyPlayers = $bindable<Array<{ name: string; seatIndex: number; isBot: boolean }>>([]),
         lobbyHiddenMode = $bindable(true),
+        difficulty = $bindable("Easy"),
         oncreate = () => {},
         onjoin = (_roomId: string) => {},
         onleave = () => {},
@@ -175,6 +178,17 @@
                     {/if}
                 </div>
                 {#if lobbyIsHost}
+                    <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
+                        <Label for="difficulty">Difficulty</Label>
+                        <Select.Root type="single" bind:value={difficulty}>
+                            <Select.Trigger class="w-[100px]">{difficulty}</Select.Trigger>
+                            <Select.Content>
+                                <Select.Item value="Easy">Easy</Select.Item>
+                                <Select.Item value="Medium">Medium</Select.Item>
+                                <Select.Item value="Hard" disabled>Hard</Select.Item>
+                            </Select.Content>
+                        </Select.Root>
+                    </div>
                     <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
                         <span class="text-sm text-foreground">Hidden Mode Only</span>
                         <button
