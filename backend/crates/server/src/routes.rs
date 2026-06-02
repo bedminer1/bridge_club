@@ -1342,7 +1342,14 @@ async fn leave_room(
 async fn start_game(
     State(state): State<AppState>,
     Path(room_id): Path<Uuid>,
+    Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
+    let difficulty_str = payload.get("difficulty").and_then(|v| v.as_str()).unwrap_or("easy");
+    let difficulty = match difficulty_str.to_lowercase().as_str() {
+        "easy" => BotDifficulty::Easy,
+        "medium" => BotDifficulty::Medium,
+        _ => BotDifficulty::Easy,
+    };
     let mut rooms = state.rooms.write().await;
     let room = match rooms.get_mut(&room_id) {
         Some(r) => r,
@@ -1381,6 +1388,7 @@ async fn start_game(
 
     // Deal cards
     room.table.deal();
+    room.difficulty = difficulty;
     room.is_started = true;
 
     // Process initial bot turns (bidding starts with P1)
@@ -1831,15 +1839,8 @@ async fn single_player_action(
     };
 
     // Apply the human move and process bot turns.
-    // We determine difficulty by checking whether the room has bot players.
-    // Bot players have names starting with "Bot-".
-    let has_bots = room.sessions.values().any(|s| s.player_name.starts_with("Bot-"));
-    let difficulty = if has_bots {
-        BotDifficulty::Easy
-    } else {
-        // Default difficulty for non-bot rooms; shouldn't happen for single-player
-        BotDifficulty::Easy
-    };
+    // Use the room's stored difficulty (set when the game was created or started).
+    let difficulty = room.difficulty;
 
     match game_session::action_human_move(
         &mut room.table,
@@ -1932,12 +1933,8 @@ async fn advance_game(
     };
 
     // Determine difficulty (same logic as single_player_action)
-    let has_bots = room.sessions.values().any(|s| s.player_name.starts_with("Bot-"));
-    let difficulty = if has_bots {
-        BotDifficulty::Easy
-    } else {
-        BotDifficulty::Easy
-    };
+    // Use the room's stored difficulty.
+    let difficulty = room.difficulty;
 
     // Advance exactly one bot turn
     match game_session::advance_one_turn(&mut room.table, human_seat, difficulty) {

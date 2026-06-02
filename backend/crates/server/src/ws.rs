@@ -38,7 +38,10 @@ enum ClientMessage {
     #[serde(rename = "lobby:leave")]
     LobbyLeave { player_id: String },
     #[serde(rename = "lobby:start")]
-    LobbyStart { hidden_mode: Option<bool> },
+    LobbyStart {
+        hidden_mode: Option<bool>,
+        difficulty: Option<String>,
+    },
     #[serde(rename = "lobby:toggle_hidden")]
     LobbyToggleHidden { enabled: bool },
     #[serde(rename = "game:action")]
@@ -257,8 +260,16 @@ async fn handle_client_message(
         ClientMessage::LobbyLeave { .. } => {
             handle_lobby_leave(conn, state).await
         }
-        ClientMessage::LobbyStart { hidden_mode } => {
-            handle_lobby_start(hidden_mode.unwrap_or(true), conn, state).await
+        ClientMessage::LobbyStart { hidden_mode, difficulty } => {
+            let difficulty = difficulty
+                .as_deref()
+                .and_then(|d| match d.to_lowercase().as_str() {
+                    "easy" => Some(BotDifficulty::Easy),
+                    "medium" => Some(BotDifficulty::Medium),
+                    _ => None,
+                })
+                .unwrap_or(BotDifficulty::Easy);
+            handle_lobby_start(hidden_mode.unwrap_or(true), difficulty, conn, state).await
         }
         ClientMessage::LobbyToggleHidden { enabled } => {
             handle_lobby_toggle_hidden(enabled, conn, state).await
@@ -407,6 +418,7 @@ async fn handle_lobby_leave(
 
 async fn handle_lobby_start(
     hidden_mode: bool,
+    difficulty: BotDifficulty,
     conn: &mut ConnectionState,
     state: &AppState,
 ) -> Result<Option<String>, String> {
@@ -424,6 +436,7 @@ async fn handle_lobby_start(
     }
 
     room.hidden_mode = hidden_mode;
+    room.difficulty = difficulty;
     room.table.deal();
     room.is_started = true;
 
@@ -573,7 +586,8 @@ async fn handle_game_action(
 
     let human_action = parse_human_action(&action_type, &call, &card)?;
 
-    let difficulty = BotDifficulty::Easy; // Default for now
+    // Use the room's stored difficulty (set when the game started)
+    let difficulty = room.difficulty;
 
     game_session::action_human_move(&mut room.table, human_seat, &human_action, difficulty)
         .map_err(|e| format!("{{\"type\":\"error\",\"error\":\"{}\"}}", e))?;

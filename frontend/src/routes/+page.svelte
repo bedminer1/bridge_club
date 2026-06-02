@@ -437,6 +437,7 @@
             const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/start`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
+                body: JSON.stringify({ difficulty: headerState.difficulty || "Easy" }),
             })
             if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Start failed: ${res.status} ${t}`); return }
             const d = await res.json()

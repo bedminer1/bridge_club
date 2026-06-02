@@ -197,8 +197,8 @@ class WsClient {
     }
 
     /** Start the game in the current lobby. */
-    startGame(hiddenMode: boolean): void {
-        this.send({ type: "lobby:start", hiddenMode })
+    startGame(hiddenMode: boolean, difficulty: string = "Easy"): void {
+        this.send({ type: "lobby:start", hiddenMode, difficulty })
     }
 
     /** Toggle hidden mode. */

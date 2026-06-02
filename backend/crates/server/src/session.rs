@@ -1,4 +1,5 @@
-use serde::Serialize;
+use crate::bot::BotDifficulty;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
@@ -41,6 +42,7 @@ pub struct GameRoom {
     pub sessions: HashMap<Uuid, PlayerSession>,
     pub is_started: bool,
     pub hidden_mode: bool,
+    pub difficulty: BotDifficulty,
     pub messages: Vec<ChatMessage>,
     next_msg_id: u64,
 }
@@ -53,6 +55,7 @@ impl GameRoom {
             sessions: HashMap::new(),
             is_started: false,
             hidden_mode: true,
+            difficulty: BotDifficulty::Easy,
             messages: Vec::new(),
             next_msg_id: 1,
         }
