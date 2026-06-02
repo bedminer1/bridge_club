@@ -1,9 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::ws::WebSocketUpgrade,
-    extract::Query,
-    http::{header, HeaderName, HeaderValue},
+    http::{header, HeaderName},
     routing::get,
     Router,
 };

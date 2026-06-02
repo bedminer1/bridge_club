@@ -36,7 +36,7 @@
     let isOnlineLoading = $state(false)
     let game: any = $state({})
     let roomId = $state("")
-    let onlineToken = $state(token ?? "")
+    let onlineToken = $derived(token ?? "")
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
