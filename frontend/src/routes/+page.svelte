@@ -420,6 +420,11 @@
                 const updated = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
                 fixupPlayerDisplay(updated)
                 game = updated
+                // Start polling if it's now a bot's turn
+                if (updated.WhoseTurn !== humanPlayerId && updated.Winner === "") {
+                    _pollActive = false  // reset so startPolling doesn't bail
+                    startPolling()
+                }
             }
         })
 
