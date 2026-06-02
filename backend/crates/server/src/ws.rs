@@ -487,6 +487,29 @@ async fn handle_lobby_start(
     room.table.deal();
     room.is_started = true;
 
+    // Auto-advance any initial bot turns (before first human move)
+    let username = conn.username.as_deref().unwrap_or("");
+    let human_seat = room
+        .sessions
+        .values()
+        .find(|s| s.player_name == username)
+        .map(|s| s.seat_index)
+        .unwrap_or(0);
+    use game_core::GamePhase;
+    loop {
+        let current = room.table.current_player_index();
+        if room.table.phase == GamePhase::Finished {
+            break;
+        }
+        if !room.table.players[current].name.starts_with("Bot-") {
+            break;
+        }
+        match game_session::advance_one_turn(&mut room.table, human_seat, difficulty) {
+            Ok(true) => {}
+            _ => break,
+        }
+    }
+
     // Build state and broadcast to all
     let state_resp = crate::routes::build_table_state(&room.table);
     let game_msg = serde_json::to_string(&ServerMessage::GameState {
@@ -641,6 +664,23 @@ async fn handle_game_action(
 
     game_session::action_human_move(&mut room.table, human_seat, &human_action, difficulty)
         .map_err(|e| format!("{{\"type\":\"error\",\"error\":\"{}\"}}", e))?;
+
+    // Auto-advance consecutive bot turns (no more HTTP polling)
+    use game_core::GamePhase;
+    loop {
+        let current = room.table.current_player_index();
+        if room.table.phase == GamePhase::Finished {
+            break;
+        }
+        let player_name = &room.table.players[current].name;
+        if !player_name.starts_with("Bot-") {
+            break;
+        }
+        match game_session::advance_one_turn(&mut room.table, human_seat, difficulty) {
+            Ok(true) => {} // continue to next bot
+            _ => break,
+        }
+    }
 
     let state_resp = crate::routes::build_table_state(&room.table);
     drop(rooms);

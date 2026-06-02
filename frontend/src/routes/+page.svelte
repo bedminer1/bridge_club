@@ -16,7 +16,6 @@
     import {
         createOnlineGame,
         getRoomState,
-        doAdvance,
         apiStateToGame,
     } from "$lib/game/api-game";
     import { page } from "$app/state";
@@ -160,10 +159,6 @@
                     headerState.hiddenMode = info.hiddenMode ?? true
                 }
             } catch {}
-            // Start game polling if it's not the human's turn
-            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
-                startPolling()
-            }
         } catch (e) {
             console.error("Failed to load existing room:", e)
             try { localStorage.removeItem("bridgeActiveRoom") } catch {}
@@ -175,63 +170,6 @@
             isOnlineLoading = false
         }
     }
-
-    /** Poll timeout handle for online bot turn waiting. */
-    let pollTimeout: ReturnType<typeof setTimeout> | null = null
-
-    function startPolling() {
-        stopPolling()
-        _pollActive = true
-        const delay = (headerState.botSpeed ?? 2) * 1000
-        pollTimeout = setTimeout(() => {
-            if (_pollActive) tick()
-        }, delay)
-    }
-
-    let _pollActive = $state(false)
-
-    function stopPolling() {
-        _pollActive = false
-        if (pollTimeout !== null) { clearTimeout(pollTimeout); pollTimeout = null }
-    }
-
-    async function tick() {
-        if (!isOnline || !roomId || !onlineToken) {
-            stopPolling()
-            return
-        }
-        try {
-            const updated = await doAdvance(roomId, onlineToken)
-            fixupPlayerDisplay(updated)
-            game = updated
-            if (updated.WhoseTurn === humanPlayerId || updated.Winner !== "") {
-                _pollActive = false
-                return
-            }
-        } catch (e) {
-            console.error("Poll error:", e)
-            _pollActive = false
-            return
-        }
-        // Schedule next tick with current bot speed (reads fresh each tick)
-        const delay = (headerState.botSpeed ?? 2) * 1000
-        pollTimeout = setTimeout(() => {
-            if (_pollActive) tick()
-        }, delay)
-    }
-
-    // React to bot speed changes during active polling
-    let _lastBotSpeed = $state(headerState.botSpeed)
-    $effect(() => {
-        const current = headerState.botSpeed
-        if (_pollActive && current !== _lastBotSpeed) {
-            _lastBotSpeed = current
-            stopPolling()
-            _pollActive = true
-            tick()
-        }
-        _lastBotSpeed = current
-    })
 
     async function onlineRaiseBet(bs: number, suit: string) {
         if (!isOnline || !roomId || !onlineToken) return
@@ -274,24 +212,6 @@
         }
     }
 
-    /** Re-sync game state from the backend to avoid acting on stale data. */
-    async function syncState() {
-        try {
-            const res = await fetch(`${API_URL}/room/${roomId}/state`, {
-                headers: { "X-Session-Token": onlineToken },
-            })
-            if (res.ok) {
-                const data = await res.json()
-                const betWinnerIdx = data.betWinner ?? undefined
-                const updated = apiStateToGame(data, roomId, betWinnerIdx)
-                fixupPlayerDisplay(updated)
-                game = updated
-            }
-        } catch (e) {
-            console.error("Sync error:", e)
-        }
-    }
-
     /** Fix up player display: ensure IsBot is correct without overwriting real names. */
     function fixupPlayerDisplay(g: any) {
         if (!g.Players) return
@@ -299,11 +219,6 @@
             g.Players[i].IsBot = i !== humanSeat
         }
     }
-
-    // Cleanup polling on component destroy
-    $effect(() => {
-        return () => stopPolling()
-    })
 
     // Utility: get a player's display name from their ID
     function playerName(playerId: number): string {
@@ -420,11 +335,6 @@
                 const updated = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
                 fixupPlayerDisplay(updated)
                 game = updated
-                // Start polling if it's now a bot's turn
-                if (updated.WhoseTurn !== humanPlayerId && updated.Winner === "") {
-                    _pollActive = false  // reset so startPolling doesn't bail
-                    startPolling()
-                }
             }
         })
 
