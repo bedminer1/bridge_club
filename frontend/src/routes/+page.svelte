@@ -183,6 +183,15 @@
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
+            // Register WS game:state listener for realtime updates
+            // (the WS lobby event listeners don't fire since lobby uses HTTP)
+            const unsubGame = wsClient.on("game:state", (data) => {
+                if (data.roomId === roomId) {
+                    const updated = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
+                    fixupPlayerDisplay(updated)
+                    game = updated
+                }
+            })
         } catch (e) {
             console.error("Failed to load existing room:", e)
             try { localStorage.removeItem("bridgeActiveRoom") } catch {}
@@ -256,17 +265,11 @@
 
     async function onlineRaiseBet(bs: number, suit: string) {
         if (!isOnline || !roomId || !onlineToken) return
-        // Sync state first
-        await syncState()
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
-            const updated = await doBid(roomId, onlineToken, call)
-            fixupPlayerDisplay(updated)
-            game = updated
-            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
-                startPolling()
-            }
+            wsClient.gameAction("bid", call)
+            // The WS game:state listener will update the game state
         } catch (e) {
             console.error("Online raise failed:", e)
         }
@@ -274,15 +277,9 @@
 
     async function onlinePassBet() {
         if (!isOnline || !roomId || !onlineToken) return
-        await syncState()
         if (game.WhoseTurn !== humanPlayerId) return
         try {
-            const updated = await doBid(roomId, onlineToken, "Pass")
-            fixupPlayerDisplay(updated)
-            game = updated
-            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
-                startPolling()
-            }
+            wsClient.gameAction("bid", "Pass")
         } catch (e) {
             console.error("Online pass failed:", e)
         }
@@ -290,15 +287,9 @@
 
     async function onlineSelectPartner(card: any) {
         if (!isOnline || !roomId || !onlineToken) return
-        await syncState()
         if (game.WhoseTurn !== humanPlayerId) return
         try {
-            const updated = await doSelectPartner(roomId, onlineToken, card)
-            fixupPlayerDisplay(updated)
-            game = updated
-            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
-                startPolling()
-            }
+            wsClient.gameAction("selectPartner", undefined, card)
         } catch (e) {
             console.error("Online partner select failed:", e)
         }
@@ -306,15 +297,9 @@
 
     async function onlinePlayCard(card: any, _player: any) {
         if (!isOnline || !roomId || !onlineToken) return
-        await syncState()
         if (game.WhoseTurn !== humanPlayerId) return
         try {
-            const updated = await doPlay(roomId, onlineToken, card)
-            fixupPlayerDisplay(updated)
-            game = updated
-            if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
-                startPolling()
-            }
+            wsClient.gameAction("play", undefined, card)
         } catch (e) {
             console.error("Online play failed:", e)
         }

@@ -191,6 +191,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                 let _ = sender.send(Message::Text(err_json.into())).await;
                             }
                         }
+                        // Subscribe to broadcast channel when entering a room
+                        if broadcast_rx.is_none() {
+                            if let Some(room_id) = conn.current_room {
+                                broadcast_rx = state
+                                    .room_broadcast
+                                    .read()
+                                    .await
+                                    .get(&room_id)
+                                    .map(|tx| tx.subscribe());
+                            }
+                        }
                     }
                     Some(Ok(Message::Close(_))) | None => break,
                     _ => {}
