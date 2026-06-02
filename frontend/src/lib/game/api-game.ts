@@ -476,58 +476,7 @@ export async function getRoomState(roomId: string, token: string): Promise<Game>
 
 // ── Action Helpers ─────────────────────────────────────────────────
 
-/** Call value types for the API action endpoint. */
-type ApiCall = "Pass" | { Bid: { level: number; strain: string } } | { Double: Record<string, never> } | { Redouble: Record<string, never> }
-
-/** API card format. */
-interface ApiCard {
-    suit: string
-    rank: string
-}
-
-/**
- * Sends a bid action to the backend.
- *
- * @param roomId - The game room ID
- * @param token - Session token
- * @param call - "Pass" or a bid object with level and strain
- * @returns Updated Game state
- */
-export async function doBid(roomId: string, token: string, call: ApiCall): Promise<Game> {
-    return doAction(roomId, token, { type: "bid", call })
-}
-
-/**
- * Sends a play action to the backend.
- *
- * @param roomId - The game room ID
- * @param token - Session token
- * @param card - The card to play (frontend Card type)
- * @returns Updated Game state
- */
-export async function doPlay(roomId: string, token: string, card: Card): Promise<Game> {
-    const apiCard: ApiCard = {
-        suit: FRONTEND_SUIT_TO_API[card.Suit] ?? card.Suit,
-        rank: VALUE_TO_API_RANK[card.Value] ?? "Two",
-    }
-    return doAction(roomId, token, { type: "play", card: apiCard })
-}
-
-/**
- * Sends a partner selection action to the backend.
- *
- * @param roomId - The game room ID
- * @param token - Session token
- * @param card - The chosen partner card
- * @returns Updated Game state
- */
-export async function doSelectPartner(roomId: string, token: string, card: Card): Promise<Game> {
-    const apiCard: ApiCard = {
-        suit: FRONTEND_SUIT_TO_API[card.Suit] ?? card.Suit,
-        rank: VALUE_TO_API_RANK[card.Value] ?? "Two",
-    }
-    return doAction(roomId, token, { type: "selectPartner", card: apiCard })
-}
+// ── Advance ────────────────────────────────────────────────────────
 
 /**
  * Advances exactly one bot turn on the backend.
@@ -556,43 +505,5 @@ export async function doAdvance(roomId: string, token: string): Promise<Game> {
     }
 
     const betWinnerIdx = data.state.betWinner ?? undefined
-    return apiStateToGame(data.state, roomId, betWinnerIdx)
-}
-
-// ── Core Action ────────────────────────────────────────────────────
-
-interface ActionPayload {
-    type: "bid" | "play" | "selectPartner"
-    call?: ApiCall
-    card?: ApiCard
-}
-
-async function doAction(roomId: string, token: string, payload: ActionPayload): Promise<Game> {
-    const body: Record<string, unknown> = { type: payload.type }
-    if (payload.call !== undefined) body.call = payload.call
-    if (payload.card !== undefined) body.card = payload.card
-
-    const res = await fetch(`${API_URL}/api/game/${roomId}/action`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-Session-Token": token,
-        },
-        body: JSON.stringify(body),
-    })
-
-    if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        throw new Error(`Action failed: ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`)
-    }
-
-    const data: ApiActionResponse = await res.json()
-    if (!data.ok || !data.state) {
-        throw new Error(`API action returned error: ${JSON.stringify(data)}`)
-    }
-
-    // Extract betWinner from state for mapping
-    const betWinnerIdx = data.state.betWinner ?? undefined
-
     return apiStateToGame(data.state, roomId, betWinnerIdx)
 }

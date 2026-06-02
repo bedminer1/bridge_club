@@ -11,19 +11,10 @@ use uuid::Uuid;
 use crate::auth;
 use crate::bot::BotDifficulty;
 use crate::db::{DbPool, MatchRow, UserRow};
-use crate::game_session::{self, HumanAction};
+use crate::game_session;
 use crate::session::AppState;
-use game_core::Call;
 
 // ── Request / Response types ──────────────────────────────────────────────
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateRoomResponse {
-    pub room_id: Uuid,
-    pub player_id: Uuid,
-    pub seat_index: usize,
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,26 +32,6 @@ pub struct RoomPlayerInfo {
     pub name: String,
     pub seat_index: usize,
     pub is_bot: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JoinRoomResponse {
-    pub player_id: Uuid,
-    pub seat_index: usize,
-    pub room_id: Uuid,
-}
-
-#[derive(Deserialize)]
-pub struct MakeCallRequest {
-    pub player_id: Uuid,
-    pub call: Call,
-}
-
-#[derive(Deserialize)]
-pub struct SelectPartnerRequest {
-    pub player_id: Uuid,
-    pub card: game_core::Card,
 }
 
 #[derive(Debug, Serialize)]
@@ -226,15 +197,6 @@ pub struct NewGameResponse {
     pub error: Option<String>,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GameActionRequest {
-    #[serde(rename = "type")]
-    pub action_type: String, // "bid", "play", "selectPartner"
-    pub call: Option<Call>,
-    pub card: Option<game_core::Card>,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameActionResponse {
@@ -322,18 +284,9 @@ async fn require_user(
 pub fn routes(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { "Bridge Club API v0.1" }))
-        // Game room routes
-        .route("/api/rooms", post(create_room))
-        .route("/api/rooms/{room_id}/join", post(join_room))
-        .route("/api/rooms/{room_id}/hidden-mode", post(set_hidden_mode))
-        .route("/api/rooms/{room_id}/chat", get(get_chat).post(send_chat))
-        .route("/api/rooms/{room_id}/leave/{player_id}", post(leave_room))
-        .route("/api/rooms/{room_id}/start", post(start_game))
+        // Room info & state routes
         .route("/api/rooms/{room_id}/info", get(get_room_info))
         .route("/room/{room_id}/state", get(get_table_state))
-        .route("/room/{room_id}/call", post(make_call))
-        .route("/room/{room_id}/select-partner", post(select_partner))
-        .route("/room/{room_id}/play/{player_id}", post(play_card))
         // Auth routes
         .route("/api/auth/signup", post(signup))
         .route("/api/auth/login", post(login))
@@ -347,7 +300,6 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/deploy", post(deploy_webhook))
         // Single-player game routes
         .route("/api/game/new", post(create_single_player_game))
-        .route("/api/game/{room_id}/action", post(single_player_action))
         .route("/api/game/{room_id}/advance", post(advance_game))
         .with_state(state)
 }
@@ -1145,270 +1097,6 @@ async fn get_leaderboard(
 
 // ── Game Room Handlers ────────────────────────────────────────────────────
 
-async fn create_room(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    // Auth check
-    let user = match require_user(&state.db, &headers, None).await {
-        Ok(u) => u,
-        Err((status, json)) => return (
-            status,
-            Json(CreateRoomResponse {
-                room_id: Uuid::nil(),
-                player_id: Uuid::nil(),
-                seat_index: 0,
-            }),
-        ),
-    };
-
-    let mut room = crate::session::GameRoom::new();
-    let room_id = room.room_id;
-
-    // Auto-join the creating player using auth username
-    let (player_id, seat_index) = match room.add_player(&user.username) {
-        Ok((pid, si)) => (pid, si),
-        Err(e) => return (
-            StatusCode::BAD_REQUEST,
-            Json(CreateRoomResponse {
-                room_id,
-                player_id: Uuid::nil(),
-                seat_index: 0,
-            }),
-        ),
-    };
-
-    let mut rooms = state.rooms.write().await;
-    rooms.insert(room_id, room);
-
-    tracing::info!("Created room {} with player '{}' at seat {}", room_id, user.username, seat_index);
-    (StatusCode::CREATED, Json(CreateRoomResponse { room_id, player_id, seat_index }))
-}
-
-async fn join_room(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(room_id): Path<Uuid>,
-) -> impl IntoResponse {
-    // Auth check
-    let user = match require_user(&state.db, &headers, None).await {
-        Ok(u) => u,
-        Err((status, json)) => return (
-            status,
-            Json(JoinRoomResponse {
-                player_id: Uuid::nil(),
-                seat_index: 0,
-                room_id,
-            }),
-        ),
-    };
-
-    let mut rooms = state.rooms.write().await;
-    let room = match rooms.get_mut(&room_id) {
-        Some(r) => r,
-        None => return (StatusCode::NOT_FOUND, Json(JoinRoomResponse {
-            player_id: Uuid::nil(),
-            seat_index: 0,
-            room_id,
-        })),
-    };
-
-    match room.add_player(&user.username) {
-        Ok((player_id, seat_index)) => {
-            tracing::info!(
-                "Player '{}' joined room {} as seat {}",
-                user.username, room_id, seat_index
-            );
-            (StatusCode::OK, Json(JoinRoomResponse { player_id, seat_index, room_id }))
-        }
-        Err(e) => {
-            tracing::warn!("Failed to join room {}: {}", room_id, e);
-            (StatusCode::BAD_REQUEST, Json(JoinRoomResponse {
-                player_id: Uuid::nil(),
-                seat_index: 0,
-                room_id,
-            }))
-        }
-    }
-}
-
-async fn set_hidden_mode(
-    State(state): State<AppState>,
-    Path(room_id): Path<Uuid>,
-    Json(payload): Json<serde_json::Value>,
-) -> impl IntoResponse {
-    let enabled = payload.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    let player_id = payload.get("playerId").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
-
-    let rooms = state.rooms.read().await;
-    let room = match rooms.get(&room_id) {
-        Some(r) => r,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Room not found"}))),
-    };
-
-    // Only the host (first player to join) can toggle hidden mode
-    let is_host = match (&player_id, room.sessions.iter().min_by_key(|(_, s)| s.seat_index)) {
-        (Some(pid), Some((host_id, _))) => *pid == *host_id,
-        _ => false,
-    };
-
-    if !is_host {
-        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "Only the host can toggle hidden mode"})));
-    }
-
-    drop(rooms);
-    let mut rooms = state.rooms.write().await;
-    if let Some(room) = rooms.get_mut(&room_id) {
-        room.hidden_mode = enabled;
-    }
-
-    (StatusCode::OK, Json(serde_json::json!({"ok": true, "hiddenMode": enabled})))
-}
-
-
-async fn send_chat(
-    State(state): State<AppState>,
-    Path(room_id): Path<Uuid>,
-    Json(payload): Json<serde_json::Value>,
-) -> impl IntoResponse {
-    let player_id = payload.get("playerId").and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
-    let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    if text.trim().is_empty() || text.len() > 500 {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"ok": false, "error": "Invalid message"})));
-    }
-
-    let rooms = state.rooms.read().await;
-    let room = match rooms.get(&room_id) {
-        Some(r) => r,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Room not found"}))),
-    };
-
-    // Find the player's name from their session
-    let player_name = player_id.and_then(|pid| room.sessions.get(&pid)).map(|s| s.player_name.clone()).unwrap_or_default();
-    if player_name.is_empty() {
-        return (StatusCode::FORBIDDEN, Json(serde_json::json!({"ok": false, "error": "Not in this room"})));
-    }
-
-    drop(rooms);
-    let mut rooms = state.rooms.write().await;
-    let msg = if let Some(room) = rooms.get_mut(&room_id) {
-        room.add_message(&player_name, &text)
-    } else {
-        return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Room not found"})));
-    };
-
-    (StatusCode::OK, Json(serde_json::json!({"ok": true, "message": msg})))
-}
-
-/// GET /api/rooms/{room_id}/chat?after=0
-async fn get_chat(
-    State(state): State<AppState>,
-    Path(room_id): Path<Uuid>,
-    Query(params): Query<std::collections::HashMap<String, String>>,
-) -> impl IntoResponse {
-    let after = params.get("after").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
-
-    let rooms = state.rooms.read().await;
-    let room = match rooms.get(&room_id) {
-        Some(r) => r,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "messages": []}))),
-    };
-
-    let messages: Vec<&crate::session::ChatMessage> = room.messages.iter().filter(|m| m.id > after).collect();
-    (StatusCode::OK, Json(serde_json::json!({"ok": true, "messages": messages})))
-}
-
-async fn leave_room(
-    State(state): State<AppState>,
-    Path((room_id, player_id)): Path<(Uuid, Uuid)>,
-) -> impl IntoResponse {
-    let mut rooms = state.rooms.write().await;
-    let room = match rooms.get_mut(&room_id) {
-        Some(r) => r,
-        None => return StatusCode::NOT_FOUND,
-    };
-
-    room.remove_player(player_id);
-
-    // Clean up empty rooms
-    if room.player_count() == 0 {
-        rooms.remove(&room_id);
-        tracing::info!("Removed empty room {}", room_id);
-    }
-
-    StatusCode::OK
-}
-
-async fn start_game(
-    State(state): State<AppState>,
-    Path(room_id): Path<Uuid>,
-    payload: Option<Json<serde_json::Value>>,
-) -> impl IntoResponse {
-    let difficulty_str = payload
-        .as_ref()
-        .and_then(|p| p.get("difficulty"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("easy");
-    let difficulty = match difficulty_str.to_lowercase().as_str() {
-        "easy" => BotDifficulty::Easy,
-        "medium" => BotDifficulty::Medium,
-        _ => BotDifficulty::Easy,
-    };
-    let mut rooms = state.rooms.write().await;
-    let room = match rooms.get_mut(&room_id) {
-        Some(r) => r,
-        None => return (StatusCode::NOT_FOUND, Json(NewGameResponse {
-            ok: false,
-            room_id: None,
-            state: None,
-            error: Some("Room not found".to_string()),
-        })),
-    };
-
-    let connected_count = room.sessions.len();
-    if connected_count == 0 {
-        return (StatusCode::BAD_REQUEST, Json(NewGameResponse {
-            ok: false,
-            room_id: None,
-            state: None,
-            error: Some("No players in room".to_string()),
-        }));
-    }
-
-    // Fill empty seats with bots
-    let bot_names = ["Bot-Alpha", "Bot-Beta", "Bot-Gamma"];
-    let mut bot_idx = 0;
-    for seat in 0..4 {
-        let has_player = room.sessions.values().any(|s| s.seat_index == seat);
-        if !has_player && bot_idx < bot_names.len() {
-            let name = bot_names[bot_idx];
-            bot_idx += 1;
-            // Set bot name on the table
-            room.table.players[seat].name = name.to_string();
-            // Add a pseudo-session for the bot (no auth, marked by "Bot-" prefix)
-            // The advance endpoint checks for "Bot-" prefix to identify bots
-        }
-    }
-
-    // Deal cards
-    room.table.deal();
-    room.difficulty = difficulty;
-    room.is_started = true;
-
-    // Process initial bot turns (bidding starts with P1)
-    // P1 (index 0) always starts bidding — if P1 is human, no initial bot actions
-    // The advance endpoint handles bot turns after human actions
-
-    let state_resp = build_table_state(&room.table);
-    tracing::info!("Game started in room {} ({} human players + {} bots)", room_id, connected_count, 4 - connected_count);
-    (StatusCode::OK, Json(NewGameResponse {
-        ok: true,
-        room_id: Some(room_id),
-        state: Some(state_resp),
-        error: None,
-    }))
-}
-
 /// GET /room/{id}/info — lobby info (players, phase, etc.)
 async fn get_room_info(
     State(state): State<AppState>,
@@ -1481,81 +1169,6 @@ async fn get_table_state(
         StatusCode::OK,
         Json(build_table_state(&room.table)),
     )
-}
-
-async fn make_call(
-    State(state): State<AppState>,
-    Path(room_id): Path<Uuid>,
-    Json(payload): Json<MakeCallRequest>,
-) -> impl IntoResponse {
-    let mut rooms = state.rooms.write().await;
-    let room = match rooms.get_mut(&room_id) {
-        Some(r) => r,
-        None => return StatusCode::NOT_FOUND,
-    };
-
-    // Verify player is in this room
-    if !room.sessions.contains_key(&payload.player_id) {
-        return StatusCode::FORBIDDEN;
-    }
-
-    match room.table.make_call(payload.call) {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            tracing::warn!("Call rejected in room {}: {}", room_id, e);
-            StatusCode::BAD_REQUEST
-        }
-    }
-}
-
-async fn select_partner(
-    State(state): State<AppState>,
-    Path(room_id): Path<Uuid>,
-    Json(payload): Json<SelectPartnerRequest>,
-) -> impl IntoResponse {
-    let mut rooms = state.rooms.write().await;
-    let room = match rooms.get_mut(&room_id) {
-        Some(r) => r,
-        None => return StatusCode::NOT_FOUND,
-    };
-
-    // Verify player is in this room
-    if !room.sessions.contains_key(&payload.player_id) {
-        return StatusCode::FORBIDDEN;
-    }
-
-    match room.table.select_partner(payload.card) {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            tracing::warn!("Partner selection rejected in room {}: {}", room_id, e);
-            StatusCode::BAD_REQUEST
-        }
-    }
-}
-
-async fn play_card(
-    State(state): State<AppState>,
-    Path((room_id, player_id)): Path<(Uuid, Uuid)>,
-    Json(card): Json<game_core::Card>,
-) -> impl IntoResponse {
-    let mut rooms = state.rooms.write().await;
-    let room = match rooms.get_mut(&room_id) {
-        Some(r) => r,
-        None => return StatusCode::NOT_FOUND,
-    };
-
-    // Verify the player is in this room
-    if !room.sessions.contains_key(&player_id) {
-        return StatusCode::FORBIDDEN;
-    }
-
-    match room.table.play_card(card) {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            tracing::warn!("Card play rejected in room {}: {}", room_id, e);
-            StatusCode::BAD_REQUEST
-        }
-    }
 }
 
 // ── Helper: build TableStateResponse from a Table ─────────────────────────
@@ -1716,163 +1329,6 @@ async fn create_single_player_game(
             error: None,
         }),
     )
-}
-
-async fn single_player_action(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(room_id): Path<Uuid>,
-    Json(payload): Json<GameActionRequest>,
-) -> impl IntoResponse {
-    // Auth check
-    let user = match require_user(&state.db, &headers, None).await {
-        Ok(u) => u,
-        Err((status, json)) => {
-            return (
-                status,
-                Json(GameActionResponse {
-                    ok: false,
-                    state: None,
-                    error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
-                }),
-            );
-        }
-    };
-
-    // Find the room
-    let mut rooms = state.rooms.write().await;
-    let room = match rooms.get_mut(&room_id) {
-        Some(r) => r,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(GameActionResponse {
-                    ok: false,
-                    state: None,
-                    error: Some("Room not found".to_string()),
-                }),
-            );
-        }
-    };
-
-    // Determine the human seat index and difficulty.
-    // For single-player rooms, we need to find the human player.
-    // The human is the one whose name matches the authenticated user.
-    let human_seat = match room
-        .sessions
-        .values()
-        .find(|s| s.player_name == user.username)
-    {
-        Some(session) => session.seat_index,
-        None => {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(GameActionResponse {
-                    ok: false,
-                    state: None,
-                    error: Some("You are not a player in this room".to_string()),
-                }),
-            );
-        }
-    };
-
-    // Build the human action from the request
-    let human_action = match payload.action_type.as_str() {
-        "bid" => {
-            let call = match payload.call {
-                Some(c) => c,
-                None => {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(GameActionResponse {
-                            ok: false,
-                            state: None,
-                            error: Some("Missing 'call' field for bid action".to_string()),
-                        }),
-                    );
-                }
-            };
-            HumanAction::Call(call)
-        }
-        "play" => {
-            let card = match payload.card {
-                Some(c) => c,
-                None => {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(GameActionResponse {
-                            ok: false,
-                            state: None,
-                            error: Some("Missing 'card' field for play action".to_string()),
-                        }),
-                    );
-                }
-            };
-            HumanAction::PlayCard(card)
-        }
-        "selectPartner" => {
-            let card = match payload.card {
-                Some(c) => c,
-                None => {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(GameActionResponse {
-                            ok: false,
-                            state: None,
-                            error: Some(
-                                "Missing 'card' field for selectPartner action".to_string(),
-                            ),
-                        }),
-                    );
-                }
-            };
-            HumanAction::SelectPartner(card)
-        }
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(GameActionResponse {
-                    ok: false,
-                    state: None,
-                    error: Some(format!(
-                        "Unknown action type '{}'. Use 'bid', 'play', or 'selectPartner'",
-                        payload.action_type
-                    )),
-                }),
-            );
-        }
-    };
-
-    // Apply the human move and process bot turns.
-    // Use the room's stored difficulty (set when the game was created or started).
-    let difficulty = room.difficulty;
-
-    match game_session::action_human_move(
-        &mut room.table,
-        human_seat,
-        &human_action,
-        difficulty,
-    ) {
-        Ok(()) => {
-            let state_resp = build_table_state(&room.table);
-            (
-                StatusCode::OK,
-                Json(GameActionResponse {
-                    ok: true,
-                    state: Some(state_resp),
-                    error: None,
-                }),
-            )
-        }
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(GameActionResponse {
-                ok: false,
-                state: None,
-                error: Some(e.to_string()),
-            }),
-        ),
-    }
 }
 
 // ── Advance bot turn endpoint ─────────────────────────────────────────────
