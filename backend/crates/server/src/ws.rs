@@ -171,6 +171,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             msg = receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        tracing::info!(raw_msg = %text, "WS received text message");
                         let response = handle_client_message(&text, &mut conn, &state).await;
                         match response {
                             Ok(resp) => {
