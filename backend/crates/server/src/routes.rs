@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth;
 use crate::bot::BotDifficulty;
-use crate::db::{DbPool, MatchRow, UserRow};
+use crate::db::{DbPool, MatchRowLight, UserRow};
 use crate::game_session;
 use crate::session::AppState;
 
@@ -145,7 +145,7 @@ pub struct SaveMatchRequest {
 pub struct MatchesResponse {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub matches: Option<Vec<MatchRow>>,
+    pub matches: Option<Vec<MatchRowLight>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -673,14 +673,15 @@ async fn get_matches(
 
     let mut rows = match conn
         .query(
-            "SELECT id, user_id, date, bot_difficulty, trump_suit, bet_size, bet_winner, \
-             partner, won_match, bet_winner_user_id, partner_user_id, winning_team, \
-             player1_sets, player2_sets, player3_sets, player4_sets, \
-             player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int, elo_change \
-             FROM matches WHERE (players_int & 0xFF) = ?1 \
-             OR ((players_int >> 8) & 0xFF) = ?1 \
-             OR ((players_int >> 16) & 0xFF) = ?1 \
-             OR ((players_int >> 24) & 0xFF) = ?1 ORDER BY date DESC",
+            "SELECT m.id, m.date, m.bot_difficulty, m.trump_suit, m.bet_size, \
+             m.bet_winner_user_id, m.partner_user_id, m.winning_team, \
+             m.won_match, \
+             m.player1_sets, m.player2_sets, m.player3_sets, m.player4_sets, \
+             m.players, m.elo_change \
+             FROM matches m \
+             JOIN match_participants mp ON m.id = mp.match_id \
+             WHERE mp.user_id = ?1 \
+             ORDER BY m.date DESC",
             libsql::params![user.id],
         )
         .await
@@ -703,32 +704,22 @@ async fn get_matches(
     loop {
         match rows.next().await {
             Ok(Some(row)) => {
-                matches.push(MatchRow {
+                matches.push(MatchRowLight {
                     id: row.get::<i64>(0).unwrap_or(0),
-                    user_id: row.get::<i64>(1).unwrap_or(0),
-                    date: row.get::<i64>(2).unwrap_or(0),
-                    bot_difficulty: row.get::<String>(3).unwrap_or_default(),
-                    trump_suit: row.get::<String>(4).unwrap_or_default(),
-                    bet_size: row.get::<i64>(5).unwrap_or(0),
-                    bet_winner: row.get::<i64>(6).unwrap_or(0),
-                    partner: row.get::<Option<i64>>(7).unwrap_or(None),
+                    date: row.get::<i64>(1).unwrap_or(0),
+                    bot_difficulty: row.get::<String>(2).unwrap_or_default(),
+                    trump_suit: row.get::<String>(3).unwrap_or_default(),
+                    bet_size: row.get::<i64>(4).unwrap_or(0),
+                    bet_winner_user_id: row.get::<i64>(5).unwrap_or(0),
+                    partner_user_id: row.get::<i64>(6).unwrap_or(0),
+                    winning_team: row.get::<i64>(7).unwrap_or(1),
                     won_match: row.get::<Option<i64>>(8).unwrap_or(None),
-                    bet_winner_user_id: row.get::<i64>(9).unwrap_or(0),
-                    partner_user_id: row.get::<i64>(10).unwrap_or(0),
-                    winning_team: row.get::<i64>(11).unwrap_or(1),
-                    player1_sets: row.get::<i64>(12).unwrap_or(0),
-                    player2_sets: row.get::<i64>(13).unwrap_or(0),
-                    player3_sets: row.get::<i64>(14).unwrap_or(0),
-                    player4_sets: row.get::<i64>(15).unwrap_or(0),
-                    player1_hand: row.get::<String>(16).unwrap_or_default(),
-                    player2_hand: row.get::<String>(17).unwrap_or_default(),
-                    player3_hand: row.get::<String>(18).unwrap_or_default(),
-                    player4_hand: row.get::<String>(19).unwrap_or_default(),
-                    sets_data: row.get::<Option<String>>(20).unwrap_or(None),
-                    players: row.get::<Option<String>>(21).unwrap_or(None),
-                    room_id: row.get::<Option<String>>(22).unwrap_or(None),
-                    players_int: row.get::<i64>(23).unwrap_or(0),
-                    elo_change: row.get::<i64>(24).unwrap_or(0),
+                    player1_sets: row.get::<i64>(9).unwrap_or(0),
+                    player2_sets: row.get::<i64>(10).unwrap_or(0),
+                    player3_sets: row.get::<i64>(11).unwrap_or(0),
+                    player4_sets: row.get::<i64>(12).unwrap_or(0),
+                    players: row.get::<Option<String>>(13).unwrap_or(None),
+                    elo_change: row.get::<i64>(14).unwrap_or(0),
                 });
             }
             Ok(None) => break,
@@ -915,6 +906,17 @@ async fn save_match(
                  WHERE id = ?4",
                 libsql::params![won, total_sets, max_sets, user.id],
             ).await;
+
+            // Populate match_participants for all 4 player seats
+            let inserted_id = conn.last_insert_rowid();
+            for (seat, &pid) in player_ids.iter().enumerate() {
+                if pid > 0 {
+                    let _ = conn.execute(
+                        "INSERT OR IGNORE INTO match_participants (match_id, user_id, seat_index) VALUES (?1, ?2, ?3)",
+                        libsql::params![inserted_id, pid, seat as i64],
+                    ).await;
+                }
+            }
 
             // ── Elo computation ───────────────────────────────────────────────
             tracing::info!(

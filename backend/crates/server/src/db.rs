@@ -105,6 +105,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id     INTEGER NOT NULL REFERENCES users(id),
     expires_at  INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS match_participants (
+    match_id    INTEGER NOT NULL REFERENCES matches(id),
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    seat_index  INTEGER NOT NULL,
+    PRIMARY KEY (match_id, user_id)
+);
 ";
 
 pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
@@ -136,6 +143,11 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
     let _ = conn.execute(
         "INSERT OR IGNORE INTO users (id, username, password, games_played, games_won, total_sets_won, most_sets_won, elo) VALUES (?1, ?2, '', 0, 0, 0, 0, 500)",
         libsql::params![3i64, "Bot-Gamma"],
+    ).await;
+
+    // Create match_participants join table for indexed user->match lookups
+    let _ = conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS match_participants (\n         match_id INTEGER NOT NULL REFERENCES matches(id),\n         user_id INTEGER NOT NULL REFERENCES users(id),\n         seat_index INTEGER NOT NULL,\n         PRIMARY KEY (match_id, user_id)\n         );\n         CREATE INDEX IF NOT EXISTS idx_match_participants_user_id ON match_participants(user_id);\n         "
     ).await;
 
     tracing::info!("Database schema up to date");
@@ -195,6 +207,28 @@ pub struct MatchRow {
     pub players: Option<String>,
     pub players_int: i64,
     pub room_id: Option<String>,
+    pub elo_change: i64,
+}
+
+/// Lightweight match row without hand/sets blobs — used for match list queries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchRowLight {
+    pub id: i64,
+    pub date: i64,
+    pub bot_difficulty: String,
+    pub trump_suit: String,
+    pub bet_size: i64,
+    pub bet_winner_user_id: i64,
+    pub partner_user_id: i64,
+    pub winning_team: i64,
+    pub won_match: Option<i64>,
+    pub player1_sets: i64,
+    pub player2_sets: i64,
+    pub player3_sets: i64,
+    pub player4_sets: i64,
+    pub players: Option<String>,
     pub elo_change: i64,
 }
 

@@ -31,23 +31,12 @@ export async function load({ cookies }) {
     })
     const matchesData = await matchesRes.json()
 
-    // Fetch leaderboard to compute rank
-    let rank = 0
-    try {
-        const lbRes = await fetch(`${API_URL}/api/leaderboard`)
-        const lbData = await lbRes.json()
-        if (lbData.ok && lbData.entries) {
-            const idx = lbData.entries.findIndex((e: any) => e.id === sessionData.user?.id)
-            if (idx !== -1) rank = idx + 1
-        }
-    } catch {}
-
     return {
         matchRecords: matchesData.matches || [],
         message: "success",
         username: sessionData.user?.username || "",
         userID: sessionData.user?.id ?? 0,
-        rank,
+        rank: 0,
         userStats: sessionData.user ? {
             gamesPlayed: sessionData.user.gamesPlayed,
             gamesWon: sessionData.user.gamesWon,

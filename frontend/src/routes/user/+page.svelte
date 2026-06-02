@@ -1,7 +1,5 @@
 <script lang="ts">
     import ScoreDisplay from "./ScoreDisplay.svelte";
-    import HandDisplay from "$lib/components/hand-display.svelte";
-    import PokerCard from "$lib/components/poker-card.svelte";
     import * as Card from "$lib/components/ui/card/index"
     import { formatDate } from "$lib/utils";
     import { Separator } from "$lib/components/ui/separator/index.js";
@@ -146,13 +144,6 @@
                                                 <span>|</span>
                                                 <span class="{matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">{matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange}</span>
                                             {/if}
-                                        </div>
-                                        <div class="flex ml-4">
-                                            {#each JSON.parse(matchRecord.player1Hand) as card, index}
-                                                <HandDisplay {index}>
-                                                    <PokerCard card={card} isIllegal={false} minify={true} />
-                                                </HandDisplay>
-                                            {/each}
                                         </div>
                                     </div>
 
