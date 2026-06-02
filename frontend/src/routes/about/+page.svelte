@@ -1,23 +1,100 @@
 <script lang="ts">
     import { Gamepad2, Crown, Github } from "@lucide/svelte"
+    import { suitToSymbol } from "$lib/utils"
+
+    const suits = { c: "Club", d: "Diamond", h: "Heart", s: "Spades" }
 </script>
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
     <h1 class="text-2xl font-bold mb-2">Bridge Club</h1>
     <p class="text-sm text-muted-foreground mb-8">Singapore Bridge — Hidden Mode Only — Elo ranked</p>
 
-    <div class="w-full max-w-md flex flex-col gap-4 text-sm">
+    <div class="w-full max-w-lg flex flex-col gap-4 text-sm">
+        <!-- How to Play -->
         <div class="rounded-lg border border-border bg-card p-4">
-            <h2 class="font-semibold mb-2">How to Play</h2>
-            <ul class="space-y-2 text-muted-foreground">
-                <li><span class="text-accent">Betting</span> — each player bids once, starting left of dealer. Bid how many tricks (sets) your team can take, paired with a trump suit. Higher suit rank (♣&lt;♦&lt;♥&lt;♠) breaks equal-level bids. Pass if you don't want to raise. The highest bidder wins the contract.</li>
-                <li><span class="text-accent">Partner</span> — the bet winner picks a card from the remaining deck. The player who holds that card becomes their partner for the round. The two partners form Team 1; the other two form Team 2.</li>
-                <li><span class="text-accent">Play</span> — the player left of the dealer leads the first trick. Follow suit if you can; otherwise play anything. Trump cannot be led until it has been played on a trick (broken). If void in the led suit, you may play trump even before it's been broken.</li>
-                <li><span class="text-accent">Scoring</span> — a trick is won by the highest card of the led suit, or by the highest trump if any. Team 1 wins if they take 6 + bet_size tricks; Team 2 wins if they take 14 &minus; bet_size tricks.</li>
-                <li><span class="text-accent">Elo</span> — rated matches use team-average Elo with K=32. Hidden Mode Only games count; Open games are for practice (no rating change).</li>
-            </ul>
+            <h2 class="font-semibold mb-3">How to Play</h2>
+
+            <!-- Sets -->
+            <div class="mb-3">
+                <h3 class="text-accent font-medium mb-1">{suitToSymbol.get('Spades')} Sets</h3>
+                <p class="text-muted-foreground text-xs leading-relaxed">
+                    4 players each play one card. The <strong class="text-foreground">highest card of the led suit</strong> wins the set.
+                    The winner leads the next set. Play 13 sets per round.
+                </p>
+                <div class="flex gap-2 items-center mt-2 text-[11px]">
+                    <span class="rounded border border-border px-1.5 py-0.5 bg-card">K{suitToSymbol.get('Spades')} led</span>
+                    <span class="text-muted-foreground">&rarr;</span>
+                    <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">2{suitToSymbol.get('Heart')}</span>
+                    <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">3{suitToSymbol.get('Heart')}</span>
+                    <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">4{suitToSymbol.get('Heart')}</span>
+                    <span class="text-green text-xs ml-1">
+                        <Crown class="inline w-3 h-3" /> won
+                    </span>
+                </div>
+            </div>
+
+            <!-- Trump -->
+            <div class="mb-3">
+                <h3 class="text-accent font-medium mb-1">{suitToSymbol.get('Heart')} Trump Suit</h3>
+                <p class="text-muted-foreground text-xs leading-relaxed">
+                    A <strong class="text-foreground">trump suit</strong> is chosen before play begins.
+                    Trump <strong class="text-foreground">beats any card of any other suit</strong>.
+                    If you can't follow the led suit, you may play a trump to steal the set.
+                    Trump cannot be <strong class="text-foreground">led</strong> until it has been played on another suit first (<em class="text-muted-foreground">trump broken</em>).
+                    Exception: if you're <strong class="text-foreground">void</strong> in the led suit, you may lead trump even before it's broken.
+                </p>
+                <div class="flex gap-2 items-center mt-2 text-[11px]">
+                    <span class="rounded border border-border px-1.5 py-0.5 bg-card">A{suitToSymbol.get('Club')} led (♣)</span>
+                    <span class="text-muted-foreground">&rarr;</span>
+                    <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">K{suitToSymbol.get('Club')}</span>
+                    <span class="rounded border border-border px-1.5 py-0.5 bg-card opacity-60">Q{suitToSymbol.get('Club')}</span>
+                    <span class="rounded border border-b-2 border-red-500 px-1.5 py-0.5 bg-card font-bold">2{suitToSymbol.get('Heart')} <span class="text-red-500">trump!</span></span>
+                    <span class="text-green text-xs ml-1">
+                        <Crown class="inline w-3 h-3" /> won
+                    </span>
+                </div>
+            </div>
+
+            <!-- Bidding -->
+            <div class="mb-3">
+                <h3 class="text-accent font-medium mb-1">{suitToSymbol.get('Diamond')} Bidding</h3>
+                <p class="text-muted-foreground text-xs leading-relaxed">
+                    Each player bids once, starting <strong class="text-foreground">left of the dealer</strong>.
+                    A bid pairs a <strong class="text-foreground">set target</strong> (how many sets your team will take) with a
+                    <strong class="text-foreground">trump suit</strong>.
+                    To raise, you must bid higher sets <em>or</em> the same sets with a higher suit
+                    (<span class="tabular-nums">♣ &lt; ♦ &lt; ♥ &lt; ♠</span>).
+                    Pass if you don't want to bid. The <strong class="text-foreground">highest bid wins the betting phase</strong>
+                    — their chosen suit becomes trump for the round.
+                </p>
+            </div>
+
+            <!-- Partners -->
+            <div class="mb-3">
+                <h3 class="text-accent font-medium mb-1">{suitToSymbol.get('Club')} Partners</h3>
+                <p class="text-muted-foreground text-xs leading-relaxed">
+                    The bet winner selects a <strong class="text-foreground">partner card</strong>
+                    from the 39 cards they don't hold. The player who holds that card is their partner.
+                    The <strong class="text-foreground">two partners form Team 1</strong>;
+                    the other two players are Team 2.
+                </p>
+            </div>
+
+            <!-- Scoring -->
+            <div>
+                <h3 class="text-accent font-medium mb-1">{suitToSymbol.get('Spades')} Scoring</h3>
+                <p class="text-muted-foreground text-xs leading-relaxed">
+                    After all 13 sets, count who won how many:
+                </p>
+                <ul class="text-xs text-muted-foreground mt-1 space-y-0.5 ml-3 list-disc [&>li]:pl-1">
+                    <li><strong class="text-foreground">Team 1</strong> wins if they take <strong class="tabular-nums">6 + bid_size</strong> or more sets.</li>
+                    <li><strong class="text-foreground">Team 2</strong> wins if they take <strong class="tabular-nums">14 &minus; bid_size</strong> or more sets.</li>
+                    <li><strong class="text-foreground">Elo</strong> changes only in <strong class="text-accent">Hidden Mode Only</strong> games (K=32, team-average rating). Open games are practice &mdash; no rating change.</li>
+                </ul>
+            </div>
         </div>
 
+        <!-- About -->
         <div class="rounded-lg border border-border bg-card p-4">
             <h2 class="font-semibold mb-2">About</h2>
             <p class="text-muted-foreground">
@@ -28,6 +105,7 @@
             </p>
         </div>
 
+        <!-- Links -->
         <div class="flex gap-4 justify-center mt-4">
             <a href="/" class="flex items-center gap-2 text-sm text-accent hover:underline">
                 <Gamepad2 class="w-4 h-4" /> Play
