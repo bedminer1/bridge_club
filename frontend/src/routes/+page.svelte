@@ -387,8 +387,10 @@
     }
 
     // ── WS Event Listeners (replaces HTTP polling) ──────────────────
+    let wsInitialized = false
     $effect(() => {
-        if (!onlineToken) return
+        if (!onlineToken || wsInitialized) return
+        wsInitialized = true
 
         // Connect WebSocket
         wsClient.connect(onlineToken)
