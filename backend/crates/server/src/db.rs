@@ -148,6 +148,15 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
          SELECT id, ((players_int >> 24) & 0xFF), 3 FROM matches WHERE players_int > 0"
     ).await;
 
+    // Add compact preview columns for hands
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview1 TEXT;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview2 TEXT;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview3 TEXT;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview4 TEXT;").await;
+
+    // Backfill previews for existing matches
+    let _ = backfill_previews(&conn).await;
+
     let _ = conn.execute(
         "INSERT OR IGNORE INTO users (id, username, password, games_played, games_won, total_sets_won, most_sets_won, elo) VALUES (?1, ?2, '', 0, 0, 0, 0, 500)",
         libsql::params![1i64, "Bot-Alpha"],
@@ -231,6 +240,7 @@ pub struct MatchRowLight {
     pub bot_difficulty: String,
     pub trump_suit: String,
     pub bet_size: i64,
+    pub partner: Option<i64>,
     pub bet_winner_user_id: i64,
     pub partner_user_id: i64,
     pub winning_team: i64,
@@ -241,6 +251,10 @@ pub struct MatchRowLight {
     pub player4_sets: i64,
     pub players: Option<String>,
     pub elo_change: i64,
+    pub preview1: Option<String>,
+    pub preview2: Option<String>,
+    pub preview3: Option<String>,
+    pub preview4: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,4 +263,61 @@ pub struct SessionRow {
     pub id: String,
     pub user_id: i64,
     pub expires_at: i64,
+}
+
+/// Generate a compact preview string from a JSON array of played cards (frontend PascalCase format).
+/// Format: "2cw3hl..." where:
+///   - Value: 2-10, J, Q, K, A (from card["Value"] which is 2-14)
+///   - Suit letter: card["Suit"] → c/d/h/s
+///   - w/l: won/lost from card["WonSet"]
+pub fn compact_hand_preview(hand_json: &str) -> String {
+    let cards: Vec<serde_json::Value> = serde_json::from_str(hand_json).unwrap_or_default();
+    let mut out = String::new();
+    let rank_map: [&str; 15] = ["", "", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
+    for card in &cards {
+        let suit = card["Suit"].as_str().unwrap_or("");
+        let suit_letter = match suit {
+            "Club" => 'c', "Diamond" => 'd', "Heart" => 'h', "Spades" => 's',
+            _ => '?',
+        };
+        let val = card["Value"].as_i64().unwrap_or(2) as usize;
+        let rank_str = rank_map.get(val).unwrap_or(&"?");
+        let won = card["WonSet"].as_bool().unwrap_or(false);
+        out.push_str(rank_str);
+        out.push(suit_letter);
+        out.push(if won { 'w' } else { 'l' });
+    }
+    out
+}
+
+/// Backfill compact previews for all existing matches.
+async fn backfill_previews(conn: &libsql::Connection) -> Result<(), Box<dyn std::error::Error>> {
+    let mut rows = conn.query(
+        "SELECT id, player1_hand, player2_hand, player3_hand, player4_hand FROM matches WHERE preview1 IS NULL",
+        libsql::params![],
+    ).await?;
+
+    loop {
+        match rows.next().await? {
+            Some(row) => {
+                let id: i64 = row.get(0).unwrap_or(0);
+                let p1: String = row.get(1).unwrap_or_default();
+                let p2: String = row.get(2).unwrap_or_default();
+                let p3: String = row.get(3).unwrap_or_default();
+                let p4: String = row.get(4).unwrap_or_default();
+                let preview1 = compact_hand_preview(&p1);
+                let preview2 = compact_hand_preview(&p2);
+                let preview3 = compact_hand_preview(&p3);
+                let preview4 = compact_hand_preview(&p4);
+                let _ = conn.execute(
+                    "UPDATE matches SET preview1 = ?1, preview2 = ?2, preview3 = ?3, preview4 = ?4 WHERE id = ?5",
+                    libsql::params![preview1, preview2, preview3, preview4, id],
+                ).await;
+            }
+            None => break,
+        }
+    }
+
+    tracing::info!("Backfilled compact previews for existing matches");
+    Ok(())
 }

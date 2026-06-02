@@ -114,4 +114,9 @@ export type MatchRecord = {
     player4Hand: string
     /** JSON string of completed sets: [{Cards: Card[], WinnerID: number}] */
     setsData: string | null
+    /** Compact hand preview strings for quick display */
+    preview1: string | null
+    preview2: string | null
+    preview3: string | null
+    preview4: string | null
 }

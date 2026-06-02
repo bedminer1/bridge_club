@@ -152,6 +152,14 @@
                                         <ScoreDisplay {matchRecord} />
                                     </div>
                                 </div>
+                                <!-- Hand preview -->
+                                {#if matchRecord.preview1}
+                                    <div class="px-4 pb-2">
+                                        <div class="text-xs text-muted-foreground font-mono truncate max-w-[200px] sm:max-w-[300px]">
+                                            {matchRecord.preview1}
+                                        </div>
+                                    </div>
+                                {/if}
                             </Card.Root>
                         </a>
                     {/each}

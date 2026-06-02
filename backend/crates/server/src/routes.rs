@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth;
 use crate::bot::BotDifficulty;
-use crate::db::{DbPool, MatchRowLight, UserRow};
+use crate::db::{compact_hand_preview, DbPool, MatchRowLight, UserRow};
 use crate::game_session;
 use crate::session::AppState;
 
@@ -677,7 +677,8 @@ async fn get_matches(
              m.bet_winner_user_id, m.partner_user_id, m.winning_team, \
              m.won_match, \
              m.player1_sets, m.player2_sets, m.player3_sets, m.player4_sets, \
-             m.players, m.elo_change \
+             m.players, m.elo_change, \
+             m.partner, m.preview1, m.preview2, m.preview3, m.preview4 \
              FROM matches m \
              JOIN match_participants mp ON m.id = mp.match_id \
              WHERE mp.user_id = ?1 \
@@ -720,6 +721,11 @@ async fn get_matches(
                     player4_sets: row.get::<i64>(12).unwrap_or(0),
                     players: row.get::<Option<String>>(13).unwrap_or(None),
                     elo_change: row.get::<i64>(14).unwrap_or(0),
+                    partner: row.get::<Option<i64>>(15).unwrap_or(None),
+                    preview1: row.get::<Option<String>>(16).unwrap_or(None),
+                    preview2: row.get::<Option<String>>(17).unwrap_or(None),
+                    preview3: row.get::<Option<String>>(18).unwrap_or(None),
+                    preview4: row.get::<Option<String>>(19).unwrap_or(None),
                 });
             }
             Ok(None) => break,
@@ -739,7 +745,8 @@ async fn get_matches(
                  bet_winner_user_id, partner_user_id, winning_team, \
                  won_match, \
                  player1_sets, player2_sets, player3_sets, player4_sets, \
-                 players, elo_change \
+                 players, elo_change, \
+                 partner, preview1, preview2, preview3, preview4 \
                  FROM matches WHERE (players_int & 0xFF) = ?1 \
                  OR ((players_int >> 8) & 0xFF) = ?1 \
                  OR ((players_int >> 16) & 0xFF) = ?1 \
@@ -767,6 +774,11 @@ async fn get_matches(
                             player4_sets: row.get::<i64>(12).unwrap_or(0),
                             players: row.get::<Option<String>>(13).unwrap_or(None),
                             elo_change: row.get::<i64>(14).unwrap_or(0),
+                            partner: row.get::<Option<i64>>(15).unwrap_or(None),
+                            preview1: row.get::<Option<String>>(16).unwrap_or(None),
+                            preview2: row.get::<Option<String>>(17).unwrap_or(None),
+                            preview3: row.get::<Option<String>>(18).unwrap_or(None),
+                            preview4: row.get::<Option<String>>(19).unwrap_or(None),
                         });
                     }
                     Ok(None) => break,
@@ -922,10 +934,10 @@ async fn save_match(
                 payload.player2_sets,
                 payload.player3_sets,
                 payload.player4_sets,
-                payload.player1_hand,
-                payload.player2_hand,
-                payload.player3_hand,
-                payload.player4_hand,
+                payload.player1_hand.clone(),
+                payload.player2_hand.clone(),
+                payload.player3_hand.clone(),
+                payload.player4_hand.clone(),
                 payload.sets_data,
                 payload.players,
                 payload.room_id,
@@ -966,6 +978,16 @@ async fn save_match(
                     ).await;
                 }
             }
+
+            // Compute and store compact hand previews
+            let preview1 = compact_hand_preview(&payload.player1_hand);
+            let preview2 = compact_hand_preview(&payload.player2_hand);
+            let preview3 = compact_hand_preview(&payload.player3_hand);
+            let preview4 = compact_hand_preview(&payload.player4_hand);
+            let _ = conn.execute(
+                "UPDATE matches SET preview1 = ?1, preview2 = ?2, preview3 = ?3, preview4 = ?4 WHERE id = ?5",
+                libsql::params![preview1, preview2, preview3, preview4, inserted_id],
+            ).await;
 
             // ── Elo computation ───────────────────────────────────────────────
             tracing::info!(
