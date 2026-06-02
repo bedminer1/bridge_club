@@ -46,6 +46,7 @@
     // Match result data for the game-over dialog
     let lastMatchId = $state<number | null>(null)
     let lastEloChange = $state<number | null>(null)
+    let loadingMatchResult = $state(false)
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -439,6 +440,7 @@
         }
 
         try {
+            loadingMatchResult = true
             const res = await fetch(`${API_URL}/api/matches`, {
                 method: "POST",
                 headers: {
@@ -454,8 +456,10 @@
             } else {
                 console.error("Auto-save failed:", res.status, await res.text().catch(() => ""))
             }
+            loadingMatchResult = false
         } catch (e) {
             console.error("Auto-save error:", e)
+            loadingMatchResult = false
         }
     }
 </script>
@@ -550,7 +554,9 @@
                     <span class="text-xs text-muted-foreground mt-1">
                         Bet: {game.BetSize}{suitToSymbol.get(game.Trump)}
                     </span>
-                    {#if lastEloChange !== null}
+                    {#if loadingMatchResult}
+                        <span class="text-sm mt-1 text-muted-foreground animate-pulse">Calculating Elo...</span>
+                    {:else if lastEloChange !== null}
                         <span class="text-sm mt-1 {lastEloChange > 0 ? 'text-green' : 'text-red'}">
                             Elo: {lastEloChange > 0 ? '+' : ''}{lastEloChange}
                         </span>
@@ -559,7 +565,9 @@
             </Dialog.Header>
             <Dialog.Footer class="justify-center gap-2">
                 <Button onclick={() => { showGameOverDialog = false }} variant="outline">OK</Button>
-                {#if lastMatchId}
+                {#if loadingMatchResult}
+                    <Button disabled variant="outline">Saving...</Button>
+                {:else if lastMatchId}
                     <Button onclick={() => { showGameOverDialog = false; goto(`/user/${lastMatchId}`) }}>
                         View Results
                     </Button>
