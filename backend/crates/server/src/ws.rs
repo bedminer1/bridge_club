@@ -56,36 +56,52 @@ enum ClientMessage {
 #[serde(tag = "type", rename_all = "camelCase")]
 enum ServerMessage {
     #[serde(rename = "auth:ok")]
-    AuthOk { user_id: i64, username: String },
+    AuthOk {
+        #[serde(rename = "userId")]
+        user_id: i64,
+        username: String,
+    },
     #[serde(rename = "auth:error")]
     AuthError { error: String },
     #[serde(rename = "lobby:created")]
     LobbyCreated {
+        #[serde(rename = "roomId")]
         room_id: Uuid,
+        #[serde(rename = "playerId")]
         player_id: Uuid,
+        #[serde(rename = "seatIndex")]
         seat_index: usize,
     },
     #[serde(rename = "lobby:joined")]
     LobbyJoined {
+        #[serde(rename = "roomId")]
         room_id: Uuid,
+        #[serde(rename = "playerId")]
         player_id: Uuid,
+        #[serde(rename = "seatIndex")]
         seat_index: usize,
     },
     #[serde(rename = "lobby:update")]
     LobbyUpdate {
         players: Vec<LobbyPlayerInfo>,
+        #[serde(rename = "hiddenMode")]
         hidden_mode: bool,
     },
     #[serde(rename = "lobby:started")]
-    LobbyStarted { room_id: Uuid },
+    LobbyStarted {
+        #[serde(rename = "roomId")]
+        room_id: Uuid,
+    },
     #[serde(rename = "game:state")]
     GameState {
         state: TableStateResponse,
+        #[serde(rename = "roomId")]
         room_id: Uuid,
     },
     #[serde(rename = "chat:message")]
     ChatMessage {
         id: u64,
+        #[serde(rename = "playerName")]
         player_name: String,
         text: String,
         timestamp: i64,

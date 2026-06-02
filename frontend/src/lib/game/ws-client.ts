@@ -48,21 +48,24 @@ class WsClient {
 
         const url = getWsUrl()
         console.log("[WS] Connecting to", url)
-        this.ws = new WebSocket(url)
+        const ws = new WebSocket(url)
+        this.ws = ws
 
-        this.ws.onopen = () => {
+        ws.onopen = () => {
+            // Guard: if this.ws was reassigned (reconnect race), ignore stale open
+            if (this.ws !== ws) return
             console.log("[WS] Connected")
             this._connected = true
             // Send auth
             this.send({ type: "auth", token })
-            // Flush pending
+            // Flush pending — use send() method so it checks readyState
             for (const msg of this.pendingMessages) {
-                this.ws?.send(msg)
+                this.send(JSON.parse(msg))
             }
             this.pendingMessages = []
         }
 
-        this.ws.onmessage = (event) => {
+        ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data)
                 const type: string = data.type || "unknown"
@@ -72,7 +75,9 @@ class WsClient {
             }
         }
 
-        this.ws.onclose = () => {
+        ws.onclose = () => {
+            // Guard: ignore stale close events from overwritten ws
+            if (this.ws !== ws) return
             console.log("[WS] Disconnected")
             this._connected = false
             this._connectionPromise = null
@@ -84,9 +89,13 @@ class WsClient {
             }, 3000)
         }
 
-        this.ws.onerror = (err) => {
+        ws.onerror = (err) => {
+            // Guard: ignore stale error events from overwritten ws
+            if (this.ws !== ws) return
             console.error("[WS] Error:", err)
         }
+
+
     }
 
     /** Disconnect and stop reconnecting. */
