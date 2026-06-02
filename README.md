@@ -173,9 +173,125 @@ ROOM_PLAYER:{room_id} → Set of player session IDs
 - Frontend: Svelte + Vite (TypeScript)
 - UI: shadcn-svelte
 - Database: Turso (SQLite)
-- Testing: C++ 
 - Build & tooling: Cargo for Rust backend, npm for Svelte frontend
-- Deployment: Vercel (Frontend), 
+- Deployment: Vercel (Frontend),
+
+## Testing
+
+The project maintains **57 automated tests** across three test suites — all passing with zero failures. Tests are split into unit tests (game-logic), bot AI tests, and integration tests (HTTP API).
+
+### Running tests
+
+```bash
+cd backend
+cargo test --workspace          # Run all tests (57 total)
+cargo test -p game-core         # Game-core unit tests (37)
+cargo test -p bridge-server     # Integration + bot tests (20)
+cargo test -- --list            # List every test by name
+```
+
+### 1. Game-core unit tests (37 tests)
+
+Located in `backend/crates/game-core/src/{bid.rs,game.rs,scoring.rs}`. No database or network needed — pure in-memory state machine assertions.
+
+| Module | Tests | What it covers |
+|--------|-------|----------------|
+| `bid`        | 17 | Auction lifecycle: start → must outrank → 3 passes ends it. Bid ordering, display formatting, valid/invalid parsing, call abbreviations. Forces 1♣ when all pass. |
+| `game`       | 14 | Deal gives 13 cards each, next deal rotates dealer, bidding phase transitions, partner selection (cannot pick own card), team 1/2 win detection at target sets. |
+| `scoring`    | 7  | Higher rank beats lower, led-suit must be followed, trump beats non-trump, vulnerability state tracking. |
+
+**Example — betting auction must outrank** (`bid.rs`):
+
+```rust
+#[test]
+fn test_auction_must_outrank() {
+    let mut a = Auction::new();
+    a.add_call(Call::Bid(Bid { level: 1, strain: Strain::Clubs }));
+    assert!(a.add_call(Call::Bid(Bid { level: 1, strain: Strain::Clubs })).is_err());
+    assert!(a.add_call(Call::Bid(Bid { level: 1, strain: Strain::Diamonds })).is_ok());
+}
+```
+
+### 2. Bot AI tests (8 tests)
+
+Located in `backend/crates/server/src/bot.rs`. Each test validates that the bot makes legal, reasonable decisions.
+
+| Test | What it checks |
+|------|----------------|
+| `test_card_beats_led_suit` | Card of led suit beats off-suit |
+| `test_card_beats_same_suit` | Higher rank beats lower of same suit |
+| `test_card_beats_trump` | Trump card beats non-trump |
+| `test_suit_scoring` | Scoring logic for card evaluation |
+| `test_legal_plays_follow_suit` | Bot must follow suit when possible |
+| `test_legal_plays_no_follow` | Bot can play any card when void |
+| `test_legal_plays_cannot_lead_trump` | Bot cannot lead trump before broken |
+| `test_decide_bid` | Bot produces a valid bid |
+
+**Example — bot must follow suit** (`bot.rs`):
+
+```rust
+#[test]
+fn test_legal_plays_follow_suit() {
+    let hand = vec![
+        Card { suit: Suit::Hearts, value: 2 },
+        Card { suit: Suit::Hearts, value: 5 },
+        Card { suit: Suit::Clubs, value: 10 },
+    ];
+    let led_suit = Suit::Hearts;
+    let plays = legal_plays(&hand, led_suit, false);
+    assert_eq!(plays.len(), 2);          // Only hearts
+    assert!(plays.iter().all(|c| c.suit == Suit::Hearts));
+}
+```
+
+### 3. HTTP Integration tests (12 tests)
+
+Located in `backend/crates/server/tests/api_test.rs`. Each test starts a real Axum server with an in-memory SQLite database (no Turso dependency), runs full HTTP requests against it, and asserts on JSON responses.
+
+| Test | What it verifies |
+|------|------------------|
+| `test_signup_and_login` | Full auth flow: signup → login → session token returned |
+| `test_login_wrong_password` | Wrong password returns 401 |
+| `test_signup_duplicate` | Duplicate username returns error |
+| `test_signup_validates_input` | Empty/weak inputs rejected |
+| `test_logout_invalidates_session` | Token cannot be reused after logout |
+| `test_matches_empty` | GET /api/matches returns empty list for new user |
+| `test_matches_requires_auth` | Unauthenticated match query returns 401 |
+| `test_save_and_retrieve_match` | POST match → GET returns it with correct data |
+| `test_save_match_dedup_by_room` | Same room_id cannot create duplicate match |
+| `test_leaderboard_with_user` | Leaderboard includes logged-in user |
+| `test_leaderboard_without_bots` | Bot IDs 1,2,3 excluded from leaderboard |
+| `test_health_check` | Server responds to basic requests |
+
+**Example — full auth + match lifecycle** (`api_test.rs`):
+
+```rust
+#[tokio::test]
+async fn test_signup_and_login() {
+    let (app_state, _tmp) = new_temp_db().await;
+    let app = create_app(app_state);
+
+    // Signup
+    let res = request(&app, "POST", "/api/auth/signup",
+        r#"{"username":"alice","password":"secret123"}"#).await;
+    assert_eq!(res.status(), 200);
+
+    // Login
+    let res = request(&app, "POST", "/api/auth/login",
+        r#"{"username":"alice","password":"secret123"}"#).await;
+    assert_eq!(res.status(), 200);
+    let body: serde_json::Value = serde_json::from_slice(&res.body()).unwrap();
+    assert!(body["ok"].as_bool().unwrap());
+    assert!(body["token"].as_str().unwrap().len() > 10);
+}
+```
+
+### Test Infrastructure
+
+- **No Turso dependency** — integration tests use `Database::open(":memory:")` with tempfile SQLite via the `new_temp()` helper in `db.rs`.
+- **Each test is isolated** — `#[tokio::test]` runs with its own app instance and fresh database.
+- **Bot tests use mock state** — bot AI is tested in isolation without needing a full game loop or network.
+- **Quick feedback** — the full suite runs in under **1 second** on a local machine.
 
 ## Architecture
 
