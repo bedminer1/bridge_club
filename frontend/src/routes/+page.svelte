@@ -1,20 +1,16 @@
 <script lang="ts">
-    import * as Select from "$lib/components/ui/select/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
     import * as Popover from "$lib/components/ui/popover/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
-    import { Button } from "$lib/components/ui/button/index.js";
-    import { Separator } from "$lib/components/ui/separator/index.js";
+    import * as Select from "$lib/components/ui/select/index.js";
     import { Switch } from "$lib/components/ui/switch/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
+    import { Button } from "$lib/components/ui/button/index.js";
     import { Settings } from "@lucide/svelte";
 
     import PokerCard from "$lib/components/poker-card.svelte";
-    import HandDisplay from "$lib/components/hand-display.svelte";
     
     import { suitToSymbol } from "$lib/utils"
-    import { isLegalRaise } from "$lib/game/betting";
-    import { isCardIllegal } from "$lib/game/legality";
     import { headerState } from "$lib/game/header-state.svelte";
 
     import {
@@ -28,13 +24,12 @@
 
     import { wsClient } from "$lib/game/ws-client";
 
-    import {
-        Card,
-        CardContent,
-        CardHeader,
-        CardTitle,
-        CardDescription,
-    } from "$lib/components/ui/card/index.js";
+    // ── Import extracted components ─────────────────────────────────
+    import Lobby from "$lib/components/lobby.svelte";
+    import GameInfo from "$lib/components/game-info.svelte";
+    import BidArea from "$lib/components/bid-area.svelte";
+    import PlayArea from "$lib/components/play-area.svelte";
+    import Chat from "$lib/components/chat.svelte";
 
     let { data } = $props()
     let { username, userID, token } = $state(data)
@@ -116,10 +111,6 @@
     $effect(() => { headerState.username = username })
     $effect(() => { headerState.loggedIn = loggedIn })
 
-    // form inputs
-    let betSize: number = $state(1)
-    let bettedSuit: string = $state("Club")
-
     const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
     let remainingDeck = $derived(
         game.FullDeck
@@ -130,13 +121,6 @@
                 return a.Value - b.Value
             }) ?? []
     )
-
-    const playerIDToColor = new Map<number, string>([
-        [1, "[var(--red)]"],
-        [2, "[var(--blue)]"],
-        [3, "[var(--yellow)]"],
-        [4, "[var(--green)]"],
-    ])
 
     // ── Online Game Actions ───────────────────────────────────────
 
@@ -255,7 +239,6 @@
         try {
             const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
             wsClient.gameAction("bid", call)
-            // The WS game:state listener will update the game state
         } catch (e) {
             console.error("Online raise failed:", e)
         }
@@ -350,31 +333,24 @@
     }
 
     // ── Lobby State ─────────────────────────────────────────────
-    let lobbyMode = $state<"" | "create" | "join">("create")
-    let lobbyCreating = $state(false)
-    let lobbyIsHost = $state(false)
     let lobbyRoomId = $state("")
     let lobbyPlayerId = $state("")
-    let lobbyJoinRoomId = $state("")
-    let lobbyJoining = $state(false)
-    let lobbyJoinError = $state("")
     let lobbyMySeatIndex = $state(0)
+    let lobbyIsHost = $state(false)
     let lobbyPlayers = $state<Array<{ name: string; seatIndex: number; isBot: boolean }>>([])
     let lobbyHiddenMode = $state(true)
 
     function lobbyCreateRoom() {
-        lobbyCreating = true
         try {
             wsClient.createLobby()
-        } catch (e) { console.error("Create room error:", e); lobbyCreating = false; alert("Failed. Is the backend running?") }
+        } catch (e) { console.error("Create room error:", e); alert("Failed. Is the backend running?") }
     }
 
-    function lobbyJoinRoom() {
-        if (!lobbyJoinRoomId.trim()) return
-        lobbyJoining = true; lobbyJoinError = ""
+    function lobbyJoinRoom(joinRoomId: string) {
+        if (!joinRoomId.trim()) return
         try {
-            wsClient.joinLobby(lobbyJoinRoomId.trim())
-        } catch (e) { console.error("Join error:", e); lobbyJoining = false; lobbyJoinError = "Failed. Is the backend running?" }
+            wsClient.joinLobby(joinRoomId.trim())
+        } catch (e) { console.error("Join error:", e); alert("Failed. Is the backend running?") }
     }
 
     function lobbyLeaveRoom() {
@@ -398,27 +374,16 @@
             wsClient.toggleHidden(!lobbyHiddenMode)
         } catch (e) { console.error("Toggle hidden mode error:", e) }
     }
-    async function lobbyCopyRoomId() { try { await navigator.clipboard.writeText(lobbyRoomId) } catch {} }
 
     // ── Chat ────────────────────────────────────────────────────────
     interface ChatMsg { id: number; playerName: string; text: string; timestamp: number }
     let chatMessages = $state<ChatMsg[]>([])
-    function fmtChatTime(ts: number): string {
-        return new Date(ts).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: false })
-    }
-    let chatText = $state("")
-    let chatContainer: HTMLDivElement | undefined = $state(undefined)
 
-    function chatSend() {
-        const text = chatText.trim()
+    function chatSend(text: string) {
         if (!text || !roomId || !lobbyPlayerId) return
-        chatText = ""
         try {
             wsClient.sendChat(lobbyPlayerId, text)
         } catch {}
-    }
-    function chatHandleKey(e: KeyboardEvent) {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatSend() }
     }
 
     // ── WS Event Listeners (replaces HTTP polling) ──────────────────
@@ -434,7 +399,6 @@
             lobbyMySeatIndex = data.seatIndex
             lobbyIsHost = true
             lobbyPlayerId = data.playerId
-            lobbyCreating = false
         })
 
         const unsubJoined = wsClient.on("lobby:joined", (data) => {
@@ -443,7 +407,6 @@
             lobbyMySeatIndex = data.seatIndex
             lobbyIsHost = false
             lobbyPlayerId = data.playerId
-            lobbyJoining = false
         })
 
         // Standalone game:state listener for realtime updates (handles both
@@ -481,7 +444,6 @@
 
         const unsubChatMessage = wsClient.on("chat:message", (data) => {
             chatMessages = [...chatMessages, data]
-            if (chatContainer) setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
         })
 
         // Cleanup: unsubscribe all listeners and disconnect WS on destroy
@@ -517,7 +479,6 @@
     /** Auto-save the match to the backend when the game ends. */
     async function autoSaveMatch() {
         // Determine if the human player is on Team 1 (bet winner's team)
-        // Use ID comparison, not reference equality (Team1/Team2 arrays are always different instances)
         const userIsTeam1 = game.Team1?.some((p: any) => p.ID === humanPlayerId) ?? false
         const wonMatch = (game.Winner === "Team 1" && userIsTeam1) || (game.Winner === "Team 2" && !userIsTeam1) ? 1 : 0
         // Partner is the bet winner's partner (in-game player ID), not the human player's teammate
@@ -534,7 +495,6 @@
             setsData: saveCompletedSetsJson,
             players: JSON.stringify((game.Players ?? []).map((p: any) => ({ id: p.ID, username: p.Username }))),
             roomId,
-            // Required by backend SaveMatchRequest (computed server-side from seat data)
             betWinnerUserId: 0,
             partnerUserId: 0,
             winningTeam: userIsTeam1 ? 1 : 2,
@@ -570,7 +530,7 @@
 
 <div class="flex flex-col gap-6 w-full min-h-screen items-center px-4 pt-20 pb-8">
 
-    {#if page.url.searchParams.get("room")}
+{#if page.url.searchParams.get("room")}
     {#if isOnlineLoading}
     <div class="text-lg text-muted-foreground animate-pulse">
         Starting game...
@@ -581,6 +541,7 @@
     </div>
 
     {#if game.IsPartnerSelectionPhase && game.BetWinner.ID === humanPlayerId}
+        <!-- Partner selection: displayed outside the game board card -->
         <div class="flex flex-col gap-4 items-center">
             <p class="text-xl">Select a partner card</p>
             <p class="text-sm opacity-70">Choose any card you don't own — the player holding it becomes your partner</p>
@@ -602,26 +563,10 @@
     <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
     <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl">
         <!-- Game info strip -->
-        <div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-xs text-muted-foreground px-1 overflow-x-auto scrollbar-none">
-            {#if game.BetSize > 0 || !game.IsBettingPhase}
-            <span>Trump <strong class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</strong></span>
-            <span>Bet <strong class="text-foreground font-medium">{game.BetSize}</strong></span>
-            {/if}
-            {#if game.IsBettingPhase && game.BetSize > 0}
-            <span class="text-muted-foreground/40">|</span>
-            <span class="whitespace-nowrap"><strong class="text-foreground font-medium">{playerName(game.BetWinner.ID)}</strong> + partner need <strong class="text-accent font-medium">{6 + game.BetSize}</strong> sets</span>
-            <span class="whitespace-nowrap">Opponents need <strong class="text-foreground font-medium">{8 - game.BetSize}</strong> sets</span>
-            {/if}
-            {#if !game.IsBettingPhase}
-            <span>Winner <strong class="text-foreground font-medium">{playerName(game.BetWinner.ID)}</strong></span>
-            <span>Partner <strong class="text-accent font-medium">{game.PartnerCard.Rank}{suitToSymbol.get(game.PartnerCard.Suit)}</strong></span>
-            <span class="text-muted-foreground">|</span>
-            <span>Set <strong class="text-foreground font-medium">{game.Players.reduce((s: number, p: any) => s + p.Sets, 0)}/13</strong></span>
-            {/if}
-        </div>
+        <GameInfo {game} {humanSeat} {humanPlayerId} />
 
     <div class="rounded-xl border border-border bg-card/50 p-4 sm:p-6 relative">
-        <!-- Settings gear (top-right) -->
+        <!-- Settings gear (top-right of game board card) -->
         <div class="absolute top-2 right-2 z-10">
         <Popover.Root>
             <Popover.Trigger>
@@ -654,191 +599,19 @@
             </Popover.Content>
         </Popover.Root>
         </div>
+
     {#if game.IsBettingPhase}
-    <div class="flex flex-col items-center gap-1">
-        {#each game.Moves.slice(-3) as move}
-            <div class="flex items-center gap-2 {move === game.Moves[game.Moves.length - 1] ? 'text-base font-medium' : 'text-xs text-muted-foreground/60'}">
-                <span class="text-{playerIDToColor.get(move.PlayerID)}">{playerName(move.PlayerID)}</span>
-                {#if move.CardPlayed.Value === 0}
-                    <span>passed</span>
-                {:else}
-                    <span>raised <strong>{move.CardPlayed.Value} {move.CardPlayed.Suit}</strong></span>
-                {/if}
-            </div>
-        {/each}
-        {#if game.Moves.length < 4}
-            <div class="text-xs text-muted-foreground/40 mt-1">
-                waiting for {playerName(game.WhoseTurn)}...
-            </div>
-        {/if}
-        {#if game.Moves.length === 0}
-            <div class="text-xs text-muted-foreground/40">
-                {playerName(game.WhoseTurn)} to bet
-            </div>
-        {/if}
-    </div>
+        <BidArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} onRaise={onlineRaiseBet} onPass={onlinePassBet} />
     {:else}
-    <div class="flex justify-between w-full min-h-28 relative">
-        <div class="flex gap-1.5 sm:gap-2 ml-2 sm:ml-4 items-start flex-shrink-0">
-            {#each game.Moves as move, i}
-            <div class="flex flex-col {i % 2 === 0 ? 'items-center mb-8' : 'items-center mt-8'}">
-                <PokerCard card={move.CardPlayed} isIllegal={false} minify={false} />
-                <p class="text-{playerIDToColor.get(move.PlayerID)} text-2xs sm:text-xs whitespace-nowrap">{playerName(move.PlayerID)}</p>
-            </div>
-            {/each}
-        </div>
-    
-        {#if game.PreviousMoves.length !== 0} 
-        <div class="relative mr-7 flex-shrink-0" style="width: {game.PreviousMoves.length * 12 + 40}px; min-height: {game.PreviousMoves.length * 8 + 40}px;">
-            {#each game.PreviousMoves as move, i}
-                <div class="absolute flex-col items-center gap-4" style="top: {i * 16}px; left: {i * 16}px; z-index: {i};">
-                    <p class="text-2xs text-right text-{playerIDToColor.get(move.PlayerID)} whitespace-nowrap">P{move.PlayerID}</p>
-                    <div>
-                        <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
-                    </div>
-                </div>
-            {/each}
-        </div>
-        {/if}
-    </div>
-    {/if}
-
-
-    {#if !game.IsBettingPhase}
-    <!-- MAIN PHASE -->
-    <div class="flex flex-col gap-10">
-        {#each headerState.hiddenMode ? [game.Players[humanSeat]] : game.Players as player}
-        <div>
-            <div class="flex gap-2">
-                <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
-                {#if !headerState.hiddenMode && player.Partner !== null}
-                <p>| Partner is {playerName(player.Partner?.ID ?? 0)}</p>
-                {/if}
-            </div>
-            
-            <div class="flex h-[100px] pl-4">
-                {#each player.Cards  as card, index}
-                <button
-                    disabled={isCardIllegal(game, player, card)}
-                    onclick={() => onlinePlayCard(card, player)}
-                    class="text-left">
-                    <HandDisplay index={index}>
-                        <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
-                    </HandDisplay>
-                </button>
-                {/each}
-                {#if !headerState.hiddenMode}
-                <Separator orientation="vertical" class="mx-10 h-full"/>
-                    {#each player.PlayedCards as card, index}
-                     <button 
-                        disabled={true}>
-                        <HandDisplay index={index}>
-                            <PokerCard card={card} isIllegal={true} minify={false}/>
-                        </HandDisplay>
-                    </button>
-                    {/each}
-                {/if}
-            </div>
-        </div>
-        {/each}
-
-        {#if headerState.hiddenMode}
-        <div class="flex gap-4">
-            {#each game.Players.slice(1, 4) as player, index}
-                <div class="flex flex-col gap-0">
-                <p class="text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
-                <p class="text-sm text-muted-foreground">({player.Sets} sets)</p>
-                </div>
-                
-
-                {#if index < 2}
-                <Separator orientation="vertical" />
-                {/if}
-            {/each}
-        </div>
-        {/if}
-    </div>
-
-    {:else} 
-    <!-- BETTING PHASE -->
-        <div class="flex flex-col gap-10">
-            {#each headerState.hiddenMode ? [game.Players[humanSeat]] : game.Players as player}
-            <div class="flex flex-col h-[100px]">
-                <p class="mb-2 text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
-                <div class="flex pl-4">
-                    {#each !headerState.hiddenMode || player.ID === humanPlayerId ? player.Cards : []  as card, index}
-                        <HandDisplay index={index}>
-                            <PokerCard card={card} isIllegal={false} minify={false}/>
-                        </HandDisplay>
-                    {/each}
-                </div>
-            </div>
-            {/each}
-        </div>
-
-        <div class="flex flex-col justify-center gap-2">
-            <div class="flex flex-col gap-2 items-start w-[45%]">
-                <div class="flex gap-2 w-full">
-                    <Input bind:value={betSize} class="text-center numberInput flex-1" type="number" min={1} max={7} placeholder="1-7"/>
-                    <Select.Root type="single" bind:value={bettedSuit}>
-                    <Select.Trigger class="flex-[3]">
-                        <p class="text-sm">{suitToSymbol.get(bettedSuit)} {bettedSuit}</p>
-                    </Select.Trigger>
-                    <Select.Content>
-                        <Select.Item value="Club">♣ Club</Select.Item>
-                        <Select.Item value="Diamond">♦ Diamond</Select.Item>
-                        <Select.Item value="Heart">♥ Heart</Select.Item>
-                        <Select.Item value="Spades">♠ Spades</Select.Item>
-                    </Select.Content>
-                    </Select.Root>
-                </div>
-                <div class="flex gap-2 w-full">
-                    <Button class="flex-1" onclick={onlinePassBet}>Pass</Button>
-                    <Button 
-                    variant="destructive"
-                    onclick={() => onlineRaiseBet(betSize, bettedSuit)}
-                    disabled={!isLegalRaise(game, betSize, bettedSuit)}
-                    class="flex-1"
-                    >Raise</Button>
-                </div>
-            </div>
-        </div>
+        <PlayArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} onPlayCard={onlinePlayCard} />
     {/if}
     </div>
     </div>
 
-    <!-- Chat card (in-game, side panel) -->
-    <div class="w-full md:w-80 flex flex-col mt-4">
-        <Card class="h-full flex flex-col">
-            <CardContent class="flex flex-col gap-2 p-3 flex-1">
-                <div class="text-xs font-medium text-muted-foreground">Chat</div>
-                <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin">
-                    {#each chatMessages as msg, i (msg.id)}
-                        <div>
-                            {#if i === 0 || chatMessages[i-1].playerName !== msg.playerName}
-                                <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
-                                <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
-                            {/if}
-                            <div class="text-sm text-foreground/90 break-words">{msg.text}</div>
-                        </div>
-                    {/each}
-                </div>
-                <div class="flex gap-2">
-                    <Input
-                        bind:value={chatText}
-                        onkeydown={chatHandleKey}
-                        placeholder="Chat..."
-                        maxlength={500}
-                        class="flex-1 h-8 text-xs"
-                    />
-                    <Button onclick={chatSend} size="sm" class="h-8 px-3 text-xs">Send</Button>
-                </div>
-            </CardContent>
-        </Card>
-    </div>
+    <!-- Chat sidebar (in-game) -->
+    <Chat {roomId} lobbyPlayerId={lobbyPlayerId} bind:chatMessages onSend={chatSend} />
 
     </div>
-    <!-- ^ closes the outer flex wrapper (play area + chat) -->
     {/if}
 
     <!-- Game-over dialog -->
@@ -866,148 +639,30 @@
     {/if}
     {/if}
 
-    {:else}
+{:else}
     <!-- Lobby UI -->
     <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
-        <div class="w-full max-w-md">
-            {#if !lobbyRoomId}
-                <!-- Mode Selector (always visible) -->
-                <div class="relative flex justify-center mb-6 items-center">
-                    {#if lobbyMode}
-                    <button onclick={() => lobbyMode = ""} class="absolute left-0 p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors text-4xl leading-none" title="Back">
-                        ←
-                    </button>
-                    {/if}
-                    <div class="flex gap-2">
-                        <Button onclick={() => { if (lobbyMode === "create") lobbyCreateRoom(); else lobbyMode = "create" }}
-                            variant={lobbyMode === "create" ? "default" : "outline"}>
-                            Create Room
-                        </Button>
-                        <Button onclick={() => { lobbyMode = "join" }}
-                            variant={lobbyMode === "join" ? "default" : "outline"}>
-                            Join Room
-                        </Button>
-                    </div>
-                </div>
-
-                {#if lobbyMode === "create"}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle class="text-center">Create a Room</CardTitle>
-                            <CardDescription class="text-center max-w-[220px] mx-auto">Create a new game room</CardDescription>
-                        </CardHeader>
-                        <CardContent class="flex flex-col gap-4">
-                            <Button onclick={lobbyCreateRoom} disabled={lobbyCreating}>
-                                {lobbyCreating ? "Creating..." : "Create Room"}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                {:else if lobbyMode === "join"}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle class="text-center">Join a Room</CardTitle>
-                            <CardDescription class="text-center max-w-[220px] mx-auto">Paste the room ID from the host</CardDescription>
-                        </CardHeader>
-                        <CardContent class="flex flex-col gap-4">
-                            <div class="flex flex-col gap-2">
-                                <label for="room-id" class="text-sm text-muted-foreground">Room ID</label>
-                                <Input id="room-id" bind:value={lobbyJoinRoomId} placeholder="Enter room ID" />
-                            </div>
-                            {#if lobbyJoinError}<p class="text-sm text-destructive">{lobbyJoinError}</p>{/if}
-                            <Button onclick={lobbyJoinRoom} disabled={lobbyJoining || !lobbyJoinRoomId.trim()}>
-                                {lobbyJoining ? "Joining..." : "Join Room"}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                {/if}
-            {:else}
-                <!-- Lobby View (waiting room) -->
-                <Card>
-                    <CardHeader class="relative">
-                        <button onclick={lobbyLeaveRoom} class="absolute left-3 inset-y-0 flex items-center text-3xl leading-none text-muted-foreground hover:text-foreground transition-colors" title="Leave room">
-                            ←
-                        </button>
-                        <CardTitle class="text-center">Game Lobby</CardTitle>
-                        <CardDescription class="text-center max-w-[220px] mx-auto">Copy Room ID and invite friends</CardDescription>
-                    </CardHeader>
-                    <CardContent class="flex flex-col gap-4">
-                        <div class="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/50">
-                            <span class="text-sm font-mono text-muted-foreground flex-1 truncate">{lobbyRoomId}</span>
-                            <Button onclick={lobbyCopyRoomId} variant="outline" size="sm">Copy</Button>
-                        </div>
-                        <div class="flex flex-col gap-2">
-                            <h3 class="text-sm font-medium text-foreground">Players ({lobbyPlayers.length})</h3>
-                            {#if lobbyPlayers.length === 0}
-                                <p class="text-sm text-muted-foreground">Waiting for players...</p>
-                            {:else}
-                                <div class="flex flex-col gap-1">
-                                    {#each lobbyPlayers as p}
-                                        <div class="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-card">
-                                            <div class="w-2 h-2 rounded-full {p.isBot ? 'bg-muted-foreground/40' : 'bg-green-500'}"></div>
-                                            <span class="text-sm text-foreground">{p.name}</span>
-                                            {#if p.isBot}<span class="text-xs text-muted-foreground">(bot)</span>{/if}
-                                        </div>
-                                    {/each}
-                                </div>
-                            {/if}
-                        </div>
-                        {#if lobbyIsHost}
-                            <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                                <span class="text-sm text-foreground">Hidden Mode Only</span>
-                                <button
-                                    onclick={lobbyToggleHiddenMode}
-                                    class="relative w-10 h-5 rounded-full transition-colors {lobbyHiddenMode ? 'bg-accent' : 'bg-muted-foreground/30'}"
-                                >
-                                    <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {lobbyHiddenMode ? 'translate-x-5' : ''}" />
-                                </button>
-                            </div>
-                            <Button onclick={lobbyStartGame} class="w-full mt-2" size="lg">Start Game</Button>
-                        {:else}
-                            <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                                <span class="text-sm text-foreground">Hidden Mode Only</span>
-                                <span class="text-xs text-muted-foreground">{lobbyHiddenMode ? 'On' : 'Off'}</span>
-                            </div>
-                            <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
-                        {/if}
-                        <Button onclick={lobbyLeaveRoom} variant="outline" class="w-full mt-1">Leave Room</Button>
-                    </CardContent>
-                </Card>
-            {/if}
-        </div>
+        <Lobby
+            {onlineToken}
+            {username}
+            bind:lobbyRoomId
+            bind:lobbyPlayerId
+            bind:lobbyMySeatIndex
+            bind:lobbyIsHost
+            bind:lobbyPlayers
+            bind:lobbyHiddenMode
+            oncreate={lobbyCreateRoom}
+            onjoin={lobbyJoinRoom}
+            onleave={lobbyLeaveRoom}
+            onstart={lobbyStartGame}
+            ontogglehidden={lobbyToggleHiddenMode}
+        />
 
         {#if lobbyRoomId}
-        <!-- Chat card (lobby, side panel) -->
-        <div class="w-full md:w-64 shrink-0 flex flex-col">
-            <Card class="h-full flex flex-col">
-                <CardContent class="flex flex-col gap-2 p-3 flex-1">
-                    <div class="text-xs font-medium text-muted-foreground">Chat</div>
-                    <div bind:this={chatContainer} class="flex-1 overflow-y-auto space-y-1 scrollbar-thin" style="min-height:120px">
-                        {#each chatMessages as msg, i (msg.id)}
-                            <div>
-                                {#if i === 0 || chatMessages[i-1].playerName !== msg.playerName}
-                                    <span class="text-xs font-semibold text-accent">{msg.playerName}</span>
-                                    <span class="text-xs text-muted-foreground tabular-nums">{fmtChatTime(msg.timestamp)}</span>
-                                {/if}
-                                <div class="text-sm text-foreground/90 break-words">{msg.text}</div>
-                            </div>
-                        {:else}
-                            <p class="text-xs text-muted-foreground text-center pt-8">No messages yet</p>
-                        {/each}
-                    </div>
-                    <div class="flex gap-2">
-                        <Input
-                            bind:value={chatText}
-                            onkeydown={chatHandleKey}
-                            placeholder="Chat..."
-                            maxlength={500}
-                            class="flex-1 h-8 text-xs"
-                        />
-                        <Button onclick={chatSend} size="sm" class="h-8 px-3 text-xs">Send</Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+        <!-- Chat sidebar (lobby) -->
+        <Chat roomId={roomId} lobbyPlayerId={lobbyPlayerId} bind:chatMessages onSend={chatSend} />
         {/if}
     </div>
 {/if}
+
 </div>
