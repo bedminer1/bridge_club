@@ -69,9 +69,9 @@
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <span
-                    class="text-lg font-bold {didWin ? 'text-[var(--green)]' : 'text-[var(--red)]'}"
+                    class="text-lg font-bold {didWin ? 'text-[var(--blue)]' : 'text-[var(--red)]'}"
                 >
-                    {didWin ? "Victory" : "Defeat"}
+                    {didWin ? "Win" : "Loss"}
                 </span>
                 {#if matchRecord.eloChange}
                     <span class="text-xs font-bold {matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">({matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange})</span>

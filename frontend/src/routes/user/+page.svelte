@@ -158,8 +158,8 @@
                                         <div class="flex items-center justify-between p-4 gap-4">
                                             <!-- Info + Result badge inline -->
                                             <div class="flex items-center gap-3 flex-1 min-w-0">
-                                                <span class="text-sm font-bold shrink-0 {didWin ? 'text-green' : 'text-red'}">
-                                                    {didWin ? "Victory" : "Defeat"}
+                                                <span class="text-sm font-bold shrink-0 {didWin ? 'text-blue' : 'text-red'}">
+                                                    {didWin ? "Win" : "Loss"}
                                                 </span>
                                                 <span class="flex gap-3 text-xs text-muted-foreground flex-wrap items-center">
                                                     <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>

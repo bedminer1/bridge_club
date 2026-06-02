@@ -541,9 +541,9 @@
         <Dialog.Content class="max-w-sm">
             <Dialog.Header class="text-center">
                 <Dialog.Title
-                    class="text-2xl font-bold {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'text-[var(--green)]' : 'text-[var(--red)]'}"
+                    class="text-2xl font-bold {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'text-[var(--blue)]' : 'text-[var(--red)]'}"
                 >
-                    {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'Victory!' : 'Defeat'}
+                    {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'Win!' : 'Loss'}
                 </Dialog.Title>
                 <Dialog.Description class="flex flex-col gap-2 items-center pt-2">
                     <span class="text-lg">Team 1 <span class="text-[var(--red)]">{team1Sets}</span> — <span class="text-[var(--blue)]">{team2Sets}</span> Team 2</span>
