@@ -1,11 +1,44 @@
 <script lang="ts">
     import ScoreDisplay from "./ScoreDisplay.svelte";
+    import PokerCard from "$lib/components/poker-card.svelte";
     import * as Card from "$lib/components/ui/card/index"
     import { formatDate } from "$lib/utils";
     import { Separator } from "$lib/components/ui/separator/index.js";
     import { headerState } from "$lib/game/header-state.svelte";
     import { toggleMode } from "mode-watcher";
     import { Switch } from "$lib/components/ui/switch/index.js";
+
+    /** Parse a compact preview string like "2cw3hlAdw..." into Card objects. */
+    function parsePreview(preview: string): Card[] {
+        const suitMap: Record<string, string> = { c: "Club", d: "Diamond", h: "Heart", s: "Spades" }
+        const rankToValue: Record<string, number> = {
+            "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+            "10": 10, "J": 11, "Q": 12, "K": 13, "A": 14,
+        }
+        const valueToRank: Record<number, string> = {
+            2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9",
+            10: "10", 11: "J", 12: "Q", 13: "K", 14: "A",
+        }
+        const cards: Card[] = []
+        let i = 0
+        while (i < preview.length) {
+            const isTen = preview[i] === "1" && preview[i + 1] === "0"
+            const rankStr = isTen ? "10" : preview[i]
+            const suitLetter = preview[isTen ? i + 2 : i + 1]
+            const won = preview[isTen ? i + 3 : i + 2] === "w"
+            const value = rankToValue[rankStr]
+            if (value && suitLetter) {
+                cards.push({
+                    Rank: valueToRank[value] ?? rankStr,
+                    Value: value,
+                    Suit: suitMap[suitLetter] ?? "Club",
+                    WonSet: won,
+                })
+            }
+            i += isTen ? 4 : 3
+        }
+        return cards
+    }
 
     let { data } = $props()
     let { matchRecords, message, username, userID, rank, userStats } = $state(data)
@@ -152,12 +185,13 @@
                                         <ScoreDisplay {matchRecord} />
                                     </div>
                                 </div>
-                                <!-- Hand preview -->
+                                <!-- Hand preview (parsed from compact string) -->
                                 {#if matchRecord.preview1}
-                                    <div class="px-4 pb-2">
-                                        <div class="text-xs text-muted-foreground font-mono truncate max-w-[200px] sm:max-w-[300px]">
-                                            {matchRecord.preview1}
-                                        </div>
+                                    {@const cards = parsePreview(matchRecord.preview1)}
+                                    <div class="px-4 pb-2 flex flex-wrap gap-0.5">
+                                        {#each cards as card, ci (ci)}
+                                            <PokerCard card={card} isIllegal={false} minify={true} />
+                                        {/each}
                                     </div>
                                 {/if}
                             </Card.Root>
