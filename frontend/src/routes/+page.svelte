@@ -425,6 +425,7 @@
             betWinnerUserId: 0,
             partnerUserId: 0,
             winningTeam: userIsTeam1 ? 1 : 2,
+            isHidden: headerState.hiddenMode,
         }
 
         // Player sets counts

@@ -139,6 +139,7 @@ pub struct SaveMatchRequest {
     pub players: Option<String>,
     pub players_int: Option<i64>,
     pub room_id: Option<String>,
+    pub is_hidden: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -677,7 +678,7 @@ async fn get_matches(
              m.bet_winner_user_id, m.partner_user_id, m.winning_team, \
              m.won_match, \
              m.player1_sets, m.player2_sets, m.player3_sets, m.player4_sets, \
-             m.players, m.elo_change, \
+             m.players, m.elo_change, m.is_hidden, \
              m.partner, m.preview1, m.preview2, m.preview3, m.preview4 \
              FROM matches m \
              JOIN match_participants mp ON m.id = mp.match_id \
@@ -721,11 +722,12 @@ async fn get_matches(
                     player4_sets: row.get::<i64>(12).unwrap_or(0),
                     players: row.get::<Option<String>>(13).unwrap_or(None),
                     elo_change: row.get::<i64>(14).unwrap_or(0),
-                    partner: row.get::<Option<i64>>(15).unwrap_or(None),
-                    preview1: row.get::<Option<String>>(16).unwrap_or(None),
-                    preview2: row.get::<Option<String>>(17).unwrap_or(None),
-                    preview3: row.get::<Option<String>>(18).unwrap_or(None),
-                    preview4: row.get::<Option<String>>(19).unwrap_or(None),
+                    is_hidden: row.get::<bool>(15).unwrap_or(true),
+                    partner: row.get::<Option<i64>>(16).unwrap_or(None),
+                    preview1: row.get::<Option<String>>(17).unwrap_or(None),
+                    preview2: row.get::<Option<String>>(18).unwrap_or(None),
+                    preview3: row.get::<Option<String>>(19).unwrap_or(None),
+                    preview4: row.get::<Option<String>>(20).unwrap_or(None),
                 });
             }
             Ok(None) => break,
@@ -745,7 +747,7 @@ async fn get_matches(
                  bet_winner_user_id, partner_user_id, winning_team, \
                  won_match, \
                  player1_sets, player2_sets, player3_sets, player4_sets, \
-                 players, elo_change, \
+                 players, elo_change, is_hidden, \
                  partner, preview1, preview2, preview3, preview4 \
                  FROM matches WHERE (players_int & 0xFF) = ?1 \
                  OR ((players_int >> 8) & 0xFF) = ?1 \
@@ -774,11 +776,12 @@ async fn get_matches(
                             player4_sets: row.get::<i64>(12).unwrap_or(0),
                             players: row.get::<Option<String>>(13).unwrap_or(None),
                             elo_change: row.get::<i64>(14).unwrap_or(0),
-                            partner: row.get::<Option<i64>>(15).unwrap_or(None),
-                            preview1: row.get::<Option<String>>(16).unwrap_or(None),
-                            preview2: row.get::<Option<String>>(17).unwrap_or(None),
-                            preview3: row.get::<Option<String>>(18).unwrap_or(None),
-                            preview4: row.get::<Option<String>>(19).unwrap_or(None),
+                            is_hidden: row.get::<bool>(15).unwrap_or(true),
+                            partner: row.get::<Option<i64>>(16).unwrap_or(None),
+                            preview1: row.get::<Option<String>>(17).unwrap_or(None),
+                            preview2: row.get::<Option<String>>(18).unwrap_or(None),
+                            preview3: row.get::<Option<String>>(19).unwrap_or(None),
+                            preview4: row.get::<Option<String>>(20).unwrap_or(None),
                         });
                     }
                     Ok(None) => break,
@@ -901,16 +904,13 @@ async fn save_match(
     let won = payload.won_match.unwrap_or(0);
     let winning_team: i64 = if (user_is_team1 && won == 1) || (!user_is_team1 && won == 0) { 1 } else { 2 };
 
-    // Save room_id before it gets moved into params
-    let saved_room_id = payload.room_id.clone();
-
     let result = conn
         .execute(
             "INSERT INTO matches (user_id, date, bot_difficulty, trump_suit, bet_size, \
              bet_winner, partner, won_match, bet_winner_user_id, partner_user_id, winning_team, \
              player1_sets, player2_sets, player3_sets, \
-             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int, elo_change) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
+             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int, elo_change, is_hidden) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
             libsql::params![
                 user.id,
                 payload.date,
@@ -936,6 +936,7 @@ async fn save_match(
                 payload.room_id,
                 players_int,
                 0i64, // elo_change placeholder, updated below
+                payload.is_hidden.unwrap_or(true) as i64, // is_hidden: 1 or 0
             ],
         )
         .await;
@@ -944,35 +945,117 @@ async fn save_match(
         Ok(_) => {
             tracing::info!("Match saved for user_id={}", user.id);
 
-            // Update user stats after successful match save
-            let won = payload.won_match.unwrap_or(0);
-            let max_sets = payload.player1_sets.max(payload.player2_sets)
-                .max(payload.player3_sets).max(payload.player4_sets);
-            let total_sets = payload.player1_sets + payload.player2_sets
-                + payload.player3_sets + payload.player4_sets;
-
-            let _ = conn.execute(
-                "UPDATE users SET
-                    games_played = games_played + 1,
-                    games_won = games_won + ?1,
-                    total_sets_won = total_sets_won + ?2,
-                    most_sets_won = MAX(most_sets_won, ?3)
-                 WHERE id = ?4",
-                libsql::params![won, total_sets, max_sets, user.id],
-            ).await;
-
-            // Populate match_participants for all 4 player seats
+            let is_hidden = payload.is_hidden.unwrap_or(true);
+            let mut elo_delta_for_user: i64 = 0;
             let inserted_id = conn.last_insert_rowid();
-            for (seat, &pid) in player_ids.iter().enumerate() {
-                if pid > 0 {
-                    let _ = conn.execute(
-                        "INSERT OR IGNORE INTO match_participants (match_id, user_id, seat_index) VALUES (?1, ?2, ?3)",
-                        libsql::params![inserted_id, pid, seat as i64],
-                    ).await;
+
+            if is_hidden {
+                // Update user stats after successful match save
+                let won = payload.won_match.unwrap_or(0);
+                let max_sets = payload.player1_sets.max(payload.player2_sets)
+                    .max(payload.player3_sets).max(payload.player4_sets);
+                let total_sets = payload.player1_sets + payload.player2_sets
+                    + payload.player3_sets + payload.player4_sets;
+
+                let _ = conn.execute(
+                    "UPDATE users SET
+                        games_played = games_played + 1,
+                        games_won = games_won + ?1,
+                        total_sets_won = total_sets_won + ?2,
+                        most_sets_won = MAX(most_sets_won, ?3)
+                     WHERE id = ?4",
+                    libsql::params![won, total_sets, max_sets, user.id],
+                ).await;
+
+                // Populate match_participants for all 4 player seats
+                for (seat, &pid) in player_ids.iter().enumerate() {
+                    if pid > 0 {
+                        let _ = conn.execute(
+                            "INSERT OR IGNORE INTO match_participants (match_id, user_id, seat_index) VALUES (?1, ?2, ?3)",
+                            libsql::params![inserted_id, pid, seat as i64],
+                        ).await;
+                    }
+                }
+
+                // ── Elo computation ───────────────────────────────────────────────
+                tracing::info!(
+                    "Elo: winning_team={}, bet_winner_seat={}, partner={:?}, player_ids={:?}",
+                    winning_team, bet_winner_seat, payload.partner, player_ids
+                );
+
+                // Team 1 = bet winner's seat + partner seat
+                // Team 2 = the other two seats
+                let k: f64 = 32.0;
+
+                // Determine which seat index = partner
+                let partner_seat = payload.partner.map(|p| (p.max(1).min(4) - 1) as usize).unwrap_or(99);
+                let bet_seat = bet_winner_seat;
+
+                // Identify team 1 and team 2 seat indices
+                let team1_seats = [bet_seat, partner_seat];
+                let team2_seats: Vec<usize> = (0..4).filter(|s| *s != bet_seat && *s != partner_seat).collect();
+
+                tracing::info!("Elo: team1_seats={:?}, team2_seats={:?}", team1_seats, team2_seats);
+
+                // Fetch current Elo for all 4 participants
+                let mut elos: [f64; 4] = [500.0; 4];
+                for (seat, &pid) in player_ids.iter().enumerate() {
+                    if pid > 0 {
+                        if let Ok(mut erows) = conn
+                            .query("SELECT elo FROM users WHERE id = ?1", libsql::params![pid])
+                            .await
+                        {
+                            if let Ok(Some(erow)) = erows.next().await {
+                                elos[seat] = erow.get::<i64>(0).unwrap_or(500) as f64;
+                            }
+                        }
+                    }
+                }
+
+                tracing::info!("Elo: elos={:?}, partner_seat={}", elos, partner_seat);
+
+                // Team average Elo
+                let team1_avg = (team1_seats.iter().map(|&s| elos[s]).sum::<f64>()) / team1_seats.len() as f64;
+                let team2_avg = if !team2_seats.is_empty() {
+                    team2_seats.iter().map(|&s| elos[s]).sum::<f64>() / team2_seats.len() as f64
+                } else {
+                    team1_avg // fallback, shouldn't happen
+                };
+
+                // Expected scores
+                let expected_team1 = 1.0 / (1.0 + 10.0_f64.powf((team2_avg - team1_avg) / 400.0));
+                let expected_team2 = 1.0 - expected_team1;
+
+                // Actual: team 1 won -> 1, team 2 won -> 0
+                let team1_won = winning_team == 1;
+
+                // Delta for each team
+                let delta1 = k * (if team1_won { 1.0 } else { 0.0 } - expected_team1);
+                let delta2 = k * (if team1_won { 0.0 } else { 1.0 } - expected_team2);
+
+                tracing::info!(
+                    "Elo: team1_avg={:.1}, team2_avg={:.1}, expected1={:.3}, expected2={:.3}, delta1={:.1}, delta2={:.1}, team1_won={}",
+                    team1_avg, team2_avg, expected_team1, expected_team2, delta1, delta2, team1_won
+                );
+
+                // Update Elo for all participants
+                for (seat, &pid) in player_ids.iter().enumerate() {
+                    if pid > 0 {
+                        let delta = if seat == bet_seat || seat == partner_seat { delta1 } else { delta2 };
+                        let delta_int = delta.round() as i64;
+                        tracing::info!("Elo: seat={}, pid={}, team={}, delta={}", seat, pid, if seat == bet_seat || seat == partner_seat { 1 } else { 2 }, delta_int);
+                        if pid == user.id {
+                            elo_delta_for_user = delta_int;
+                        }
+                        let _ = conn.execute(
+                            "UPDATE users SET elo = MAX(1, elo + ?1) WHERE id = ?2",
+                            libsql::params![delta_int, pid],
+                        ).await;
+                    }
                 }
             }
 
-            // Compute and store compact hand previews
+            // Compute and store compact hand previews (always)
             let preview1 = compact_hand_preview(&payload.player1_hand);
             let preview2 = compact_hand_preview(&payload.player2_hand);
             let preview3 = compact_hand_preview(&payload.player3_hand);
@@ -982,105 +1065,17 @@ async fn save_match(
                 libsql::params![preview1, preview2, preview3, preview4, inserted_id],
             ).await;
 
-            // ── Elo computation ───────────────────────────────────────────────
-            tracing::info!(
-                "Elo: winning_team={}, bet_winner_seat={}, partner={:?}, player_ids={:?}",
-                winning_team, bet_winner_seat, payload.partner, player_ids
-            );
-
-            // Team 1 = bet winner's seat + partner seat
-            // Team 2 = the other two seats
-            let k: f64 = 32.0;
-
-            // Determine which seat index = partner
-            let partner_seat = payload.partner.map(|p| (p.max(1).min(4) - 1) as usize).unwrap_or(99);
-            let bet_seat = bet_winner_seat;
-
-            // Identify team 1 and team 2 seat indices
-            let team1_seats = [bet_seat, partner_seat];
-            let team2_seats: Vec<usize> = (0..4).filter(|s| *s != bet_seat && *s != partner_seat).collect();
-
-            tracing::info!("Elo: team1_seats={:?}, team2_seats={:?}", team1_seats, team2_seats);
-
-            // Fetch current Elo for all 4 participants
-            let mut elos: [f64; 4] = [500.0; 4];
-            for (seat, &pid) in player_ids.iter().enumerate() {
-                if pid > 0 {
-                    if let Ok(mut erows) = conn
-                        .query("SELECT elo FROM users WHERE id = ?1", libsql::params![pid])
-                        .await
-                    {
-                        if let Ok(Some(erow)) = erows.next().await {
-                            elos[seat] = erow.get::<i64>(0).unwrap_or(500) as f64;
-                        }
-                    }
-                }
-            }
-
-            tracing::info!("Elo: elos={:?}, partner_seat={}", elos, partner_seat);
-
-            // Team average Elo
-            let team1_avg = (team1_seats.iter().map(|&s| elos[s]).sum::<f64>()) / team1_seats.len() as f64;
-            let team2_avg = if !team2_seats.is_empty() {
-                team2_seats.iter().map(|&s| elos[s]).sum::<f64>() / team2_seats.len() as f64
-            } else {
-                team1_avg // fallback, shouldn't happen
-            };
-
-            // Expected scores
-            let expected_team1 = 1.0 / (1.0 + 10.0_f64.powf((team2_avg - team1_avg) / 400.0));
-            let expected_team2 = 1.0 - expected_team1;
-
-            // Actual: team 1 won -> 1, team 2 won -> 0
-            let team1_won = winning_team == 1;
-
-            // Delta for each team
-            let delta1 = k * (if team1_won { 1.0 } else { 0.0 } - expected_team1);
-            let delta2 = k * (if team1_won { 0.0 } else { 1.0 } - expected_team2);
-
-            tracing::info!(
-                "Elo: team1_avg={:.1}, team2_avg={:.1}, expected1={:.3}, expected2={:.3}, delta1={:.1}, delta2={:.1}, team1_won={}",
-                team1_avg, team2_avg, expected_team1, expected_team2, delta1, delta2, team1_won
-            );
-
-            // Update Elo for all participants
-            let mut elo_delta_for_user: i64 = 0;
-            for (seat, &pid) in player_ids.iter().enumerate() {
-                if pid > 0 {
-                    let delta = if seat == bet_seat || seat == partner_seat { delta1 } else { delta2 };
-                    let delta_int = delta.round() as i64;
-                    tracing::info!("Elo: seat={}, pid={}, team={}, delta={}", seat, pid, if seat == bet_seat || seat == partner_seat { 1 } else { 2 }, delta_int);
-                    if pid == user.id {
-                        elo_delta_for_user = delta_int;
-                    }
-                    let _ = conn.execute(
-                        "UPDATE users SET elo = MAX(1, elo + ?1) WHERE id = ?2",
-                        libsql::params![delta_int, pid],
-                    ).await;
-                }
-            }
-
             // Update the match record with the saving user's Elo change
-            // Get the saved match ID
-            let match_id: i64 = if let Ok(mut id_rows) = conn
-                .query("SELECT id FROM matches WHERE room_id = ?1 ORDER BY id DESC LIMIT 1", libsql::params![saved_room_id.clone()])
-                .await
-            {
-                if let Ok(Some(id_row)) = id_rows.next().await {
-                    id_row.get::<i64>(0).unwrap_or(0)
-                } else { 0 }
-            } else { 0 };
-
             let _ = conn.execute(
-                "UPDATE matches SET elo_change = ?1 WHERE room_id = ?2",
-                libsql::params![elo_delta_for_user, saved_room_id],
+                "UPDATE matches SET elo_change = ?1 WHERE id = ?2",
+                libsql::params![elo_delta_for_user, inserted_id],
             ).await;
-    
+
             (
                 StatusCode::CREATED,
                 Json(serde_json::json!({
                     "ok": true,
-                    "id": match_id,
+                    "id": inserted_id,
                     "eloChange": elo_delta_for_user,
                 })),
             )

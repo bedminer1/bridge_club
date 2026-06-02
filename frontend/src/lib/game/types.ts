@@ -119,4 +119,6 @@ export type MatchRecord = {
     preview2: string | null
     preview3: string | null
     preview4: string | null
+    /** Whether this match is hidden (affects leaderboard/elo) */
+    isHidden?: boolean
 }

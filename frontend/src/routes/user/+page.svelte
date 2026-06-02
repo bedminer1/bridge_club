@@ -156,46 +156,44 @@
                                 <a href="/user/{matchRecord.id}" class="block">
                                     <Card.Root class="w-full rounded-lg border-border hover:border-accent/30 transition-colors">
                                         <div class="flex items-center justify-between p-4 gap-4">
-                                            <!-- Result badge -->
-                                            <div class="w-16 shrink-0">
-                                                <span
-                                                    class="text-sm font-bold {didWin ? 'text-green' : 'text-red'}"
-                                                >
+                                            <!-- Info + Result badge inline -->
+                                            <div class="flex items-center gap-3 flex-1 min-w-0">
+                                                <span class="text-sm font-bold shrink-0 {didWin ? 'text-green' : 'text-red'}">
                                                     {didWin ? "Victory" : "Defeat"}
                                                 </span>
-                                    </div>
+                                                <span class="flex gap-3 text-xs text-muted-foreground flex-wrap items-center">
+                                                    <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>
+                                                    <span>|</span>
+                                                    {#if matchRecord.isHidden}
+                                                        <span class="text-purple font-semibold">Hidden Only</span>
+                                                    {:else}
+                                                        <span class="text-muted-foreground">Open</span>
+                                                    {/if}
+                                                    <span>|</span>
+                                                    <span>{formatDate(matchRecord.date)}</span>
+                                                    {#if matchRecord.eloChange}
+                                                        <span>|</span>
+                                                        <span class="{matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">{matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange}</span>
+                                                    {/if}
+                                                </span>
+                                            </div>
 
-                                    <!-- Info -->
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex gap-3 mb-5 text-xs text-muted-foreground">
-                                            <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>
-                                            <span>|</span>
-                                            <span>{matchRecord.botDifficulty}</span>
-                                            <span>|</span>
-                                            <span>{formatDate(matchRecord.date)}</span>
-                                            {#if matchRecord.eloChange}
-                                                <span>|</span>
-                                                <span class="{matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">{matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange}</span>
-                                            {/if}
+                                            <!-- Scores -->
+                                            <div class="hidden sm:block shrink-0">
+                                                <ScoreDisplay {matchRecord} />
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    <!-- Scores -->
-                                    <div class="hidden sm:block shrink-0">
-                                        <ScoreDisplay {matchRecord} />
-                                    </div>
-                                </div>
-                                <!-- Hand preview (parsed from compact string) -->
-                                {#if matchRecord.preview1}
-                                    {@const cards = parsePreview(matchRecord.preview1)}
-                                    <div class="px-4 pb-2 flex flex-wrap gap-0.5">
-                                        {#each cards as card, ci (ci)}
-                                            <PokerCard card={card} isIllegal={false} minify={true} />
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </Card.Root>
-                        </a>
+                                        <!-- Hand preview (parsed from compact string) -->
+                                        {#if matchRecord.preview1}
+                                            {@const cards = parsePreview(matchRecord.preview1)}
+                                            <div class="px-4 pb-2 flex flex-wrap gap-0.5">
+                                                {#each cards as card, ci (ci)}
+                                                    <PokerCard card={card} isIllegal={false} minify={true} />
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                    </Card.Root>
+                                </a>
                     {/each}
                 </div>
             {:else}

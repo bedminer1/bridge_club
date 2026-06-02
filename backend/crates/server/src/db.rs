@@ -124,6 +124,7 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN most_sets_won INTEGER DEFAULT 0;").await;
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN elo INTEGER DEFAULT 500;").await;
     let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN elo_change INTEGER DEFAULT 0;").await;
+    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN is_hidden INTEGER DEFAULT 1;").await;
 
     // Create match_participants join table for indexed user->match lookups
     let _ = conn.execute_batch(
@@ -251,6 +252,7 @@ pub struct MatchRowLight {
     pub player4_sets: i64,
     pub players: Option<String>,
     pub elo_change: i64,
+    pub is_hidden: bool,
     pub preview1: Option<String>,
     pub preview2: Option<String>,
     pub preview3: Option<String>,
