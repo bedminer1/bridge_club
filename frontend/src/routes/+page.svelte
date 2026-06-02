@@ -17,6 +17,7 @@
         createOnlineGame,
         getRoomState,
         apiStateToGame,
+        frontendCardToApiCard,
     } from "$lib/game/api-game";
     import { page } from "$app/state";
     import { goto } from "$app/navigation";
@@ -196,7 +197,7 @@
         if (!isOnline || !roomId || !onlineToken) return
         if (game.WhoseTurn !== humanPlayerId) return
         try {
-            wsClient.gameAction("selectPartner", undefined, card)
+            wsClient.gameAction("selectPartner", undefined, frontendCardToApiCard(card))
         } catch (e) {
             console.error("Online partner select failed:", e)
         }
@@ -206,7 +207,7 @@
         if (!isOnline || !roomId || !onlineToken) return
         if (game.WhoseTurn !== humanPlayerId) return
         try {
-            wsClient.gameAction("play", undefined, card)
+            wsClient.gameAction("play", undefined, frontendCardToApiCard(card))
         } catch (e) {
             console.error("Online play failed:", e)
         }

@@ -507,3 +507,13 @@ export async function doAdvance(roomId: string, token: string): Promise<Game> {
     const betWinnerIdx = data.state.betWinner ?? undefined
     return apiStateToGame(data.state, roomId, betWinnerIdx)
 }
+
+/**
+ * Convert a frontend card ({Suit, Value}) to the backend API card format ({suit, rank}).
+ */
+export function frontendCardToApiCard(card: any): { suit: string; rank: string } {
+    return {
+        suit: FRONTEND_SUIT_TO_API[card.Suit] ?? card.Suit,
+        rank: VALUE_TO_API_RANK[card.Value] ?? "Two",
+    }
+}
