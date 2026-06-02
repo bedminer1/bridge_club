@@ -21,13 +21,12 @@
         createOnlineGame,
         getRoomState,
         doAdvance,
-        doBid,
-        doPlay,
-        doSelectPartner,
         apiStateToGame,
     } from "$lib/game/api-game";
     import { page } from "$app/state";
     import { goto } from "$app/navigation";
+
+    import { wsClient } from "$lib/game/ws-client";
 
     import {
         Card,
@@ -177,21 +176,10 @@
                     headerState.hiddenMode = info.hiddenMode ?? true
                 }
             } catch {}
-            // Always start chat polling when entering the game
-            chatStartPolling()
             // Start game polling if it's not the human's turn
             if (game.WhoseTurn !== humanPlayerId && game.Winner === "") {
                 startPolling()
             }
-            // Register WS game:state listener for realtime updates
-            // (the WS lobby event listeners don't fire since lobby uses HTTP)
-            const unsubGame = wsClient.on("game:state", (data) => {
-                if (data.roomId === roomId) {
-                    const updated = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
-                    fixupPlayerDisplay(updated)
-                    game = updated
-                }
-            })
         } catch (e) {
             console.error("Failed to load existing room:", e)
             try { localStorage.removeItem("bridgeActiveRoom") } catch {}
@@ -210,7 +198,6 @@
     function startPolling() {
         stopPolling()
         _pollActive = true
-        chatStartPolling()
         const delay = (headerState.botSpeed ?? 2) * 1000
         pollTimeout = setTimeout(() => {
             if (_pollActive) tick()
@@ -220,7 +207,6 @@
     let _pollActive = $state(false)
 
     function stopPolling() {
-        chatStopPolling()
         _pollActive = false
         if (pollTimeout !== null) { clearTimeout(pollTimeout); pollTimeout = null }
     }
@@ -375,101 +361,44 @@
     let lobbyMySeatIndex = $state(0)
     let lobbyPlayers = $state<Array<{ name: string; seatIndex: number; isBot: boolean }>>([])
     let lobbyHiddenMode = $state(true)
-    let lobbyPollInterval: ReturnType<typeof setInterval> | null = null
 
-    async function lobbyCreateRoom() {
+    function lobbyCreateRoom() {
         lobbyCreating = true
         try {
-            const res = await fetch(`${API_URL}/api/rooms`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
-            })
-            if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Failed: ${res.status} ${t}`); return }
-            const d = await res.json()
-            roomId = d.roomId; lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = true; lobbyPlayerId = d.playerId
-            lobbyStartPolling(); chatStartPolling()
-        } catch (e) { console.error("Create room error:", e); alert("Failed. Is the backend running?") }
-        finally { lobbyCreating = false }
+            wsClient.createLobby()
+        } catch (e) { console.error("Create room error:", e); lobbyCreating = false; alert("Failed. Is the backend running?") }
     }
 
-    async function lobbyJoinRoom() {
+    function lobbyJoinRoom() {
         if (!lobbyJoinRoomId.trim()) return
         lobbyJoining = true; lobbyJoinError = ""
         try {
-            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyJoinRoomId.trim())}/join`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
-            })
-            if (!res.ok) { const t = await res.text().catch(() => ""); lobbyJoinError = `Failed: ${res.status} ${t}`; return }
-            const d = await res.json()
-            roomId = d.roomId; lobbyRoomId = d.roomId; lobbyMySeatIndex = d.seatIndex; lobbyIsHost = false; lobbyPlayerId = d.playerId
-            lobbyStartPolling(); chatStartPolling()
-        } catch (e) { console.error("Join error:", e); lobbyJoinError = "Failed. Is the backend running?" }
-        finally { lobbyJoining = false }
+            wsClient.joinLobby(lobbyJoinRoomId.trim())
+        } catch (e) { console.error("Join error:", e); lobbyJoining = false; lobbyJoinError = "Failed. Is the backend running?" }
     }
 
-    async function lobbyLeaveRoom() {
+    function lobbyLeaveRoom() {
         if (!lobbyRoomId || !lobbyPlayerId) return
         try {
-            await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/leave/${encodeURIComponent(lobbyPlayerId)}`, {
-                method: "POST",
-                headers: { "X-Session-Token": onlineToken },
-            })
+            wsClient.leaveLobby()
         } catch (e) { console.error("Leave error:", e) }
-        chatStopPolling(); lobbyStopPolling()
         roomId = ""; lobbyRoomId = ""; lobbyPlayerId = ""; lobbyMySeatIndex = 0; lobbyIsHost = false; lobbyPlayers = []
         try { localStorage.removeItem("bridgeActiveRoom") } catch {}
     }
 
-    async function lobbyStartGame() {
+    function lobbyStartGame() {
         try {
-            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/start`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
-                body: JSON.stringify({ difficulty: headerState.difficulty || "Easy" }),
-            })
-            if (!res.ok) { const t = await res.text().catch(() => ""); alert(`Start failed: ${res.status} ${t}`); return }
-            const d = await res.json()
-            if (d.ok) { lobbyStopPolling(); headerState.hiddenMode = lobbyHiddenMode; goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`) }
-            else { alert("Start failed: " + JSON.stringify(d)) }
+            wsClient.startGame(lobbyHiddenMode, headerState.difficulty || "Easy")
         } catch (e) { console.error("Start error:", e); alert("Failed. Is the backend running?") }
     }
 
-    function lobbyStartPolling() {
-        lobbyStopPolling(); lobbyPoll()
-        lobbyPollInterval = setInterval(lobbyPoll, 2000)
-    }
-    function lobbyStopPolling() {
-        if (lobbyPollInterval !== null) { clearInterval(lobbyPollInterval); lobbyPollInterval = null }
-    }
-    async function lobbyPoll() {
-        if (!lobbyRoomId) return
-        try {
-            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/info`, {
-                headers: { "X-Session-Token": onlineToken },
-            })
-            if (!res.ok) return
-            const d = await res.json()
-            if (d.isStarted) { lobbyStopPolling(); headerState.hiddenMode = d.hiddenMode ?? true; goto(`/?room=${encodeURIComponent(lobbyRoomId)}&seat=${lobbyMySeatIndex}`); return }
-            lobbyPlayers = d.players || []
-            lobbyHiddenMode = d.hiddenMode ?? true
-        } catch (e) { console.error("Poll error:", e) }
-    }
-
-    async function lobbyToggleHiddenMode() {
+    function lobbyToggleHiddenMode() {
         if (!lobbyRoomId || !lobbyPlayerId) return
-        const newVal = !lobbyHiddenMode
         try {
-            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(lobbyRoomId)}/hidden-mode`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
-                body: JSON.stringify({ enabled: newVal, playerId: lobbyPlayerId }),
-            })
-            if (res.ok) lobbyHiddenMode = newVal
+            wsClient.toggleHidden(!lobbyHiddenMode)
         } catch (e) { console.error("Toggle hidden mode error:", e) }
     }
     async function lobbyCopyRoomId() { try { await navigator.clipboard.writeText(lobbyRoomId) } catch {} }
-    $effect(() => { return () => lobbyStopPolling() })
 
     // ── Chat ────────────────────────────────────────────────────────
     interface ChatMsg { id: number; playerName: string; text: string; timestamp: number }
@@ -478,58 +407,96 @@
         return new Date(ts).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit", hour12: false })
     }
     let chatText = $state("")
-    let chatLastId = $state(0)
-    let chatPollInterval: ReturnType<typeof setInterval> | null = null
     let chatContainer: HTMLDivElement | undefined = $state(undefined)
 
-    function chatStartPolling() {
-        chatStopPolling(); chatPoll()
-        chatPollInterval = setInterval(chatPoll, 2000)
-    }
-    function chatStopPolling() {
-        if (chatPollInterval !== null) { clearInterval(chatPollInterval); chatPollInterval = null }
-    }
-    async function chatPoll() {
-        if (!roomId) return
-        try {
-            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(roomId)}/chat?after=${chatLastId}`, {
-                headers: { "X-Session-Token": onlineToken },
-            })
-            if (!res.ok) return
-            const d = await res.json()
-            if (d.messages && d.messages.length > 0) {
-                for (const m of d.messages) {
-                    chatMessages = [...chatMessages, m]
-                    if (m.id > chatLastId) chatLastId = m.id
-                }
-                // Scroll to bottom
-                if (chatContainer) setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
-            }
-        } catch {}
-    }
-    async function chatSend() {
+    function chatSend() {
         const text = chatText.trim()
         if (!text || !roomId || !lobbyPlayerId) return
         chatText = ""
         try {
-            const res = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(roomId)}/chat`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Session-Token": onlineToken },
-                body: JSON.stringify({ playerId: lobbyPlayerId, text }),
-            })
-            if (res.ok) {
-                const d = await res.json()
-                if (d.ok && d.message) {
-                    chatMessages = [...chatMessages, d.message]
-                    chatLastId = d.message.id
-                    if (chatContainer) setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
-                }
-            }
+            wsClient.sendChat(lobbyPlayerId, text)
         } catch {}
     }
     function chatHandleKey(e: KeyboardEvent) {
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatSend() }
     }
+
+    // ── WS Event Listeners (replaces HTTP polling) ──────────────────
+    $effect(() => {
+        if (!onlineToken) return
+
+        // Connect WebSocket
+        wsClient.connect(onlineToken)
+
+        const unsubCreated = wsClient.on("lobby:created", (data) => {
+            roomId = data.roomId
+            lobbyRoomId = data.roomId
+            lobbyMySeatIndex = data.seatIndex
+            lobbyIsHost = true
+            lobbyPlayerId = data.playerId
+            lobbyCreating = false
+        })
+
+        const unsubJoined = wsClient.on("lobby:joined", (data) => {
+            roomId = data.roomId
+            lobbyRoomId = data.roomId
+            lobbyMySeatIndex = data.seatIndex
+            lobbyIsHost = false
+            lobbyPlayerId = data.playerId
+            lobbyJoining = false
+        })
+
+        // Standalone game:state listener for realtime updates (handles both
+        // lobby-created games and existing rooms loaded via loadExistingRoom)
+        const unsubGameState = wsClient.on("game:state", (data) => {
+            if (data.roomId === roomId) {
+                const updated = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
+                fixupPlayerDisplay(updated)
+                game = updated
+            }
+        })
+
+        const unsubUpdate = wsClient.on("lobby:update", (data) => {
+            lobbyPlayers = data.players
+            lobbyHiddenMode = data.hiddenMode
+        })
+
+        const unsubStarted = wsClient.on("lobby:started", (data) => {
+            headerState.hiddenMode = lobbyHiddenMode
+            goto(`/?room=${encodeURIComponent(data.roomId)}&seat=${lobbyMySeatIndex}`)
+        })
+
+        const unsubLeft = wsClient.on("lobby:left", () => {
+            roomId = ""
+            lobbyRoomId = ""
+            lobbyPlayerId = ""
+            lobbyMySeatIndex = 0
+            lobbyIsHost = false
+            lobbyPlayers = []
+        })
+
+        const unsubHiddenToggled = wsClient.on("lobby:hidden_toggled", (data) => {
+            lobbyHiddenMode = data.enabled
+        })
+
+        const unsubChatMessage = wsClient.on("chat:message", (data) => {
+            chatMessages = [...chatMessages, data]
+            if (chatContainer) setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
+        })
+
+        // Cleanup: unsubscribe all listeners and disconnect WS on destroy
+        return () => {
+            unsubCreated()
+            unsubJoined()
+            unsubUpdate()
+            unsubStarted()
+            unsubLeft()
+            unsubHiddenToggled()
+            unsubChatMessage()
+            unsubGameState()
+            wsClient.disconnect()
+        }
+    })
 
     /** Build each player's sequence of played cards from completed sets. */
     function playedCardsFromSets(sets: Array<{ Cards: Card[]; PlayerIDs: number[]; WinnerID: number }>): Card[][] {
