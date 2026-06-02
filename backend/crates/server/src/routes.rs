@@ -843,7 +843,7 @@ async fn save_match(
     // won_match = 1 means the saving user's team won
     // Team 1 = bet winner's team (bet winner + partner)
     // Team 2 = everyone else
-    let user_on_team1 = bet_winner_seat == player_ids.iter().position(|&id| id == user.id).unwrap_or(99)
+    let _user_on_team1 = bet_winner_seat == player_ids.iter().position(|&id| id == user.id).unwrap_or(99)
         || payload.partner.map_or(false, |p| (p as usize - 1) == player_ids.iter().position(|&id| id == user.id).unwrap_or(99));
     // Simplified: find user's seat from players JSON, check if it's bet_winner or partner seat
     let user_seat = payload.players.as_ref().and_then(|pj| {

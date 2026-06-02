@@ -3,7 +3,7 @@
 //! Serializes all database access through a Mutex. Auto-reconnects when the
 //! hrana stream is closed by the Turso server.
 
-use libsql::{Connection, Database};
+use libsql::{Builder, Connection, Database};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -24,9 +24,9 @@ impl DbPool {
         let db = if url.starts_with("libsql://") || url.starts_with("https://") {
             let auth_token = std::env::var("DATABASE_AUTH_TOKEN")
                 .map_err(|_| "DATABASE_AUTH_TOKEN required for remote Turso connection".to_string())?;
-            Database::open_remote(url.clone(), auth_token)?
+            Builder::new_remote(url.clone(), auth_token).build().await?
         } else {
-            Database::open(url.clone())?
+            Builder::new_local(url.clone()).build().await?
         };
 
         let conn = db.connect()?;
@@ -143,8 +143,8 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
 }
 
 /// Create a test pool backed by a temporary SQLite file.
-pub fn new_temp(path: &str) -> Result<DbPool, Box<dyn std::error::Error>> {
-    let db = Database::open(path.to_string())?;
+pub async fn new_temp(path: &str) -> Result<DbPool, Box<dyn std::error::Error>> {
+    let db = Builder::new_local(path.to_string()).build().await?;
     let conn = db.connect()?;
     Ok(DbPool {
         db: Arc::new(db),

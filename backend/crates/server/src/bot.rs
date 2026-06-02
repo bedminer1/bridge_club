@@ -273,6 +273,7 @@ struct TeamModel {
     pub tricks_observed: u8,
 }
 
+#[allow(dead_code)]
 impl TeamModel {
     pub fn new(bot_idx: usize) -> Self {
         TeamModel {
@@ -364,7 +365,7 @@ impl TeamModel {
         &self,
         table: &Table,
         set: &game_core::Set,
-        player: usize,
+        _player: usize,
         card_order_in_set: usize,
         winner: usize,
     ) -> bool {
@@ -767,7 +768,7 @@ fn compute_player_suits_played(table: &Table) -> [Vec<Suit>; 4] {
 /// Try to find a legal card in a suit partner hasn't played.
 /// Prefer non-trump suits first (to not waste partner's trump).
 fn find_partner_void_suit(
-    table: &Table,
+    _table: &Table,
     partner_idx: usize,
     player_suits_played: &[Vec<Suit>; 4],
     legal: &[Card],

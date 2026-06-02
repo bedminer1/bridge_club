@@ -94,7 +94,7 @@ impl Table {
     ///
     /// P1 (index 0) starts the bidding.
     pub fn deal(&mut self) {
-        let mut final_deck = Deck::new();
+        let final_deck;
         loop {
             let mut deck = Deck::new();
             deck.shuffle();
@@ -178,7 +178,6 @@ impl Table {
                     Strain::Diamonds => Suit::Diamonds,
                     Strain::Hearts => Suit::Hearts,
                     Strain::Spades => Suit::Spades,
-                    _ => return Err("Invalid strain"),
                 });
                 self.bet_winner = Some(auction.current_player);
             }

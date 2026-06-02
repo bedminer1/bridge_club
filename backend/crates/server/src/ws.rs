@@ -4,12 +4,9 @@
 //! persistent WebSocket connection per client. The server pushes state
 //! updates via broadcast channels per room.
 
-use std::sync::Arc;
-
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::{Query, State},
-    http::StatusCode,
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -36,7 +33,7 @@ enum ClientMessage {
     #[serde(rename = "lobby:join")]
     LobbyJoin { room_id: String },
     #[serde(rename = "lobby:leave")]
-    LobbyLeave { player_id: String },
+    LobbyLeave { _player_id: String },
     #[serde(rename = "lobby:start")]
     LobbyStart {
         hidden_mode: Option<bool>,
@@ -64,8 +61,6 @@ enum ServerMessage {
         user_id: i64,
         username: String,
     },
-    #[serde(rename = "auth:error")]
-    AuthError { error: String },
     #[serde(rename = "lobby:created")]
     LobbyCreated {
         #[serde(rename = "roomId")]
@@ -109,8 +104,6 @@ enum ServerMessage {
         text: String,
         timestamp: i64,
     },
-    #[serde(rename = "error")]
-    Error { error: String },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -144,7 +137,7 @@ pub struct WsQuery {
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
-    Query(query): Query<WsQuery>,
+    Query(_query): Query<WsQuery>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }

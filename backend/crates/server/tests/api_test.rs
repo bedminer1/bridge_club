@@ -23,7 +23,7 @@ async fn build_test_app() -> (Router, tempfile::TempDir) {
     let db_path = dir.path().join("test.db");
     let db_path_str = db_path.to_str().unwrap().to_string();
 
-    let pool = bridge_server::db::new_temp(&db_path_str).expect("Failed to create test DB pool");
+    let pool = bridge_server::db::new_temp(&db_path_str).await.expect("Failed to create test DB pool");
     run_migrations(&pool).await.expect("Failed to run migrations");
 
     let state = AppState {
