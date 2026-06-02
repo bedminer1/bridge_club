@@ -489,6 +489,15 @@
                     </button>
                 {/each}
             </div>
+            <!-- Your own hand for reference -->
+            <div class="w-full max-w-3xl mt-4">
+                <p class="text-xs text-muted-foreground mb-1">Your hand:</p>
+                <div class="flex flex-wrap gap-1 justify-center">
+                    {#each game.Players[humanSeat].Cards as card, index (index)}
+                        <PokerCard card={card} isIllegal={false} minify={true} />
+                    {/each}
+                </div>
+            </div>
         </div>
     {:else if game.IsPartnerSelectionPhase}
         <div class="flex flex-col gap-4 items-center">
