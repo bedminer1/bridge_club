@@ -47,43 +47,6 @@
             </a>
             
             
-        <!-- Settings popover (only when game is active) -->
-        {#if headerState.game}
-            <Popover.Root>
-                <Popover.Trigger>
-                    <button class="p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors">
-                        <Settings class="w-4 h-4" />
-                    </button>
-                </Popover.Trigger>
-                <Popover.Content class="border w-64 mr-1 mt-2 text-sm" sideOffset={8}>
-                    <div class="flex flex-col gap-3 p-1">
-                        <div class="flex justify-between items-center gap-4">
-                            <Label for="difficulty">Difficulty</Label>
-                            <Select.Root type="single" bind:value={headerState.difficulty} disabled={!headerState.game.IsBettingPhase}>
-                                <Select.Trigger class="w-[100px]">{headerState.difficulty}</Select.Trigger>
-                                <Select.Content>
-                                    <Select.Item value="Easy">Easy</Select.Item>
-                                    <Select.Item value="Medium">Medium</Select.Item>
-                                    <Select.Item value="Hard" disabled>Hard</Select.Item>
-                                </Select.Content>
-                            </Select.Root>
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <Label for="bot-speed">Bot Speed</Label>
-                            <Input type="number" bind:value={headerState.botSpeed} class="w-[100px]" />
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <Label for="hidden-mode">Hidden Mode</Label>
-                            <Switch bind:checked={headerState.hiddenMode} />
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <Label for="bots">Bots</Label>
-                            <Switch bind:checked={headerState.game.TurnOnBots} />
-                        </div>
-                    </div>
-                </Popover.Content>
-            </Popover.Root>
-        {/if}
         </div>
 
     </div>
