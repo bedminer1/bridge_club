@@ -8,7 +8,7 @@
     let {
         roomId = "",
         lobbyPlayerId = "",
-        bind:chatMessages = $bindable<ChatMsg[]>([]),
+        chatMessages = $bindable<ChatMsg[]>([]),
         onSend = (_text: string) => {},
     } = $props()
 
