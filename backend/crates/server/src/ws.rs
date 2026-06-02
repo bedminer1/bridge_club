@@ -526,10 +526,13 @@ async fn handle_chat_send(
     conn: &mut ConnectionState,
     state: &AppState,
 ) -> Result<Option<String>, String> {
+    tracing::info!(text, "handle_chat_send called");
     let room_id = conn.current_room.ok_or_else(|| {
+        tracing::warn!("Chat send: not in a room");
         "{\"type\":\"error\",\"error\":\"Not in a room\"}".to_string()
     })?;
     let player_name = conn.username.as_deref().unwrap_or("Unknown");
+    tracing::info!(%room_id, %player_name, text, "Chat send processing");
 
     let mut rooms = state.rooms.write().await;
     let room = rooms.get_mut(&room_id).ok_or_else(|| {
