@@ -31,11 +31,18 @@ enum ClientMessage {
     #[serde(rename = "lobby:create")]
     LobbyCreate,
     #[serde(rename = "lobby:join")]
-    LobbyJoin { room_id: String },
+    LobbyJoin {
+        #[serde(rename = "roomId")]
+        room_id: String,
+    },
     #[serde(rename = "lobby:leave")]
-    LobbyLeave { _player_id: String },
+    LobbyLeave {
+        #[serde(rename = "playerId")]
+        _player_id: String,
+    },
     #[serde(rename = "lobby:start")]
     LobbyStart {
+        #[serde(rename = "hiddenMode")]
         hidden_mode: Option<bool>,
         difficulty: Option<String>,
     },
@@ -43,12 +50,17 @@ enum ClientMessage {
     LobbyToggleHidden { enabled: bool },
     #[serde(rename = "game:action")]
     GameAction {
+        #[serde(rename = "actionType")]
         action_type: String,
         call: Option<serde_json::Value>,
         card: Option<serde_json::Value>,
     },
     #[serde(rename = "chat:send")]
-    ChatSend { player_id: String, text: String },
+    ChatSend {
+        #[serde(rename = "playerId")]
+        player_id: String,
+        text: String,
+    },
 }
 
 /// Messages the server sends to the client.
