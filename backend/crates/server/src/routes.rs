@@ -811,13 +811,10 @@ async fn save_match(
         Err((status, json)) => {
             return (
                 status,
-                Json(AuthResponse {
-                    ok: false,
-                    token: None,
-                    user_id: None,
-                    username: None,
-                    error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
-                }),
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": json.0.error.clone().unwrap_or_else(|| "Unauthorized".to_string()),
+                })),
             );
         }
     };
@@ -837,13 +834,9 @@ async fn save_match(
                 tracing::info!("Match for room {} already saved, skipping duplicate", room_id);
                 return (
                     StatusCode::OK,
-                    Json(AuthResponse {
-                        ok: true,
-                        token: None,
-                        user_id: None,
-                        username: None,
-                        error: None,
-                    }),
+                    Json(serde_json::json!({
+                        "ok": true,
+                    })),
                 );
             }
         }
@@ -1068,33 +1061,38 @@ async fn save_match(
             }
 
             // Update the match record with the saving user's Elo change
+            // Get the saved match ID
+            let match_id: i64 = if let Ok(mut id_rows) = conn
+                .query("SELECT id FROM matches WHERE room_id = ?1 ORDER BY id DESC LIMIT 1", libsql::params![saved_room_id.clone()])
+                .await
+            {
+                if let Ok(Some(id_row)) = id_rows.next().await {
+                    id_row.get::<i64>(0).unwrap_or(0)
+                } else { 0 }
+            } else { 0 };
+
             let _ = conn.execute(
                 "UPDATE matches SET elo_change = ?1 WHERE room_id = ?2",
                 libsql::params![elo_delta_for_user, saved_room_id],
             ).await;
-
+    
             (
                 StatusCode::CREATED,
-                Json(AuthResponse {
-                    ok: true,
-                    token: None,
-                    user_id: None,
-                    username: None,
-                    error: None,
-                }),
+                Json(serde_json::json!({
+                    "ok": true,
+                    "id": match_id,
+                    "eloChange": elo_delta_for_user,
+                })),
             )
         }
         Err(e) => {
             tracing::error!("Match insert error: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(AuthResponse {
-                    ok: false,
-                    token: None,
-                    user_id: None,
-                    username: None,
-                    error: Some("Failed to save match".to_string()),
-                }),
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": "Failed to save match",
+                })),
             )
         }
     }

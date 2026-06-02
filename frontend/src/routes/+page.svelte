@@ -43,6 +43,10 @@
     // Lock hidden mode toggle if it was on at game start
     let hiddenModeLocked = $state(false)
 
+    // Match result data for the game-over dialog
+    let lastMatchId = $state<number | null>(null)
+    let lastEloChange = $state<number | null>(null)
+
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
 
@@ -442,7 +446,11 @@
                 },
                 body: JSON.stringify(body),
             })
-            if (!res.ok) {
+            if (res.ok) {
+                const data = await res.json()
+                if (data.id) lastMatchId = data.id
+                if (data.eloChange !== undefined) lastEloChange = data.eloChange
+            } else {
                 console.error("Auto-save failed:", res.status, await res.text().catch(() => ""))
             }
         } catch (e) {
@@ -541,10 +549,23 @@
                     <span class="text-xs text-muted-foreground mt-1">
                         Bet: {game.BetSize}{suitToSymbol.get(game.Trump)}
                     </span>
+                    {#if lastEloChange !== null}
+                        <span class="text-sm mt-1 {lastEloChange > 0 ? 'text-green' : 'text-red'}">
+                            Elo: {lastEloChange > 0 ? '+' : ''}{lastEloChange}
+                        </span>
+                    {/if}
                 </Dialog.Description>
             </Dialog.Header>
-            <Dialog.Footer class="justify-center">
-                <Button onclick={() => { showGameOverDialog = false }}>OK</Button>
+            <Dialog.Footer class="justify-center gap-2">
+                <Button onclick={() => { showGameOverDialog = false }} variant="outline">OK</Button>
+                {#if lastMatchId}
+                    <Button onclick={() => { showGameOverDialog = false; goto(`/user/${lastMatchId}`) }}>
+                        View Results
+                    </Button>
+                {/if}
+                <Button onclick={() => { showGameOverDialog = false; try { localStorage.removeItem("bridgeActiveRoom") } catch {}; goto("/") }}>
+                    Play Again
+                </Button>
             </Dialog.Footer>
         </Dialog.Content>
     </Dialog.Root>
