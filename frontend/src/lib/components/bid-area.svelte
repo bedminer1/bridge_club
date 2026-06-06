@@ -90,12 +90,12 @@
             </Select.Root>
         </div>
         <div class="flex gap-2 w-full">
-            <Button class="flex-1" onclick={onPass}>Pass</Button>
+            <Button class="cursor-pointer flex-1" onclick={onPass}>Pass</Button>
             <Button 
             variant="destructive"
             onclick={() => onRaise(betSize, bettedSuit)}
             disabled={!isLegalRaise(game, betSize, bettedSuit)}
-            class="flex-1"
+            class="bg-red-500 cursor-pointer flex-1 disabled:cursor-not-allowed disabled:opacity-50"
             >Raise</Button>
         </div>
     </div>

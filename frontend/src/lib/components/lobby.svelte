@@ -105,11 +105,11 @@
             </button>
             {/if}
             <div class="flex gap-2">
-                <Button onclick={() => { if (lobbyMode === "create") handleCreate(); else lobbyMode = "create" }}
+                <Button class = "cursor-pointer" onclick={() => { if (lobbyMode === "create") handleCreate(); else lobbyMode = "create" }}
                     variant={lobbyMode === "create" ? "default" : "outline"}>
                     Create Room
                 </Button>
-                <Button onclick={() => { lobbyMode = "join" }}
+                <Button class="cursor-pointer" onclick={() => { lobbyMode = "join" }}
                     variant={lobbyMode === "join" ? "default" : "outline"}>
                     Join Room
                 </Button>
@@ -123,7 +123,7 @@
                     <CardDescription class="text-center max-w-[220px] mx-auto">Create a new game room</CardDescription>
                 </CardHeader>
                 <CardContent class="flex flex-col gap-4">
-                    <Button onclick={handleCreate} disabled={lobbyCreating}>
+                    <Button class = "cursor-pointer" onclick={handleCreate} disabled={lobbyCreating}>
                         {lobbyCreating ? "Creating..." : "Create Room"}
                     </Button>
                 </CardContent>
@@ -190,23 +190,24 @@
                         </Select.Root>
                     </div>
                     <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                        <span class="text-sm text-foreground">Hidden Mode Only</span>
+                        <span class="text-sm text-foreground">Tutorial Mode</span>
                         <button
                             onclick={handleToggleHidden}
-                            class="relative w-10 h-5 rounded-full transition-colors {lobbyHiddenMode ? 'bg-accent' : 'bg-muted-foreground/30'}"
+                            aria-label="Toggle tutorial mode"
+                            class="relative w-10 h-5 rounded-full transition-colors {!lobbyHiddenMode ? 'bg-accent' : 'bg-muted-foreground/30'}"
                         >
-                            <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {lobbyHiddenMode ? 'translate-x-5' : ''}" />
+                            <span class="cursor-pointer absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform {!lobbyHiddenMode ? 'translate-x-5' : ''}"></span>
                         </button>
                     </div>
-                    <Button onclick={handleStart} class="w-full mt-2" size="lg">Start Game</Button>
+                    <Button onclick={handleStart} class="cursor-pointer w-full mt-2" size="lg">Start Game</Button>
                 {:else}
                     <div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card">
-                        <span class="text-sm text-foreground">Hidden Mode Only</span>
-                        <span class="text-xs text-muted-foreground">{lobbyHiddenMode ? 'On' : 'Off'}</span>
+                        <span class="text-sm text-foreground">Tutorial Mode</span>
+                        <span class="text-xs text-muted-foreground">{lobbyHiddenMode ? 'Off' : 'On'}</span>
                     </div>
                     <p class="text-sm text-muted-foreground text-center">Waiting for host to start the game...</p>
                 {/if}
-                <Button onclick={handleLeave} variant="outline" class="w-full mt-1">Leave Room</Button>
+                <Button onclick={handleLeave} variant="outline" class="cursor-pointer w-full mt-1">Leave Room</Button>
             </CardContent>
         </Card>
     {/if}

@@ -486,7 +486,7 @@
     }
 </script>
 
-<div class="flex flex-col gap-6 w-full min-h-screen items-center px-4 pt-20 pb-8">
+<div class="flex flex-col gap-6 w-full items-center px-4 pt-20 pb-8">
 
 {#if page.url.searchParams.get("room")}
     {#if isOnlineLoading}
