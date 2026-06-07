@@ -90,8 +90,12 @@
         }
     }
 
-    async function copyRoomId() {
-        try { await navigator.clipboard.writeText(lobbyRoomId) } catch {}
+    let shareUrl = $derived(lobbyRoomId
+        ? `${typeof window !== 'undefined' ? window.location.origin : ''}/?room=${lobbyRoomId}`
+        : "")
+
+    async function copyShareUrl() {
+        try { await navigator.clipboard.writeText(shareUrl) } catch {}
     }
 </script>
 
@@ -154,12 +158,12 @@
                     &larr;
                 </button>
                 <CardTitle class="text-center">Game Lobby</CardTitle>
-                <CardDescription class="text-center max-w-[220px] mx-auto">Copy Room ID and invite friends</CardDescription>
+                <CardDescription class="text-center max-w-[220px] mx-auto">Share the invite link with friends</CardDescription>
             </CardHeader>
             <CardContent class="flex flex-col gap-4">
-                <div class="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/50">
-                    <span class="text-sm font-mono text-muted-foreground flex-1 truncate">{lobbyRoomId}</span>
-                    <Button onclick={copyRoomId} variant="outline" size="sm">Copy</Button>
+                <div class="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/50">
+                    <span class="text-xs text-muted-foreground truncate max-w-full">{shareUrl}</span>
+                    <Button onclick={copyShareUrl} variant="outline" size="sm" class="self-end">Copy Link</Button>
                 </div>
                 <div class="flex flex-col gap-2">
                     <h3 class="text-sm font-medium text-foreground">Players ({lobbyPlayers.length})</h3>
