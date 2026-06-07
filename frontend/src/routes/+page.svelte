@@ -29,6 +29,7 @@
     import BidArea from "$lib/components/bid-area.svelte";
     import PlayArea from "$lib/components/play-area.svelte";
     import Chat from "$lib/components/chat.svelte";
+    import { EMPTY_GAME } from "$lib/game/types.js"
 
     let { data } = $props()
     let { username, userID, token } = $state(data)
@@ -36,9 +37,16 @@
     // Online-only game state
     let isOnline = $state(false)
     let isOnlineLoading = $state(false)
-    let game: any = $state({})
+    let game: Game = $state(EMPTY_GAME)
     let roomId = $state("")
     let onlineToken = $state(token ?? "")
+
+    //playback state
+    let playbackQueue: PlayEvent[] = $state([])
+    let isPlaybackRunning = $state(false)
+    let displayedPlayCount = $state(0)
+    let playbackGenerationKey: number = $state(0)
+    const PLAY_DELAY_MS = 1000
 
     // Lock hidden mode toggle if it was on at game start
     let hiddenModeLocked = $state(false)
@@ -152,7 +160,6 @@
     )
 
     // ── Online Game Actions ───────────────────────────────────────
-
     async function startOnlineGame() {
         if (!onlineToken) return
         isOnlineLoading = true
@@ -160,6 +167,7 @@
             const result = await createOnlineGame(username, headerState.difficulty, onlineToken)
             roomId = result.roomId
             game = result.game
+            displayedPlayCount = extractPlayEvents(game).length
             isOnline = true
         } catch (e) {
             console.error("Failed to start online game:", e)
@@ -178,6 +186,7 @@
             const gameState = await getRoomState(existingRoomId, onlineToken)
             fixupPlayerDisplay(gameState)
             game = gameState
+            displayedPlayCount = extractPlayEvents(game).length
             isOnline = true
             // Fetch room info for hidden mode setting
             try {
@@ -202,7 +211,7 @@
     }
 
     async function onlineRaiseBet(bs: number, suit: string) {
-        if (!isOnline || !roomId || !onlineToken) return
+        if (!isOnline || !roomId || !onlineToken || isPlaybackRunning) return
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
@@ -213,7 +222,7 @@
     }
 
     async function onlinePassBet() {
-        if (!isOnline || !roomId || !onlineToken) return
+        if (!isOnline || !roomId || !onlineToken || isPlaybackRunning) return
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             wsClient.gameAction("bid", "Pass")
@@ -223,7 +232,7 @@
     }
 
     async function onlineSelectPartner(card: any) {
-        if (!isOnline || !roomId || !onlineToken) return
+        if (!isOnline || !roomId || !onlineToken || isPlaybackRunning) return
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             wsClient.gameAction("selectPartner", undefined, frontendCardToApiCard(card))
@@ -233,7 +242,7 @@
     }
 
     async function onlinePlayCard(card: any, _player: any) {
-        if (!isOnline || !roomId || !onlineToken) return
+        if (!isOnline || !roomId || !onlineToken || isPlaybackRunning) return
         if (game.WhoseTurn !== humanPlayerId) return
         try {
             wsClient.gameAction("play", undefined, frontendCardToApiCard(card))
@@ -362,9 +371,10 @@
         // lobby-created games and existing rooms loaded via loadExistingRoom)
         const unsubGameState = wsClient.on("game:state", (data) => {
             if (data.roomId === roomId) {
-                const updated = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
-                fixupPlayerDisplay(updated)
-                game = updated
+                const updatedGame = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
+                console.log(updatedGame)
+                fixupPlayerDisplay(updatedGame)
+                renderGame(updatedGame)
             }
         })
 
@@ -409,6 +419,184 @@
             wsClient.disconnect()
         }
     })
+
+
+    // ── Renders the game one play at a time ──────────────────
+
+    function sameVisualPhase(a: Game, b: Game): boolean {
+        return a.IsBettingPhase === b.IsBettingPhase
+            && a.IsPartnerSelectionPhase === b.IsPartnerSelectionPhase
+    }
+    
+    // diffs updatedGame with game
+    function diffGameState(updatedGame: Game, game: Game): PlayEvent[] {
+        const updatedGameEvents = extractPlayEvents(updatedGame)
+        const gameEvents = [...extractPlayEvents(game), ...playbackQueue]
+        if (gameEvents.length > updatedGameEvents.length) {
+            console.log(gameEvents)
+            console.log(updatedGameEvents)
+            throw Error("gameEvents is longer than updatedGameEvents")
+        }
+        for (let i = 0; i < gameEvents.length; i++) {
+            if (gameEvents[i]?.id !== updatedGameEvents[i]?.id) throw Error("gameEvents does not match updatedGameEvents")
+        }
+        const diff = updatedGameEvents.slice(gameEvents.length)
+        console.log(diff)
+        return diff
+    }
+
+    // takes any game state and returns an array of plays made in the game so far
+    function extractPlayEvents(game: Game | null): PlayEvent[] {
+        if (!game) return []
+        const events: PlayEvent[] = []
+        const completedSets = game.CompletedSets ?? []
+        if (completedSets.length) {
+            for (let i = 0; i < completedSets.length; i++){
+                const set = completedSets[i]
+                for (let j = 0; j < set.Cards.length; j++) {
+                    const playerId = set.PlayerIDs[j]
+                    const card = set.Cards[j]
+                    events.push({
+                        id: `${i}-${j}-${playerId}-${card.Suit}${card.Value}`,
+                        trickIndex: i,
+                        position: j,
+                        playerId,
+                        card,
+                        isTrickEnd: j === set.Cards.length - 1,
+                        trickWinnerId: j === set.Cards.length - 1 ? set.WinnerID : null,
+                    })
+                }
+            }
+        }
+
+        const curr = completedSets.length
+        const currentMoves = game.Moves ?? []
+        for (let i = 0; i < currentMoves.length; i++) {
+            const m = currentMoves[i]
+            events.push({
+                id: `${curr}-${i}-${m.PlayerID}-${m.CardPlayed.Suit}${m.CardPlayed.Value}`,
+                trickIndex: curr,
+                position: i,
+                playerId: m.PlayerID,
+                card: m.CardPlayed,
+                isTrickEnd: i === 3,
+                trickWinnerId: null,
+            })
+        }
+
+        return events
+    }
+
+    // renders one PlayEvent 
+    function applyPlayEventToGame(playEvent: PlayEvent): void {
+        const playerIndex = game.Players.findIndex((player) => player.ID === playEvent.playerId)
+        if (playerIndex === -1) {
+            console.warn("[playback] Missing player for event", playEvent)
+            throw Error("missing player for play event")
+        }
+
+        if (game.IsBettingPhase) {
+            const cardToPlay = { ...playEvent.card, WonSet: false }
+            game.Moves = [
+                ...(game.Moves ?? []),
+                { CardPlayed: cardToPlay, PlayerID: playEvent.playerId },
+            ]
+            game.WhoseTurn = (playEvent.playerId % 4) + 1
+            displayedPlayCount += 1
+            return
+        }
+
+        const player = game.Players[playerIndex]
+        const cardToPlay = { ...playEvent.card, WonSet: false }
+        const handIndex = player.Cards.findIndex((card) => card.Suit === cardToPlay.Suit && card.Value === cardToPlay.Value)
+        if (handIndex !== -1) {
+            player.Cards.splice(handIndex, 1)
+        }
+        player.PlayedCards.push(cardToPlay)
+
+        const currentMoves: Move[] = [...(game.Moves ?? []), { CardPlayed: cardToPlay, PlayerID: playEvent.playerId }]
+        game.TrumpPlayed = game.TrumpPlayed || cardToPlay.Suit === game.Trump
+
+        if (currentMoves.length < 4) {
+            game.Moves = currentMoves
+            if (currentMoves.length === 1) {
+                game.TurnSuit = cardToPlay.Suit
+            }
+            game.WhoseTurn = (playEvent.playerId % 4) + 1
+        } else {
+            const winnerId = playEvent.trickWinnerId ?? playEvent.playerId
+            const completedCards = currentMoves.map((move) => ({
+                ...move.CardPlayed,
+                WonSet: move.PlayerID === winnerId,
+            }))
+
+            game.PreviousMoves = currentMoves.map((move) => ({
+                CardPlayed: {
+                    ...move.CardPlayed,
+                    WonSet: move.PlayerID === winnerId,
+                },
+                PlayerID: move.PlayerID,
+            }))
+            game.CompletedSets = [
+                ...(game.CompletedSets ?? []),
+                {
+                    Cards: completedCards,
+                    WinnerID: winnerId,
+                    PlayerIDs: currentMoves.map((move) => move.PlayerID),
+                },
+            ]
+            game.Moves = []
+            game.TurnSuit = ""
+
+            const winningPlayerIndex = game.Players.findIndex((player) => player.ID === winnerId)
+            if (winningPlayerIndex !== -1) {
+                game.Players[winningPlayerIndex].Sets += 1
+            }
+            game.WhoseTurn = winnerId
+        }
+
+        displayedPlayCount += 1
+    }
+
+    // renders all PlayEvents in the playbackQueue one by one
+    async function processPlaybackQueue(): Promise<void> {
+        if (isPlaybackRunning) return
+        isPlaybackRunning = true
+        const key = ++playbackGenerationKey
+        while (playbackQueue.length > 0 && key === playbackGenerationKey) {
+            const playEvent = playbackQueue.shift()!
+            applyPlayEventToGame(playEvent)
+            await new Promise(r => setTimeout(r, PLAY_DELAY_MS))
+        }
+        isPlaybackRunning = false
+    }
+
+    // orchestrator for all the helper functions
+    function renderGame(updatedGame: Game): void {
+        try {
+            if (!sameVisualPhase(updatedGame, game)) {
+                game = updatedGame
+                playbackQueue = []
+                isPlaybackRunning = false
+                playbackGenerationKey += 1
+                displayedPlayCount = extractPlayEvents(game).length
+                return
+            }
+            const diff = diffGameState(updatedGame, game)
+            playbackQueue = [...playbackQueue, ...diff]
+            console.log($state.snapshot(playbackQueue))
+            processPlaybackQueue()
+        } catch (Error) {
+            console.log(Error)
+            console.log("frontend game state is malformed. falling back to latest backend game state.")
+            console.log($state.snapshot(playbackQueue))
+            game = updatedGame
+            playbackQueue = []
+            isPlaybackRunning = false
+            playbackGenerationKey += 1
+            displayedPlayCount = extractPlayEvents(game).length
+        }
+    }
 
     /** Build each player's sequence of played cards from completed sets. */
     function playedCardsFromSets(sets: Array<{ Cards: Card[]; PlayerIDs: number[]; WinnerID: number }>): Card[][] {
@@ -528,7 +716,7 @@
     {:else}
     <!-- Play area table -->
     <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
-    <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl">
+    <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl {isPlaybackRunning ? 'pointer-events-none opacity-60' : ''}" aria-busy={isPlaybackRunning}>
         <!-- Game info strip -->
         <GameInfo {game} {humanSeat} {humanPlayerId} />
 
@@ -557,9 +745,9 @@
         </div>
 
     {#if game.IsBettingPhase}
-        <BidArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} onRaise={onlineRaiseBet} onPass={onlinePassBet} />
+        <BidArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} onRaise={onlineRaiseBet} onPass={onlinePassBet} />
     {:else}
-        <PlayArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} onPlayCard={onlinePlayCard} />
+        <PlayArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} onPlayCard={onlinePlayCard} />
     {/if}
     </div>
     </div>

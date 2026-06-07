@@ -10,6 +10,7 @@
         humanSeat = 0,
         humanPlayerId = 0,
         hiddenMode = true,
+        disabled = false,
         onPlayCard = (_card: any, _player: any) => {},
     } = $props()
 
@@ -64,9 +65,9 @@
         <div class="flex h-[100px] pl-4">
             {#each player.Cards  as card, index}
             <button
-                disabled={isCardIllegal(game, player, card)}
+                disabled={disabled || isCardIllegal(game, player, card)}
                 onclick={() => onPlayCard(card, player)}
-                class="text-left">
+                class="text-left disabled:cursor-not-allowed">
                 <HandDisplay index={index}>
                     <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
                 </HandDisplay>

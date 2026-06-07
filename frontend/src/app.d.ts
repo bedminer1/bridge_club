@@ -34,6 +34,7 @@ interface Game {
 	TurnSuit: string
 	Winner: string
 	TurnOnBots: boolean
+	CompletedSets: CompletedSet[]
 }
 
 interface Card {
@@ -83,4 +84,20 @@ type MatchRecord = {
     preview3: string | null
     preview4: string | null
     isHidden?: boolean
+}
+
+interface PlayEvent {
+	id: string           
+	trickIndex: number
+	position: number      
+	playerId: number
+	card: Card
+	isTrickEnd: boolean
+	trickWinnerId?: number | null
+}
+
+interface CompletedSet {
+	Cards: Card[]
+	WinnerID: number
+	PlayerIDs: number[]
 }

@@ -122,3 +122,47 @@ export type MatchRecord = {
     /** Whether this match is hidden (affects leaderboard/elo) */
     isHidden?: boolean
 }
+
+export interface PlayEvent {
+    /** deterministic key (e.g. `${trickIndex}-${position}-${playerId}-${card.Suit}${card.Value}`) */
+    id: string           
+    trickIndex: number
+    /** 0..3 within trick */
+    position: number      
+    playerId: number
+    card: Card
+    isTrickEnd: boolean
+    trickWinnerId?: number | null
+}
+
+export const EMPTY_PLAYER: Player = {
+        ID: 0,
+        Cards: [],
+        PlayedCards: [],
+        Partner: null,
+        Sets: 0,
+        IsBot: false,
+        Username: "",
+        ShortUsername: "",
+}
+
+export const EMPTY_GAME: Game = {
+	Players: [],
+	Team1: [],
+	BetWinner: EMPTY_PLAYER,
+	PartnerCard: { Rank: "", Value: 0, Suit: "", WonSet: false },
+	Team2: [],
+	Trump: "Club",
+	BetSize: 0,
+	IsBettingPhase: false,
+	IsPartnerSelectionPhase: false,
+	TrumpPlayed: false,
+	FullDeck: [],
+	Moves: [],
+	PreviousMoves: [],
+	WhoseTurn: 1,
+	TurnSuit: "",
+	Winner: "",
+	TurnOnBots: false,
+	CompletedSets: [],
+}
