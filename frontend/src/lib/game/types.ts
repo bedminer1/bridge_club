@@ -123,7 +123,8 @@ export type MatchRecord = {
     isHidden?: boolean
 }
 
-export interface PlayEvent {
+interface PlayEvent {
+    kind: "play"
     /** deterministic key (e.g. `${trickIndex}-${position}-${playerId}-${card.Suit}${card.Value}`) */
     id: string           
     trickIndex: number
@@ -134,6 +135,14 @@ export interface PlayEvent {
     isTrickEnd: boolean
     trickWinnerId?: number | null
 }
+
+interface WinEvent { 
+    kind: "win"
+    id: string
+    winner: string 
+}
+
+export type GameEvent = PlayEvent | WinEvent
 
 export const EMPTY_PLAYER: Player = {
         ID: 0,

@@ -87,6 +87,7 @@ type MatchRecord = {
 }
 
 interface PlayEvent {
+	kind: "play"
 	id: string           
 	trickIndex: number
 	position: number      
@@ -95,6 +96,14 @@ interface PlayEvent {
 	isTrickEnd: boolean
 	trickWinnerId?: number | null
 }
+
+interface WinEvent { 
+	kind: "win"
+	id: string
+	winner: string 
+}
+
+type GameEvent = PlayEvent | WinEvent
 
 interface CompletedSet {
 	Cards: Card[]

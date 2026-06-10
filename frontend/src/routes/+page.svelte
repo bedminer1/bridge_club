@@ -41,8 +41,7 @@
     let roomId = $state("")
     let onlineToken = $state(token ?? "")
 
-    //playback state
-    let playbackQueue: PlayEvent[] = $state([])
+    let playbackQueue: GameEvent[] = $state([])
     let isPlaybackRunning = $state(false)
     let displayedPlayCount = $state(0)
     let playbackGenerationKey: number = $state(0)
@@ -429,7 +428,7 @@
     }
     
     // diffs updatedGame with game
-    function diffGameState(updatedGame: Game, game: Game): PlayEvent[] {
+    function diffGameState(updatedGame: Game, game: Game): GameEvent[] {
         const updatedGameEvents = extractPlayEvents(updatedGame)
         const gameEvents = [...extractPlayEvents(game), ...playbackQueue]
         if (gameEvents.length > updatedGameEvents.length) {
@@ -446,9 +445,9 @@
     }
 
     // takes any game state and returns an array of plays made in the game so far
-    function extractPlayEvents(game: Game | null): PlayEvent[] {
+    function extractPlayEvents(game: Game | null): GameEvent[] {
         if (!game) return []
-        const events: PlayEvent[] = []
+        const events: GameEvent[] = []
         const completedSets = game.CompletedSets ?? []
         if (completedSets.length) {
             for (let i = 0; i < completedSets.length; i++){
@@ -457,6 +456,7 @@
                     const playerId = set.PlayerIDs[j]
                     const card = set.Cards[j]
                     events.push({
+                        kind: "play",
                         id: `${i}-${j}-${playerId}-${card.Suit}${card.Value}`,
                         trickIndex: i,
                         position: j,
@@ -474,6 +474,7 @@
         for (let i = 0; i < currentMoves.length; i++) {
             const m = currentMoves[i]
             events.push({
+                kind: "play",
                 id: `${curr}-${i}-${m.PlayerID}-${m.CardPlayed.Suit}${m.CardPlayed.Value}`,
                 trickIndex: curr,
                 position: i,
@@ -484,37 +485,49 @@
             })
         }
 
+        // If the game has a winner, append a terminal 'win' event so playback
+        // can render the final outcome in sequence with the plays.
+        if (game && game.Winner) {
+            events.push({ kind: "win", id: `win-${game.Winner}-${(game.CompletedSets ?? []).length}`, winner: game.Winner })
+        }
+
         return events
     }
 
-    // renders one PlayEvent 
-    function applyPlayEventToGame(playEvent: PlayEvent): void {
-        const playerIndex = game.Players.findIndex((player) => player.ID === playEvent.playerId)
+    // renders one GameEvent 
+    function applyPlayEventToGame(gameEvent: GameEvent): void {
+        if (gameEvent.kind === "win") {
+            game.Winner = gameEvent.winner
+            displayedPlayCount += 1
+            return
+        }
+
+        const playerIndex = game.Players.findIndex((player) => player.ID === gameEvent.playerId)
         if (playerIndex === -1) {
-            console.warn("[playback] Missing player for event", playEvent)
+            console.warn("[playback] Missing player for event", gameEvent)
             throw Error("missing player for play event")
         }
 
         if (game.IsBettingPhase) {
-            const cardToPlay = { ...playEvent.card, WonSet: false }
+            const cardToPlay = { ...gameEvent.card, WonSet: false }
             game.Moves = [
                 ...(game.Moves ?? []),
-                { CardPlayed: cardToPlay, PlayerID: playEvent.playerId },
+                { CardPlayed: cardToPlay, PlayerID: gameEvent.playerId },
             ]
-            game.WhoseTurn = (playEvent.playerId % 4) + 1
+            game.WhoseTurn = (gameEvent.playerId % 4) + 1
             displayedPlayCount += 1
             return
         }
 
         const player = game.Players[playerIndex]
-        const cardToPlay = { ...playEvent.card, WonSet: false }
+        const cardToPlay = { ...gameEvent.card, WonSet: false }
         const handIndex = player.Cards.findIndex((card) => card.Suit === cardToPlay.Suit && card.Value === cardToPlay.Value)
         if (handIndex !== -1) {
             player.Cards.splice(handIndex, 1)
         }
         player.PlayedCards.push(cardToPlay)
 
-        const currentMoves: Move[] = [...(game.Moves ?? []), { CardPlayed: cardToPlay, PlayerID: playEvent.playerId }]
+        const currentMoves: Move[] = [...(game.Moves ?? []), { CardPlayed: cardToPlay, PlayerID: gameEvent.playerId }]
         game.TrumpPlayed = game.TrumpPlayed || cardToPlay.Suit === game.Trump
 
         if (currentMoves.length < 4) {
@@ -522,9 +535,9 @@
             if (currentMoves.length === 1) {
                 game.TurnSuit = cardToPlay.Suit
             }
-            game.WhoseTurn = (playEvent.playerId % 4) + 1
+            game.WhoseTurn = (gameEvent.playerId % 4) + 1
         } else {
-            const winnerId = playEvent.trickWinnerId ?? playEvent.playerId
+            const winnerId = gameEvent.trickWinnerId ?? gameEvent.playerId
             const completedCards = currentMoves.map((move) => ({
                 ...move.CardPlayed,
                 WonSet: move.PlayerID === winnerId,
@@ -558,7 +571,7 @@
         displayedPlayCount += 1
     }
 
-    // renders all PlayEvents in the playbackQueue one by one
+    // renders all GameEvents in the playbackQueue one by one
     async function processPlaybackQueue(): Promise<void> {
         if (isPlaybackRunning) return
         isPlaybackRunning = true
