@@ -1,17 +1,21 @@
 <script lang="ts">
-    let { matchRecord }: { matchRecord: MatchRecord} = $props()
+    import type { MatchRecord } from "$lib/game/types"
 
-    const partner = matchRecord.partner
-    const opponents = [2, 3, 4].filter(n => n !== matchRecord.partner)
+    let { matchRecord }: { matchRecord: MatchRecord } = $props()
 
-    function getSets(player: number): number {
-        return matchRecord[`player${player}Sets` as keyof MatchRecord] as number
-    }
+    // Display Team 1 vs Team 2 scores
+    let team1Sets = $derived(matchRecord?.team1Sets ?? 0)
+    let team2Sets = $derived(matchRecord?.team2Sets ?? 0)
+    let team1Won = $derived(matchRecord?.winningTeam === 1)
 </script>
 
 <p>
-    <span class="text-[var(--red)]">P1[{getSets(1)}]</span> |
-    <span class="text-[var(--blue)]">P{partner}[{getSets(partner!)}]</span> :
-    <span class="text-[var(--yellow)]">P{opponents[0]}[{getSets(opponents[0])}]</span> |
-    <span class="text-[var(--green)]">P{opponents[1]}[{getSets(opponents[1])}]</span>
+    <span class="text-[var(--blue)]">Team 1 [{team1Sets}]</span>
+    :
+    <span class="text-[var(--red)]">Team 2 [{team2Sets}]</span>
+    {#if team1Won}
+        <span class="text-blue text-xs ml-2">W</span>
+    {:else}
+        <span class="text-red text-xs ml-2">L</span>
+    {/if}
 </p>

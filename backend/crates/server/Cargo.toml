@@ -22,6 +22,14 @@ dotenvy = "0.15"
 sha2 = "0.10"
 base64 = "0.22"
 
+[[bin]]
+name = "dump_matches"
+path = "src/bin/dump_matches.rs"
+
+[[bin]]
+name = "port_matches"
+path = "src/bin/port_matches.rs"
+
 [dev-dependencies]
 tower = "0.5"
 tempfile = "3"

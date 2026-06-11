@@ -93,34 +93,35 @@ export interface CompletedSet {
     PlayerIDs: number[]
 }
 
-/** Database record for a completed match */
+/** A player's data in a completed match */
+export interface MatchParticipant {
+    id: number
+    userId: number
+    seatIndex: number
+    team: number
+    setsWon: number
+    cardsPlayed: string      // JSON array of Card[]
+    handPreview: string | null
+    eloChange: number
+}
+
+/** Database record for a completed match (new schema) */
 export type MatchRecord = {
     id: number
-    userID: number
-    date: number
-    botDifficulty: string
+    roomId: string | null
+    createdAt: number
     trumpSuit: string
     betSize: number
-    betWinner: number
-    partner: number | null
-    wonMatch: number | null
-    player1Sets: number
-    player2Sets: number
-    player3Sets: number
-    player4Sets: number
-    player1Hand: string
-    player2Hand: string
-    player3Hand: string
-    player4Hand: string
-    /** JSON string of completed sets: [{Cards: Card[], WinnerID: number}] */
+    betWinnerIdx: number
+    partnerIdx: number | null
+    partnerCard: string | null
+    winningTeam: number
+    team1Sets: number
+    team2Sets: number
     setsData: string | null
-    /** Compact hand preview strings for quick display */
-    preview1: string | null
-    preview2: string | null
-    preview3: string | null
-    preview4: string | null
-    /** Whether this match is hidden (affects leaderboard/elo) */
-    isHidden?: boolean
+    matchType: string          // "single" or "multi"
+    isHidden: boolean
+    participants: MatchParticipant[]
 }
 
 interface PlayEvent {

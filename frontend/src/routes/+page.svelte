@@ -631,35 +631,43 @@
     async function autoSaveMatch() {
         // Determine if the human player is on Team 1 (bet winner's team)
         const userIsTeam1 = game.Team1?.some((p: any) => p.ID === humanPlayerId) ?? false
-        const wonMatch = (game.Winner === "Team 1" && userIsTeam1) || (game.Winner === "Team 2" && !userIsTeam1) ? 1 : 0
-        // Partner is the bet winner's partner (in-game player ID), not the human player's teammate
-        const partner = game.BetWinner?.Partner?.ID ?? 0
+        const partnerId = game.BetWinner?.Partner?.ID ?? null
+
+        // Build participants array
+        const participants = (game.Players ?? []).map((p: any, i: number) => ({
+            username: p.Username,
+            seatIndex: i,
+            team: (userIsTeam1 && (p.ID === game.BetWinner?.ID || p.ID === partnerId)) || (!userIsTeam1 && p.ID !== game.BetWinner?.ID && p.ID !== partnerId) ? 1 : 2,
+            setsWon: p.Sets ?? 0,
+            cardsPlayed: JSON.stringify(savePlayedCards[i] ?? []),
+        }))
+
+        // Fix teams: Team 1 = bet winner + partner, Team 2 = everyone else
+        const betWinnerSeat = game.Players?.findIndex((p: any) => p.ID === game.BetWinner?.ID) ?? 0
+        const partnerSeat = game.Players?.findIndex((p: any) => p.ID === partnerId) ?? -1
+        for (const p of participants) {
+            p.team = (p.seatIndex === betWinnerSeat || p.seatIndex === partnerSeat) ? 1 : 2
+        }
+
+        // Compute team sets
+        const team1Sets = participants.filter((p: any) => p.team === 1).reduce((s: number, p: any) => s + p.setsWon, 0)
+        const team2Sets = participants.filter((p: any) => p.team === 2).reduce((s: number, p: any) => s + p.setsWon, 0)
+        const target = 6 + game.BetSize
+        const team1Won = team1Sets >= target
 
         const body: Record<string, unknown> = {
-            date: Date.now(),
-            botDifficulty: headerState.difficulty,
+            roomId,
+            createdAt: Date.now(),
             trumpSuit: game.Trump,
             betSize: game.BetSize,
-            betWinner: game.BetWinner?.ID ?? 0,
-            partner,
-            wonMatch,
+            betWinnerIdx: betWinnerSeat,
+            partnerIdx: partnerSeat >= 0 ? partnerSeat : null,
+            partnerCard: null,
+            winningTeam: team1Won ? 1 : 2,
             setsData: saveCompletedSetsJson,
-            players: JSON.stringify((game.Players ?? []).map((p: any) => ({ id: p.ID, username: p.Username }))),
-            roomId,
-            betWinnerUserId: 0,
-            partnerUserId: 0,
-            winningTeam: userIsTeam1 ? 1 : 2,
+            matchType: "single",
             isHidden: headerState.hiddenMode,
-        }
-
-        // Player sets counts
-        for (let i = 0; i < 4; i++) {
-            body[`player${i + 1}Sets`] = game.Players[i]?.Sets ?? 0
-        }
-
-        // Player played cards
-        for (let i = 0; i < 4; i++) {
-            body[`player${i + 1}Hand`] = JSON.stringify(savePlayedCards[i] ?? [])
+            participants,
         }
 
         try {

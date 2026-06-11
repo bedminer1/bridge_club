@@ -49,22 +49,18 @@
     // Determine match result for the current user
     let matchResult = $derived.by(() => {
         return (m: any) => {
-            // New multiplayer fields
-            if (m.betWinnerUserId != null && m.betWinnerUserId !== 0 && m.winningTeam != null) {
-                const viewerOnTeam1 = m.betWinnerUserId === userID || m.partnerUserId === userID
-                const viewerTeam = viewerOnTeam1 ? 1 : 2
-                const didWin = viewerTeam === m.winningTeam
-                return { viewerTeam, didWin }
+            const myParticipant = m.participants?.find((p: any) => p.userId === userID)
+            if (myParticipant) {
+                const didWin = myParticipant.team === m.winningTeam
+                return { didWin, eloChange: myParticipant.eloChange ?? 0 }
             }
-            // Fallback to old single-player field
-            return { viewerTeam: 0, didWin: !!m.wonMatch }
+            return { didWin: false, eloChange: 0 }
         }
     })
 
-    // Re-fetch user stats on mount to ensure latest data
+    // Re-fetch user stats on mount
     $effect(() => {
         if (message === "success") {
-            // Try to get fresh session data from the backend
             const token = document.cookie.split("; ").find(r => r.startsWith("session="))
             if (token) {
                 fetch("https://bridge-club.duckdns.org/api/auth/session?token=" + encodeURIComponent(token.split("=")[1]))
@@ -85,14 +81,17 @@
         }
     })
 
-    /** Parse the players field from a match record, returning per-player names. */
-    function getPlayerName(matchRecord: any, seatIndex: number): string {
-        try {
-            const players = JSON.parse(matchRecord.players || "[]")
-            return players[seatIndex]?.username ?? `P${seatIndex + 1}`
-        } catch {
-            return `P${seatIndex + 1}`
+    /** Get the preview cards for the current user from their participant entry */
+    function getUserPreview(matchRecord: any): Card[] {
+        if (!matchRecord.participants) return []
+        const myP = matchRecord.participants.find((p: any) => p.userId === userID)
+        if (myP?.handPreview) {
+            return parsePreview(myP.handPreview)
         }
+        // Fallback: first participant
+        const firstP = matchRecord.participants[0]
+        if (firstP?.handPreview) return parsePreview(firstP.handPreview)
+        return []
     }
 
     $effect(() => { headerState.username = username ?? "" })
@@ -152,7 +151,7 @@
             {#if matchRecords.length > 0}
                 <div class="flex flex-col gap-3">
                             {#each matchRecords as matchRecord}
-                                {@const { didWin } = matchResult(matchRecord)}
+                                {@const { didWin, eloChange } = matchResult(matchRecord)}
                                 <a href="/user/{matchRecord.id}" class="block">
                                     <Card.Root class="w-full rounded-lg border-border hover:border-accent/30 transition-colors">
                                         <div class="flex items-center justify-between p-4 gap-4">
@@ -170,10 +169,10 @@
                                                         <span class="text-muted-foreground">Open</span>
                                                     {/if}
                                                     <span>|</span>
-                                                    <span>{formatDate(matchRecord.date)}</span>
-                                                    {#if matchRecord.eloChange}
+                                                    <span>{formatDate(matchRecord.createdAt)}</span>
+                                                    {#if eloChange !== 0}
                                                         <span>|</span>
-                                                        <span class="{matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">{matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange}</span>
+                                                        <span class="{eloChange > 0 ? 'text-green' : 'text-red'}">{eloChange > 0 ? '+' : ''}{eloChange}</span>
                                                     {/if}
                                                 </span>
                                             </div>
@@ -183,11 +182,11 @@
                                                 <ScoreDisplay {matchRecord} />
                                             </div>
                                         </div>
-                                        <!-- Hand preview (parsed from compact string) -->
-                                        {#if matchRecord.preview1}
-                                            {@const cards = parsePreview(matchRecord.preview1)}
+                                        <!-- Hand preview (from current user's participant entry) -->
+                                        {@const previewCards = getUserPreview(matchRecord)}
+                                        {#if previewCards.length > 0}
                                             <div class="px-4 pb-2 flex flex-wrap gap-0.5">
-                                                {#each cards as card, ci (ci)}
+                                                {#each previewCards as card, ci (ci)}
                                                     <PokerCard card={card} isIllegal={false} minify={true} />
                                                 {/each}
                                             </div>

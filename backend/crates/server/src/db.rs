@@ -44,7 +44,6 @@ impl DbPool {
     /// Creates a new hrana connection each call (serialized via Mutex) so
     /// that stale/closed streams are never reused.
     pub async fn conn(&self) -> tokio::sync::MutexGuard<'_, Connection> {
-        // Always create a fresh connection to avoid "stream not found" errors
         if let Ok(new_conn) = self.db.connect() {
             let mut guard = self.conn.lock().await;
             *guard = new_conn;
@@ -77,27 +76,32 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS matches (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id         INTEGER NOT NULL REFERENCES users(id),
-    date            INTEGER NOT NULL,
-    bot_difficulty  TEXT NOT NULL,
+    room_id         TEXT UNIQUE,
+    created_at      INTEGER NOT NULL,
     trump_suit      TEXT NOT NULL,
     bet_size        INTEGER NOT NULL,
-    bet_winner      INTEGER NOT NULL,
-    partner         INTEGER,
-    won_match       INTEGER,
-    player1_sets    INTEGER NOT NULL DEFAULT 0,
-    player2_sets    INTEGER NOT NULL DEFAULT 0,
-    player3_sets    INTEGER NOT NULL DEFAULT 0,
-    player4_sets    INTEGER NOT NULL DEFAULT 0,
-    player1_hand    TEXT NOT NULL DEFAULT '[]',
-    player2_hand    TEXT NOT NULL DEFAULT '[]',
-    player3_hand    TEXT NOT NULL DEFAULT '[]',
-    player4_hand    TEXT NOT NULL DEFAULT '[]',
+    bet_winner_idx  INTEGER NOT NULL,
+    partner_idx     INTEGER,
+    partner_card    TEXT,
+    winning_team    INTEGER NOT NULL,
+    team1_sets      INTEGER NOT NULL DEFAULT 0,
+    team2_sets      INTEGER NOT NULL DEFAULT 0,
     sets_data       TEXT,
-    players         TEXT,
-    players_int     INTEGER DEFAULT 0,
-    room_id         TEXT,
-    elo_change      INTEGER DEFAULT 0
+    match_type      TEXT NOT NULL DEFAULT 'multi',
+    is_hidden       INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS match_participants (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id        INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    user_id         INTEGER NOT NULL REFERENCES users(id),
+    seat_index      INTEGER NOT NULL CHECK(seat_index BETWEEN 0 AND 3),
+    team            INTEGER NOT NULL CHECK(team IN (1, 2)),
+    sets_won        INTEGER NOT NULL DEFAULT 0,
+    cards_played    TEXT NOT NULL DEFAULT '[]',
+    hand_preview    TEXT,
+    elo_change      INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(match_id, seat_index)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -109,55 +113,14 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
     let conn = pool.conn().await;
+
+    // Move old tables out of the way (they'll be ported from backup JSON)
+    let _ = conn.execute_batch("ALTER TABLE matches RENAME TO matches_old;").await;
+    let _ = conn.execute_batch("ALTER TABLE match_participants RENAME TO match_participants_old;").await;
+
     conn.execute_batch(SCHEMA_SQL).await?;
 
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN sets_data TEXT;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players TEXT;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN room_id TEXT;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN players_int INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN bet_winner_user_id INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN partner_user_id INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN winning_team INTEGER DEFAULT 1;").await;
-    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN games_played INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN games_won INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN total_sets_won INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN most_sets_won INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN elo INTEGER DEFAULT 500;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN elo_change INTEGER DEFAULT 0;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN is_hidden INTEGER DEFAULT 1;").await;
-
-    // Create match_participants join table for indexed user->match lookups
-    let _ = conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS match_participants (
-             match_id INTEGER NOT NULL REFERENCES matches(id),
-             user_id INTEGER NOT NULL REFERENCES users(id),
-             seat_index INTEGER NOT NULL,
-             PRIMARY KEY (match_id, user_id)
-         );
-         CREATE INDEX IF NOT EXISTS idx_match_participants_user_id ON match_participants(user_id);"
-    ).await;
-
-    // Backfill match_participants from existing matches
-    let _ = conn.execute_batch(
-        "INSERT OR IGNORE INTO match_participants (match_id, user_id, seat_index)
-         SELECT id, (players_int & 0xFF), 0 FROM matches WHERE players_int > 0
-         UNION
-         SELECT id, ((players_int >> 8) & 0xFF), 1 FROM matches WHERE players_int > 0
-         UNION
-         SELECT id, ((players_int >> 16) & 0xFF), 2 FROM matches WHERE players_int > 0
-         UNION
-         SELECT id, ((players_int >> 24) & 0xFF), 3 FROM matches WHERE players_int > 0"
-    ).await;
-
-    // Add compact preview columns for hands
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview1 TEXT;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview2 TEXT;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview3 TEXT;").await;
-    let _ = conn.execute_batch("ALTER TABLE matches ADD COLUMN preview4 TEXT;").await;
-
-    // Backfill previews for existing matches
-    let _ = backfill_previews(&conn).await;
-
+    // Seed bot users
     let _ = conn.execute(
         "INSERT OR IGNORE INTO users (id, username, password, games_played, games_won, total_sets_won, most_sets_won, elo) VALUES (?1, ?2, '', 0, 0, 0, 0, 500)",
         libsql::params![1i64, "Bot-Alpha"],
@@ -200,63 +163,41 @@ pub struct UserRow {
     pub elo: i64,
 }
 
+/// A match + its participants, as returned by the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 #[serde(rename_all = "camelCase")]
-pub struct MatchRow {
+pub struct MatchResponse {
     pub id: i64,
-    pub user_id: i64,
-    pub date: i64,
-    pub bot_difficulty: String,
+    pub room_id: Option<String>,
+    pub created_at: i64,
     pub trump_suit: String,
     pub bet_size: i64,
-    pub bet_winner: i64,
-    pub partner: Option<i64>,
-    pub won_match: Option<i64>,
-    pub bet_winner_user_id: i64,
-    pub partner_user_id: i64,
+    pub bet_winner_idx: i64,
+    pub partner_idx: Option<i64>,
+    pub partner_card: Option<String>,
     pub winning_team: i64,
-    pub player1_sets: i64,
-    pub player2_sets: i64,
-    pub player3_sets: i64,
-    pub player4_sets: i64,
-    pub player1_hand: String,
-    pub player2_hand: String,
-    pub player3_hand: String,
-    pub player4_hand: String,
+    pub team1_sets: i64,
+    pub team2_sets: i64,
     pub sets_data: Option<String>,
-    pub players: Option<String>,
-    pub players_int: i64,
-    pub room_id: Option<String>,
-    pub elo_change: i64,
+    pub match_type: String,
+    pub is_hidden: bool,
+    pub participants: Vec<ParticipantResponse>,
 }
 
-/// Lightweight match row without hand/sets blobs — used for match list queries.
+/// Per-player data in a match.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 #[serde(rename_all = "camelCase")]
-pub struct MatchRowLight {
+pub struct ParticipantResponse {
     pub id: i64,
-    pub date: i64,
-    pub bot_difficulty: String,
-    pub trump_suit: String,
-    pub bet_size: i64,
-    pub partner: Option<i64>,
-    pub bet_winner_user_id: i64,
-    pub partner_user_id: i64,
-    pub winning_team: i64,
-    pub won_match: Option<i64>,
-    pub player1_sets: i64,
-    pub player2_sets: i64,
-    pub player3_sets: i64,
-    pub player4_sets: i64,
-    pub players: Option<String>,
+    pub user_id: i64,
+    pub seat_index: i64,
+    pub team: i64,
+    pub sets_won: i64,
+    pub cards_played: String,
+    pub hand_preview: Option<String>,
     pub elo_change: i64,
-    pub is_hidden: bool,
-    pub preview1: Option<String>,
-    pub preview2: Option<String>,
-    pub preview3: Option<String>,
-    pub preview4: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,61 +206,4 @@ pub struct SessionRow {
     pub id: String,
     pub user_id: i64,
     pub expires_at: i64,
-}
-
-/// Generate a compact preview string from a JSON array of played cards (frontend PascalCase format).
-/// Format: "2cw3hl..." where:
-///   - Value: 2-10, J, Q, K, A (from card["Value"] which is 2-14)
-///   - Suit letter: card["Suit"] → c/d/h/s
-///   - w/l: won/lost from card["WonSet"]
-pub fn compact_hand_preview(hand_json: &str) -> String {
-    let cards: Vec<serde_json::Value> = serde_json::from_str(hand_json).unwrap_or_default();
-    let mut out = String::new();
-    let rank_map: [&str; 15] = ["", "", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
-    for card in &cards {
-        let suit = card["Suit"].as_str().unwrap_or("");
-        let suit_letter = match suit {
-            "Club" => 'c', "Diamond" => 'd', "Heart" => 'h', "Spades" => 's',
-            _ => '?',
-        };
-        let val = card["Value"].as_i64().unwrap_or(2) as usize;
-        let rank_str = rank_map.get(val).unwrap_or(&"?");
-        let won = card["WonSet"].as_bool().unwrap_or(false);
-        out.push_str(rank_str);
-        out.push(suit_letter);
-        out.push(if won { 'w' } else { 'l' });
-    }
-    out
-}
-
-/// Backfill compact previews for all existing matches.
-async fn backfill_previews(conn: &libsql::Connection) -> Result<(), Box<dyn std::error::Error>> {
-    let mut rows = conn.query(
-        "SELECT id, player1_hand, player2_hand, player3_hand, player4_hand FROM matches WHERE preview1 IS NULL",
-        libsql::params![],
-    ).await?;
-
-    loop {
-        match rows.next().await? {
-            Some(row) => {
-                let id: i64 = row.get(0).unwrap_or(0);
-                let p1: String = row.get(1).unwrap_or_default();
-                let p2: String = row.get(2).unwrap_or_default();
-                let p3: String = row.get(3).unwrap_or_default();
-                let p4: String = row.get(4).unwrap_or_default();
-                let preview1 = compact_hand_preview(&p1);
-                let preview2 = compact_hand_preview(&p2);
-                let preview3 = compact_hand_preview(&p3);
-                let preview4 = compact_hand_preview(&p4);
-                let _ = conn.execute(
-                    "UPDATE matches SET preview1 = ?1, preview2 = ?2, preview3 = ?3, preview4 = ?4 WHERE id = ?5",
-                    libsql::params![preview1, preview2, preview3, preview4, id],
-                ).await;
-            }
-            None => break,
-        }
-    }
-
-    tracing::info!("Backfilled compact previews for existing matches");
-    Ok(())
 }

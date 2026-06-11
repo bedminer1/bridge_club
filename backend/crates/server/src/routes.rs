@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth;
 use crate::bot::BotDifficulty;
-use crate::db::{compact_hand_preview, DbPool, MatchRowLight, UserRow};
+use crate::db::{DbPool, MatchResponse, ParticipantResponse, UserRow};
 use crate::game_session;
 use crate::session::AppState;
 
@@ -114,39 +114,41 @@ pub struct SuccessResponse {
     pub ok: bool,
 }
 
-#[derive(Deserialize)]
+// ── Match request / response types ─────────────────────────────────────────
+
+/// One participant being saved as part of a match.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveParticipant {
+    pub username: String,
+    pub seat_index: i64,
+    pub team: i64,
+    pub sets_won: i64,
+    pub cards_played: String,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveMatchRequest {
-    pub date: i64,
-    pub bot_difficulty: String,
+    pub room_id: Option<String>,
+    pub created_at: i64,
     pub trump_suit: String,
     pub bet_size: i64,
-    pub bet_winner: i64,
-    pub partner: Option<i64>,
-    pub won_match: Option<i64>,
-    pub bet_winner_user_id: i64,
-    pub partner_user_id: i64,
+    pub bet_winner_idx: i64,
+    pub partner_idx: Option<i64>,
+    pub partner_card: Option<String>,
     pub winning_team: i64,
-    pub player1_sets: i64,
-    pub player2_sets: i64,
-    pub player3_sets: i64,
-    pub player4_sets: i64,
-    pub player1_hand: String,
-    pub player2_hand: String,
-    pub player3_hand: String,
-    pub player4_hand: String,
     pub sets_data: Option<String>,
-    pub players: Option<String>,
-    pub players_int: Option<i64>,
-    pub room_id: Option<String>,
-    pub is_hidden: Option<bool>,
+    pub match_type: String,
+    pub is_hidden: bool,
+    pub participants: Vec<SaveParticipant>,
 }
 
 #[derive(Serialize)]
 pub struct MatchesResponse {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub matches: Option<Vec<MatchRowLight>>,
+    pub matches: Option<Vec<MatchResponse>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -211,7 +213,6 @@ pub struct GameActionResponse {
 // ── Helper: extract session token from headers or query ───────────────────
 
 fn extract_token(headers: &HeaderMap, query: Option<&SessionQuery>) -> Option<String> {
-    // Try header first: X-Session-Token
     if let Some(val) = headers.get("X-Session-Token") {
         if let Ok(s) = val.to_str() {
             if !s.is_empty() {
@@ -219,7 +220,6 @@ fn extract_token(headers: &HeaderMap, query: Option<&SessionQuery>) -> Option<St
             }
         }
     }
-    // Fall back to query param ?token=...
     if let Some(q) = query {
         if let Some(t) = &q.token {
             if !t.is_empty() {
@@ -284,7 +284,7 @@ async fn require_user(
 
 pub fn routes(state: AppState) -> Router {
     Router::new()
-        .route("/", get(|| async { "Bridge Club API v0.1" }))
+        .route("/", get(|| async { "Bridge Club API v0.2 — New match schema" }))
         // Room info & state routes
         .route("/api/rooms/{room_id}/info", get(get_room_info))
         .route("/room/{room_id}/state", get(get_table_state))
@@ -295,6 +295,7 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/auth/logout", post(logout))
         // Match history routes
         .route("/api/matches", get(get_matches).post(save_match))
+        .route("/api/matches/{match_id}", get(get_match))
         // Leaderboard
         .route("/api/leaderboard", get(get_leaderboard))
         // Webhook for auto-deploy
@@ -365,7 +366,6 @@ async fn signup(
 
     let password_hash = auth::hash_password(&payload.password);
 
-    // Insert the new user
     let insert = conn
         .execute(
             "INSERT INTO users (username, password) VALUES (?1, ?2)",
@@ -375,7 +375,6 @@ async fn signup(
 
     let user_id = match insert {
         Ok(_) => {
-            // Get the inserted user's ID
             let mut rows = conn
                 .query(
                     "SELECT id FROM users WHERE username = ?1",
@@ -415,10 +414,8 @@ async fn signup(
         }
     };
 
-    // Drop connection before creating session to avoid Mutex deadlock
     drop(conn);
 
-    // Create session
     match auth::create_session(&state.db, user_id).await {
         Ok((_session_id, token)) => {
             tracing::info!("User '{}' signed up (id={})", payload.username, user_id);
@@ -546,10 +543,8 @@ async fn login(
         }
     };
 
-    // Drop connection before creating session to avoid Mutex deadlock
     drop(conn);
 
-    // Create session
     match auth::create_session(&state.db, user.id).await {
         Ok((_session_id, token)) => {
             tracing::info!("User '{}' logged in (id={})", user.username, user.id);
@@ -573,7 +568,7 @@ async fn login(
                     token: None,
                     user_id: None,
                     username: None,
-                    error: Some("Failed to create session".to_string()),
+                    error: Some("Internal server error".to_string()),
                 }),
             )
         }
@@ -652,6 +647,69 @@ async fn logout(
 
 // ── Match History Handlers ────────────────────────────────────────────────
 
+/// Build a MatchResponse by querying match + participants for a given match_id.
+async fn build_match_response(conn: &libsql::Connection, match_id: i64) -> Option<MatchResponse> {
+    let mut mrows = conn
+        .query(
+            "SELECT id, room_id, created_at, trump_suit, bet_size, bet_winner_idx, partner_idx, \
+             partner_card, winning_team, team1_sets, team2_sets, sets_data, match_type, is_hidden \
+             FROM matches WHERE id = ?1",
+            libsql::params![match_id],
+        )
+        .await
+        .ok()?;
+
+    let mrow = mrows.next().await.ok()??;
+
+    let mut participants = Vec::new();
+    let mut prows = conn
+        .query(
+            "SELECT id, user_id, seat_index, team, sets_won, cards_played, hand_preview, elo_change \
+             FROM match_participants WHERE match_id = ?1 ORDER BY seat_index",
+            libsql::params![match_id],
+        )
+        .await
+        .ok()?;
+
+    loop {
+        match prows.next().await {
+            Ok(Some(row)) => {
+                participants.push(ParticipantResponse {
+                    id: row.get::<i64>(0).unwrap_or(0),
+                    user_id: row.get::<i64>(1).unwrap_or(0),
+                    seat_index: row.get::<i64>(2).unwrap_or(0),
+                    team: row.get::<i64>(3).unwrap_or(1),
+                    sets_won: row.get::<i64>(4).unwrap_or(0),
+                    cards_played: row.get::<String>(5).unwrap_or_default(),
+                    hand_preview: row.get::<Option<String>>(6).unwrap_or(None),
+                    elo_change: row.get::<i64>(7).unwrap_or(0),
+                });
+            }
+            Ok(None) => break,
+            Err(_) => break,
+        }
+    }
+
+    Some(MatchResponse {
+        id: mrow.get::<i64>(0).unwrap_or(0),
+        room_id: mrow.get::<Option<String>>(1).unwrap_or(None),
+        created_at: mrow.get::<i64>(2).unwrap_or(0),
+        trump_suit: mrow.get::<String>(3).unwrap_or_default(),
+        bet_size: mrow.get::<i64>(4).unwrap_or(0),
+        bet_winner_idx: mrow.get::<i64>(5).unwrap_or(0),
+        partner_idx: mrow.get::<Option<i64>>(6).unwrap_or(None),
+        partner_card: mrow.get::<Option<String>>(7).unwrap_or(None),
+        winning_team: mrow.get::<i64>(8).unwrap_or(1),
+        team1_sets: mrow.get::<i64>(9).unwrap_or(0),
+        team2_sets: mrow.get::<i64>(10).unwrap_or(0),
+        sets_data: mrow.get::<Option<String>>(11).unwrap_or(None),
+        match_type: mrow.get::<String>(12).unwrap_or_default(),
+        is_hidden: mrow.get::<bool>(13).unwrap_or(true),
+        participants,
+    })
+}
+
+/// GET /api/matches — list matches for the authenticated user.
 async fn get_matches(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -672,29 +730,10 @@ async fn get_matches(
 
     let conn = state.db.conn().await;
 
-    let mut rows = match conn
+    // Get match IDs for this user via match_participants
+    let mut id_rows = match conn
         .query(
-            "SELECT m.id, m.date, m.bot_difficulty, m.trump_suit, m.bet_size, \
-             m.bet_winner_user_id, m.partner_user_id, m.winning_team, \
-             m.won_match, \
-             m.player1_sets, m.player2_sets, m.player3_sets, m.player4_sets, \
-             m.players, m.elo_change, m.is_hidden, \
-             m.partner, m.preview1, m.preview2, m.preview3, m.preview4 \
-             FROM matches m \
-             JOIN match_participants mp ON m.id = mp.match_id \
-             WHERE mp.user_id = ?1 \
-             UNION \
-             SELECT id, date, bot_difficulty, trump_suit, bet_size, \
-             bet_winner_user_id, partner_user_id, winning_team, \
-             won_match, \
-             player1_sets, player2_sets, player3_sets, player4_sets, \
-             players, elo_change, is_hidden, \
-             partner, preview1, preview2, preview3, preview4 \
-             FROM matches WHERE (players_int & 0xFF) = ?1 \
-             OR ((players_int >> 8) & 0xFF) = ?1 \
-             OR ((players_int >> 16) & 0xFF) = ?1 \
-             OR ((players_int >> 24) & 0xFF) = ?1 \
-             ORDER BY date DESC",
+            "SELECT match_id FROM match_participants WHERE user_id = ?1 ORDER BY match_id DESC",
             libsql::params![user.id],
         )
         .await
@@ -713,41 +752,28 @@ async fn get_matches(
         }
     };
 
-    let mut matches = Vec::new();
+    let mut match_ids = Vec::new();
     loop {
-        match rows.next().await {
-            Ok(Some(row)) => {
-                matches.push(MatchRowLight {
-                    id: row.get::<i64>(0).unwrap_or(0),
-                    date: row.get::<i64>(1).unwrap_or(0),
-                    bot_difficulty: row.get::<String>(2).unwrap_or_default(),
-                    trump_suit: row.get::<String>(3).unwrap_or_default(),
-                    bet_size: row.get::<i64>(4).unwrap_or(0),
-                    bet_winner_user_id: row.get::<i64>(5).unwrap_or(0),
-                    partner_user_id: row.get::<i64>(6).unwrap_or(0),
-                    winning_team: row.get::<i64>(7).unwrap_or(1),
-                    won_match: row.get::<Option<i64>>(8).unwrap_or(None),
-                    player1_sets: row.get::<i64>(9).unwrap_or(0),
-                    player2_sets: row.get::<i64>(10).unwrap_or(0),
-                    player3_sets: row.get::<i64>(11).unwrap_or(0),
-                    player4_sets: row.get::<i64>(12).unwrap_or(0),
-                    players: row.get::<Option<String>>(13).unwrap_or(None),
-                    elo_change: row.get::<i64>(14).unwrap_or(0),
-                    is_hidden: row.get::<bool>(15).unwrap_or(true),
-                    partner: row.get::<Option<i64>>(16).unwrap_or(None),
-                    preview1: row.get::<Option<String>>(17).unwrap_or(None),
-                    preview2: row.get::<Option<String>>(18).unwrap_or(None),
-                    preview3: row.get::<Option<String>>(19).unwrap_or(None),
-                    preview4: row.get::<Option<String>>(20).unwrap_or(None),
-                });
-            }
+        match id_rows.next().await {
+            Ok(Some(row)) => match_ids.push(row.get::<i64>(0).unwrap_or(0)),
             Ok(None) => break,
-            Err(e) => {
-                tracing::error!("DB row read error: {}", e);
-                break;
-            }
+            Err(_) => break,
         }
     }
+
+    // Deduplicate (same match shouldn't appear twice)
+    match_ids.sort_unstable();
+    match_ids.dedup();
+
+    let mut matches = Vec::new();
+    for mid in match_ids {
+        if let Some(m) = build_match_response(&conn, mid).await {
+            matches.push(m);
+        }
+    }
+
+    // Sort by created_at descending
+    matches.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     (
         StatusCode::OK,
@@ -759,6 +785,26 @@ async fn get_matches(
     )
 }
 
+/// GET /api/matches/{match_id} — get a single match by ID.
+async fn get_match(
+    State(state): State<AppState>,
+    Path(match_id): Path<i64>,
+) -> impl IntoResponse {
+    let conn = state.db.conn().await;
+
+    match build_match_response(&conn, match_id).await {
+        Some(m) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "match": m })),
+        ),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "ok": false, "error": "Match not found" })),
+        ),
+    }
+}
+
+/// POST /api/matches — save a completed match.
 async fn save_match(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -792,167 +838,113 @@ async fn save_match(
                 tracing::info!("Match for room {} already saved, skipping duplicate", room_id);
                 return (
                     StatusCode::OK,
-                    Json(serde_json::json!({
-                        "ok": true,
-                    })),
+                    Json(serde_json::json!({ "ok": true })),
                 );
             }
         }
     }
 
-    // Compute players_int by mapping usernames to real database user IDs
-    // Frontend sends seat-based IDs (1-4) which are useless for queries.
+    // Resolve usernames to user_ids
+    let mut resolved_participants: Vec<(i64, i64, i64, i64, String, String)> = Vec::new();
     let mut player_ids: [i64; 4] = [0; 4];
-    if let Some(ref players_json) = payload.players {
-        if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(players_json) {
-            for (i, entry) in arr.iter().enumerate().take(4) {
-                let name = entry["username"].as_str().unwrap_or("");
-                if name == user.username {
-                    player_ids[i] = user.id;
-                } else if let Some(bot_id) = match name {
-                    "Bot-Alpha" => Some(1i64),
-                    "Bot-Beta" => Some(2i64),
-                    "Bot-Gamma" => Some(3i64),
-                    _ => None,
-                } {
-                    player_ids[i] = bot_id;
-                } else {
-                    // Look up other human players in the users table
-                    if let Ok(mut rows) = conn
-                        .query("SELECT id FROM users WHERE username = ?1", libsql::params![name])
-                        .await
-                    {
-                        if let Ok(Some(row)) = rows.next().await {
-                            player_ids[i] = row.get::<i64>(0).unwrap_or(0);
-                        }
-                    }
+
+    for p in &payload.participants {
+        let uid = if p.username.starts_with("Bot-") {
+            match p.username.as_str() {
+                "Bot-Alpha" => 1i64,
+                "Bot-Beta" => 2i64,
+                "Bot-Gamma" => 3i64,
+                _ => 0i64,
+            }
+        } else if p.username == user.username {
+            user.id
+        } else {
+            // Look up other human players
+            let mut found = 0i64;
+            if let Ok(mut rows) = conn
+                .query("SELECT id FROM users WHERE username = ?1", libsql::params![p.username.clone()])
+                .await
+            {
+                if let Ok(Some(row)) = rows.next().await {
+                    found = row.get::<i64>(0).unwrap_or(0);
                 }
             }
+            found
+        };
+
+        let seat = p.seat_index as usize;
+        if seat < 4 {
+            player_ids[seat] = uid;
         }
+
+        // Generate hand preview from cards_played
+        let preview = compact_hand_preview(&p.cards_played);
+
+        resolved_participants.push((
+            uid,
+            p.seat_index,
+            p.team,
+            p.sets_won,
+            p.cards_played.clone(),
+            preview,
+        ));
     }
-    let players_int: i64 = player_ids.iter().enumerate().fold(0i64, |acc, (i, id)| {
-        acc | ((id & 0xFF) << (i * 8))
-    });
 
-    // Derive new fields from existing data
-    let bet_winner_seat = payload.bet_winner.max(1).min(4) as usize - 1;
-    let bet_winner_user_id = player_ids[bet_winner_seat];
-    let partner_user_id = payload.partner
-        .map(|p| player_ids.get((p.max(1).min(4) - 1) as usize).copied().unwrap_or(0))
-        .unwrap_or(0);
+    // Compute team total sets
+    let team1_sets: i64 = payload.participants.iter()
+        .filter(|p| p.team == 1)
+        .map(|p| p.sets_won)
+        .sum();
+    let team2_sets: i64 = payload.participants.iter()
+        .filter(|p| p.team == 2)
+        .map(|p| p.sets_won)
+        .sum();
 
-    // Determine winning team from won_match + who the saving user is
-    // won_match = 1 means the saving user's team won
-    // Team 1 = bet winner's team (bet winner + partner)
-    // Team 2 = everyone else
-    let _user_on_team1 = bet_winner_seat == player_ids.iter().position(|&id| id == user.id).unwrap_or(99)
-        || payload.partner.map_or(false, |p| (p as usize - 1) == player_ids.iter().position(|&id| id == user.id).unwrap_or(99));
-    // Simplified: find user's seat from players JSON, check if it's bet_winner or partner seat
-    let user_seat = payload.players.as_ref().and_then(|pj| {
-        serde_json::from_str::<Vec<serde_json::Value>>(pj).ok().and_then(|arr| {
-            arr.iter().position(|v| v["username"].as_str() == Some(&user.username))
-        })
-    });
-    let user_is_team1 = user_seat.map_or(false, |seat| {
-        seat == bet_winner_seat || payload.partner.map_or(false, |p| seat == p as usize - 1)
-    });
-    let won = payload.won_match.unwrap_or(0);
-    let winning_team: i64 = if (user_is_team1 && won == 1) || (!user_is_team1 && won == 0) { 1 } else { 2 };
-
+    // Insert match
     let result = conn
         .execute(
-            "INSERT INTO matches (user_id, date, bot_difficulty, trump_suit, bet_size, \
-             bet_winner, partner, won_match, bet_winner_user_id, partner_user_id, winning_team, \
-             player1_sets, player2_sets, player3_sets, \
-             player4_sets, player1_hand, player2_hand, player3_hand, player4_hand, sets_data, players, room_id, players_int, elo_change, is_hidden) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+            "INSERT INTO matches (room_id, created_at, trump_suit, bet_size, bet_winner_idx, \
+             partner_idx, partner_card, winning_team, team1_sets, team2_sets, sets_data, match_type, is_hidden) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             libsql::params![
-                user.id,
-                payload.date,
-                payload.bot_difficulty,
+                payload.room_id,
+                payload.created_at,
                 payload.trump_suit,
                 payload.bet_size,
-                payload.bet_winner,
-                payload.partner,
-                payload.won_match,
-                bet_winner_user_id,
-                partner_user_id,
-                winning_team,
-                payload.player1_sets,
-                payload.player2_sets,
-                payload.player3_sets,
-                payload.player4_sets,
-                payload.player1_hand.clone(),
-                payload.player2_hand.clone(),
-                payload.player3_hand.clone(),
-                payload.player4_hand.clone(),
+                payload.bet_winner_idx,
+                payload.partner_idx,
+                payload.partner_card,
+                payload.winning_team,
+                team1_sets,
+                team2_sets,
                 payload.sets_data,
-                payload.players,
-                payload.room_id,
-                players_int,
-                0i64, // elo_change placeholder, updated below
-                payload.is_hidden.unwrap_or(true) as i64, // is_hidden: 1 or 0
+                payload.match_type,
+                payload.is_hidden as i64,
             ],
         )
         .await;
 
     match result {
         Ok(_) => {
-            tracing::info!("Match saved for user_id={}", user.id);
-
-            let is_hidden = payload.is_hidden.unwrap_or(true);
-            let mut elo_delta_for_user: i64 = 0;
             let inserted_id = conn.last_insert_rowid();
+            tracing::info!("Match saved: id={}", inserted_id);
+
+            // Insert participants + elo computation
+            let is_hidden = payload.is_hidden;
+            let mut elo_delta_for_user: i64 = 0;
 
             if is_hidden {
-                // Update user stats after successful match save
-                let won = payload.won_match.unwrap_or(0);
-                let max_sets = payload.player1_sets.max(payload.player2_sets)
-                    .max(payload.player3_sets).max(payload.player4_sets);
-                let total_sets = payload.player1_sets + payload.player2_sets
-                    + payload.player3_sets + payload.player4_sets;
-
-                let _ = conn.execute(
-                    "UPDATE users SET
-                        games_played = games_played + 1,
-                        games_won = games_won + ?1,
-                        total_sets_won = total_sets_won + ?2,
-                        most_sets_won = MAX(most_sets_won, ?3)
-                     WHERE id = ?4",
-                    libsql::params![won, total_sets, max_sets, user.id],
-                ).await;
-
-                // Populate match_participants for all 4 player seats
-                for (seat, &pid) in player_ids.iter().enumerate() {
-                    if pid > 0 {
-                        let _ = conn.execute(
-                            "INSERT OR IGNORE INTO match_participants (match_id, user_id, seat_index) VALUES (?1, ?2, ?3)",
-                            libsql::params![inserted_id, pid, seat as i64],
-                        ).await;
-                    }
-                }
-
-                // ── Elo computation ───────────────────────────────────────────────
-                tracing::info!(
-                    "Elo: winning_team={}, bet_winner_seat={}, partner={:?}, player_ids={:?}",
-                    winning_team, bet_winner_seat, payload.partner, player_ids
-                );
-
-                // Team 1 = bet winner's seat + partner seat
-                // Team 2 = the other two seats
+                // Compute Elo
                 let k: f64 = 32.0;
+                let bet_seat = payload.bet_winner_idx as usize;
+                let partner_seat = payload.partner_idx.map(|p| p as usize).unwrap_or(99);
 
-                // Determine which seat index = partner
-                let partner_seat = payload.partner.map(|p| (p.max(1).min(4) - 1) as usize).unwrap_or(99);
-                let bet_seat = bet_winner_seat;
-
-                // Identify team 1 and team 2 seat indices
                 let team1_seats = [bet_seat, partner_seat];
-                let team2_seats: Vec<usize> = (0..4).filter(|s| *s != bet_seat && *s != partner_seat).collect();
+                let team2_seats: Vec<usize> = (0..4)
+                    .filter(|s| *s != bet_seat && *s != partner_seat)
+                    .collect();
 
-                tracing::info!("Elo: team1_seats={:?}, team2_seats={:?}", team1_seats, team2_seats);
-
-                // Fetch current Elo for all 4 participants
+                // Fetch current Elo for all participants
                 let mut elos: [f64; 4] = [500.0; 4];
                 for (seat, &pid) in player_ids.iter().enumerate() {
                     if pid > 0 {
@@ -967,38 +959,35 @@ async fn save_match(
                     }
                 }
 
-                tracing::info!("Elo: elos={:?}, partner_seat={}", elos, partner_seat);
-
                 // Team average Elo
-                let team1_avg = (team1_seats.iter().map(|&s| elos[s]).sum::<f64>()) / team1_seats.len() as f64;
+                let team1_avg = if !team1_seats.is_empty() {
+                    team1_seats.iter().map(|&s| elos[s]).sum::<f64>() / team1_seats.len() as f64
+                } else {
+                    500.0
+                };
                 let team2_avg = if !team2_seats.is_empty() {
                     team2_seats.iter().map(|&s| elos[s]).sum::<f64>() / team2_seats.len() as f64
                 } else {
-                    team1_avg // fallback, shouldn't happen
+                    500.0
                 };
 
-                // Expected scores
                 let expected_team1 = 1.0 / (1.0 + 10.0_f64.powf((team2_avg - team1_avg) / 400.0));
                 let expected_team2 = 1.0 - expected_team1;
 
-                // Actual: team 1 won -> 1, team 2 won -> 0
-                let team1_won = winning_team == 1;
-
-                // Delta for each team
+                let team1_won = payload.winning_team == 1;
                 let delta1 = k * (if team1_won { 1.0 } else { 0.0 } - expected_team1);
                 let delta2 = k * (if team1_won { 0.0 } else { 1.0 } - expected_team2);
 
                 tracing::info!(
-                    "Elo: team1_avg={:.1}, team2_avg={:.1}, expected1={:.3}, expected2={:.3}, delta1={:.1}, delta2={:.1}, team1_won={}",
-                    team1_avg, team2_avg, expected_team1, expected_team2, delta1, delta2, team1_won
+                    "Elo: team1_avg={:.1}, team2_avg={:.1}, delta1={:.1}, delta2={:.1}, team1_won={}",
+                    team1_avg, team2_avg, delta1, delta2, team1_won
                 );
 
-                // Update Elo for all participants
+                // Update Elo for all participants and store elo_change per participant
                 for (seat, &pid) in player_ids.iter().enumerate() {
                     if pid > 0 {
                         let delta = if seat == bet_seat || seat == partner_seat { delta1 } else { delta2 };
                         let delta_int = delta.round() as i64;
-                        tracing::info!("Elo: seat={}, pid={}, team={}, delta={}", seat, pid, if seat == bet_seat || seat == partner_seat { 1 } else { 2 }, delta_int);
                         if pid == user.id {
                             elo_delta_for_user = delta_int;
                         }
@@ -1006,25 +995,56 @@ async fn save_match(
                             "UPDATE users SET elo = MAX(1, elo + ?1) WHERE id = ?2",
                             libsql::params![delta_int, pid],
                         ).await;
+
+                        // Update elo_change on the participant record
+                        let _ = conn.execute(
+                            "UPDATE match_participants SET elo_change = ?1 WHERE match_id = ?2 AND user_id = ?3",
+                            libsql::params![delta_int, inserted_id, pid],
+                        ).await;
                     }
+                }
+
+                // Update stats for ALL participants (humans and bots)
+                for (uid, _seat_idx, team, sets_won, _cards_played, _preview) in &resolved_participants {
+                    let pid = *uid;
+                    if pid == 0 { continue; }
+                    let won = *team == payload.winning_team;
+                    let _ = conn.execute(
+                        "UPDATE users SET \
+                         games_played = games_played + 1, \
+                         games_won = games_won + ?1, \
+                         total_sets_won = total_sets_won + ?2, \
+                         most_sets_won = MAX(most_sets_won, ?3) \
+                         WHERE id = ?4",
+                        libsql::params![
+                            if won { 1i64 } else { 0i64 },
+                            sets_won,
+                            sets_won,
+                            pid,
+                        ],
+                    ).await;
                 }
             }
 
-            // Compute and store compact hand previews (always)
-            let preview1 = compact_hand_preview(&payload.player1_hand);
-            let preview2 = compact_hand_preview(&payload.player2_hand);
-            let preview3 = compact_hand_preview(&payload.player3_hand);
-            let preview4 = compact_hand_preview(&payload.player4_hand);
-            let _ = conn.execute(
-                "UPDATE matches SET preview1 = ?1, preview2 = ?2, preview3 = ?3, preview4 = ?4 WHERE id = ?5",
-                libsql::params![preview1, preview2, preview3, preview4, inserted_id],
-            ).await;
+            // Insert participants (now compute hand_preview)
+            for (uid, seat_idx, team, sets_won, cards_played, preview) in &resolved_participants {
+                let _ = conn.execute(
+                    "INSERT INTO match_participants (match_id, user_id, seat_index, team, sets_won, cards_played, hand_preview, elo_change) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)",
+                    libsql::params![
+                        inserted_id,
+                        uid,
+                        seat_idx,
+                        team,
+                        sets_won,
+                        cards_played.clone(),
+                        preview.clone(),
+                    ],
+                ).await;
+            }
 
-            // Update the match record with the saving user's Elo change
-            let _ = conn.execute(
-                "UPDATE matches SET elo_change = ?1 WHERE id = ?2",
-                libsql::params![elo_delta_for_user, inserted_id],
-            ).await;
+            // Insert remaining bot slots if any are missing (some seats may not have been sent)
+            // But the frontend sends all 4 participants, so this shouldn't be needed.
 
             (
                 StatusCode::CREATED,
@@ -1046,6 +1066,27 @@ async fn save_match(
             )
         }
     }
+}
+
+/// Generate a compact preview string from a JSON array of played cards (frontend PascalCase format).
+fn compact_hand_preview(hand_json: &str) -> String {
+    let cards: Vec<serde_json::Value> = serde_json::from_str(hand_json).unwrap_or_default();
+    let mut out = String::new();
+    let rank_map: [&str; 15] = ["", "", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
+    for card in &cards {
+        let suit = card["Suit"].as_str().unwrap_or("");
+        let suit_letter = match suit {
+            "Club" => 'c', "Diamond" => 'd', "Heart" => 'h', "Spades" => 's',
+            _ => '?',
+        };
+        let val = card["Value"].as_i64().unwrap_or(2) as usize;
+        let rank_str = rank_map.get(val).unwrap_or(&"?");
+        let won = card["WonSet"].as_bool().unwrap_or(false);
+        out.push_str(rank_str);
+        out.push(suit_letter);
+        out.push(if won { 'w' } else { 'l' });
+    }
+    out
 }
 
 // ── Leaderboard ──────────────────────────────────────────────────────────
@@ -1117,7 +1158,6 @@ async fn get_leaderboard(
 
 // ── Game Room Handlers ────────────────────────────────────────────────────
 
-/// GET /room/{id}/info — lobby info (players, phase, etc.)
 async fn get_room_info(
     State(state): State<AppState>,
     Path(room_id): Path<Uuid>,
@@ -1212,29 +1252,20 @@ pub fn build_table_state(table: &game_core::Table) -> TableStateResponse {
     let sets_won = table.sets_won.to_vec();
     let is_finished = table.phase == game_core::GamePhase::Finished;
 
-    // Current trick: cards in play
     let current_trick_cards = table.current_set_cards.clone();
     let n = current_trick_cards.len();
-    // Who led the current trick: if N cards in the trick and current_player
-    // is the next player to play, then leader = (current_player - N + 4) % 4
     let current_trick_start_player = if n > 0 {
         (current_player + 4 - n % 4) % 4
     } else {
         current_player
     };
 
-    // Previous trick: last completed set
     let previous_trick_start_player;
     let (previous_trick_cards, previous_trick_winner) =
         if let Some(last_set) = table.completed_sets.last() {
-            // Find the leader of the last completed set.
-            // First set is led by (bet_winner + 1) % 4.
-            // Each subsequent set is led by the previous set's winner.
             previous_trick_start_player = if table.completed_sets.len() > 1 {
-                // The winner of the second-to-last set leads the last set
                 table.completed_sets[table.completed_sets.len() - 2].winner
             } else {
-                // Only one set completed — first set leader
                 (table.bet_winner.unwrap_or(0) + 1) % 4
             };
             (last_set.cards.to_vec(), Some(last_set.winner))
@@ -1243,13 +1274,11 @@ pub fn build_table_state(table: &game_core::Table) -> TableStateResponse {
             (Vec::new(), None)
         };
 
-    // Call history from the auction
     let call_history = table
         .auction
         .as_ref()
         .map(|a| a.call_history.clone())
         .unwrap_or_default();
-    // Player 0 (index 0) always starts bidding in our implementation
     let call_history_start_player = 0usize;
 
     TableStateResponse {
@@ -1285,7 +1314,6 @@ async fn create_single_player_game(
     headers: HeaderMap,
     Json(payload): Json<NewGameRequest>,
 ) -> impl IntoResponse {
-    // Auth check
     let user = match require_user(&state.db, &headers, None).await {
         Ok(u) => u,
         Err((status, json)) => {
@@ -1301,7 +1329,6 @@ async fn create_single_player_game(
         }
     };
 
-    // Parse difficulty
     let difficulty = match payload.difficulty.to_lowercase().as_str() {
         "easy" => BotDifficulty::Easy,
         "medium" => BotDifficulty::Medium,
@@ -1318,17 +1345,14 @@ async fn create_single_player_game(
         }
     };
 
-    // Create the single-player game
     let (mut room, session) =
         game_session::new_single_player_game(&user.username, difficulty);
 
-    // Run initial bot turns (if it's not the human's turn to go first)
     game_session::process_bot_turns(&mut room.table, session.human_seat_index, difficulty);
 
     let state_resp = build_table_state(&room.table);
     let room_id = room.room_id;
 
-    // Store the room in shared state
     let mut rooms = state.rooms.write().await;
     rooms.insert(room_id, room);
 
@@ -1356,7 +1380,6 @@ async fn create_single_player_game(
 use std::process::Command;
 
 async fn deploy_webhook() -> impl IntoResponse {
-    // Fire-and-forget: spawn deploy in background, return immediately
     tokio::task::spawn_blocking(|| {
         let _ = Command::new("/root/deploy-bridge-club.sh")
             .output()

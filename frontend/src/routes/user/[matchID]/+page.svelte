@@ -7,53 +7,54 @@
     let { data } = $props()
     let { matchRecord, userID } = $state(data)
 
-    /** Determine match result for the current user */
-    let didWin = $derived.by(() => {
-        if (!matchRecord) return false
-        // New fields (multiplayer): use betWinnerUserId / partnerUserId / winningTeam
-        if (matchRecord.betWinnerUserId != null && matchRecord.betWinnerUserId !== 0 && matchRecord.winningTeam != null) {
-            const viewerOnTeam1 = matchRecord.betWinnerUserId === userID || matchRecord.partnerUserId === userID
-            const viewerTeam = viewerOnTeam1 ? 1 : 2
-            return viewerTeam === matchRecord.winningTeam
-        }
-        // Fallback to old single-player field
-        return !!matchRecord.wonMatch
-    })
+    // Find the current user's participant entry
+    let myParticipant = $derived(
+        matchRecord?.participants?.find((p: any) => p.userId === userID)
+    )
 
-    /** Parse each player's played cards from DB (JSON array of Card objects) */
-    const playerPlayedCards: Card[][] = []
-    if (matchRecord) {
-        for (let i = 1; i <= 4; i++) {
-            const cardsStr = matchRecord[`player${i}Hand` as keyof typeof matchRecord] as string
-            try {
-                playerPlayedCards.push(JSON.parse(cardsStr))
-            } catch {
-                playerPlayedCards.push([])
-            }
-        }
-    }
+    // Determine win/loss for the viewer
+    let didWin = $derived(
+        myParticipant ? myParticipant.team === matchRecord.winningTeam : false
+    )
 
-    /** Parse the players field: JSON array of { id, username } */
-    const playersMeta: Array<{ id: number; username: string }> = (() => {
-        if (!matchRecord) return []
-        try {
-            return JSON.parse(matchRecord.players || "[]")
-        } catch {
-            return []
-        }
-    })()
+    // My elo change
+    let myElo = $derived(myParticipant?.eloChange ?? 0)
+
+    // Parse each participant's played cards
+    const participantsWithCards = $derived(
+        (matchRecord?.participants ?? [])
+            .sort((a: any, b: any) => a.seatIndex - b.seatIndex)
+            .map((p: any) => ({
+                ...p,
+                cards: (() => {
+                    try { return JSON.parse(p.cardsPlayed) }
+                    catch { return [] }
+                })(),
+            }))
+    )
 
     const playerColor: Record<number, string> = {
-        1: 'var(--red)',
-        2: 'var(--blue)',
-        3: 'var(--yellow)',
-        4: 'var(--green)',
+        0: 'var(--red)',
+        1: 'var(--blue)',
+        2: 'var(--yellow)',
+        3: 'var(--green)',
     }
-    const playerShort: Record<number, string> = {
-        1: 'P1',
-        2: 'P2',
-        3: 'P3',
-        4: 'P4',
+
+    // Determine partner seat from match data
+    let partnerSeat = $derived(matchRecord?.partnerIdx ?? null)
+
+    function getPlayerName(participant: any): string {
+        // We don't have usernames in the participant data directly from API
+        // The frontend gets usernames from the /api/matches response
+        // For now, use seat-based names
+        const seat = participant.seatIndex
+        if (participant.userId <= 3) {
+            return ["Bot-Alpha", "Bot-Beta", "Bot-Gamma"][participant.userId - 1] || `Bot`
+        }
+        if (participant.userId === userID) {
+            return "You"
+        }
+        return `P${seat + 1}`
     }
 </script>
 
@@ -73,15 +74,15 @@
                 >
                     {didWin ? "Win" : "Loss"}
                 </span>
-                {#if matchRecord.eloChange}
-                    <span class="text-xs font-bold {matchRecord.eloChange > 0 ? 'text-green' : 'text-red'}">({matchRecord.eloChange > 0 ? '+' : ''}{matchRecord.eloChange})</span>
+                {#if myElo !== 0}
+                    <span class="text-xs font-bold {myElo > 0 ? 'text-green' : 'text-red'}">({myElo > 0 ? '+' : ''}{myElo})</span>
                 {/if}
                 <span class="text-xs text-muted-foreground">|</span>
-                <span class="text-xs text-muted-foreground">{formatDate(matchRecord?.date)}</span>
+                <span class="text-xs text-muted-foreground">{formatDate(matchRecord?.createdAt)}</span>
             </div>
             <div class="flex items-center gap-2 text-xs text-muted-foreground">
                 <span class="rounded border border-border px-1.5 py-0.5">{matchRecord?.betSize}{suitToSymbol.get(matchRecord?.trumpSuit)}</span>
-                <span>{matchRecord?.botDifficulty}</span>
+                <span>{matchRecord?.matchType === "single" ? "vs Bots" : "Multiplayer"}</span>
             </div>
         </div>
 
@@ -90,23 +91,30 @@
             <ScoreDisplay matchRecord={matchRecord ?? {}} />
         </div>
 
-        <!-- Played cards per player (in play order, with WonSet crowns) -->
+        <!-- Played cards per participant -->
         {#if matchRecord}
         <div class="flex flex-col gap-3 rounded-lg w-auto border border-border bg-card/40 p-3 text-sm">
-            {#each playerPlayedCards as playedCards, playerID}
-                {@const pid = playerID + 1}
-                {@const colorVar = pid === 1 ? '--red' : pid === 2 ? '--blue' : pid === 3 ? '--yellow' : '--green'}
-                {@const playerMeta = playersMeta[playerID]}
-                {@const playerName = playerMeta?.username ?? `P${pid}`}
-                {@const sets = matchRecord[`player${pid}Sets` as keyof typeof matchRecord] as number}
+            {#each participantsWithCards as participant}
+                {@const seat = participant.seatIndex}
                 <div class="p-3">
                     <div class="flex items-center gap-2 mb-4 text-xs">
-                        <span class="font-medium" style="color: var({colorVar})">{playerName}</span>
-                        <span class="text-muted-foreground">{sets} sets</span>
-                        <span class="text-muted-foreground/50">| {playedCards.length} cards played</span>
+                        <span class="font-medium" style="color: var(--red)">{getPlayerName(participant)}</span>
+                        <span class="text-muted-foreground">{participant.setsWon} sets</span>
+                        <span class="text-muted-foreground/50">| {participant.cards.length} cards played</span>
+                        {#if participant.team === 1}
+                            <span class="text-blue text-[10px]">Team 1</span>
+                        {:else}
+                            <span class="text-yellow text-[10px]">Team 2</span>
+                        {/if}
+                        {#if seat === matchRecord.betWinnerIdx}
+                            <span class="text-accent text-[10px]">(bet winner)</span>
+                        {/if}
+                        {#if matchRecord.partnerIdx !== null && seat === matchRecord.partnerIdx}
+                            <span class="text-accent text-[10px]">(partner)</span>
+                        {/if}
                     </div>
                     <div class="flex flex-wrap gap-1.5">
-                        {#each playedCards as card}
+                        {#each participant.cards as card}
                             <PokerCard card={card} isIllegal={false} minify={true} />
                         {/each}
                     </div>
