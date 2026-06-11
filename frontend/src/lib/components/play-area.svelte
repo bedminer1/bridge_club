@@ -71,7 +71,11 @@
                 <div class="flex gap-1">
                     {#each Array(player.Cards.length) as _, _i}
                     <HandDisplay index={0}>
-                        <div class="w-[53px] h-[80px] rounded-[5px] border border-[oklch(47.63%_0.024_256.79)] bg-[oklch(10.41%_0.028_253.16)]"></div>
+                        <div class="w-[43px] h-[52px] sm:w-[50px] sm:h-[60px] rounded-sm border border-indigo-800/40 bg-gradient-to-br from-slate-800 via-indigo-950 to-slate-900 flex items-center justify-center overflow-hidden shadow-inner">
+                            <div class="w-4/5 h-[85%] rounded-[2px] border border-indigo-500/20 flex items-center justify-center bg-slate-950/40">
+                                <span class="text-indigo-400/30 text-[11px] sm:text-sm font-bold">♠</span>
+                            </div>
+                        </div>
                     </HandDisplay>
                     {/each}
                 </div>
