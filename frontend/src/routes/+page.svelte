@@ -662,7 +662,7 @@
             betSize: game.BetSize,
             betWinnerIdx: betWinnerSeat,
             partnerIdx: partnerSeat >= 0 ? partnerSeat : null,
-            partnerCard: null,
+            partnerCard: game.PartnerCard?.Rank ? JSON.stringify(game.PartnerCard) : null,
             winningTeam: team1Won ? 1 : 2,
             setsData: saveCompletedSetsJson,
             matchType: "single",
