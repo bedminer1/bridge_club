@@ -235,32 +235,23 @@ async fn test_save_and_retrieve_match() {
     let token = signup(&app, "frank", "pass").await;
 
     let match_body = serde_json::json!({
-        "date": 1700000000000i64,
-        "botDifficulty": "Medium",
+        "roomId": "test-room-1",
+        "createdAt": 1700000000000i64,
         "trumpSuit": "Spades",
         "betSize": 3,
-        "betWinner": 0,
-        "partner": 2,
-        "wonMatch": 1,
-        "betWinnerUserId": 0,
-        "partnerUserId": 0,
+        "betWinnerIdx": 0,
+        "partnerIdx": 2,
+        "partnerCard": null,
         "winningTeam": 1,
-        "player1Sets": 6,
-        "player2Sets": 2,
-        "player3Sets": 3,
-        "player4Sets": 1,
-        "player1Hand": "[]",
-        "player2Hand": "[]",
-        "player3Hand": "[]",
-        "player4Hand": "[]",
         "setsData": "[]",
-        "players": serde_json::json!([
-            {"id": 0, "username": "frank"},
-            {"id": 0, "username": "Bot-Alpha"},
-            {"id": 0, "username": "Bot-Beta"},
-            {"id": 0, "username": "Bot-Gamma"}
-        ]).to_string(),
-        "roomId": "test-room-1"
+        "matchType": "single",
+        "isHidden": false,
+        "participants": [
+            {"username": "frank", "seatIndex": 0, "team": 1, "setsWon": 6, "cardsPlayed": "[]"},
+            {"username": "Bot-Alpha", "seatIndex": 1, "team": 2, "setsWon": 2, "cardsPlayed": "[]"},
+            {"username": "Bot-Beta", "seatIndex": 2, "team": 1, "setsWon": 3, "cardsPlayed": "[]"},
+            {"username": "Bot-Gamma", "seatIndex": 3, "team": 2, "setsWon": 1, "cardsPlayed": "[]"}
+        ]
     });
 
     let (status, json) = post(&app, "/api/matches", &token, &match_body).await;
@@ -276,11 +267,15 @@ async fn test_save_and_retrieve_match() {
     let m = &matches[0];
     assert_eq!(m["trumpSuit"], "Spades");
     assert_eq!(m["betSize"], 3);
-    assert_eq!(m["botDifficulty"], "Medium");
-    assert!(m.get("betWinnerUserId").is_some());
-    assert!(m.get("partnerUserId").is_some());
+    assert_eq!(m["matchType"], "single");
     assert!(m.get("winningTeam").is_some());
-    assert!(m.get("eloChange").is_some());
+    assert!(m.get("participants").is_some());
+    let participants = m["participants"].as_array().unwrap();
+    assert_eq!(participants.len(), 4);
+    // Elo is stored per-participant now
+    for p in participants {
+        assert!(p.get("eloChange").is_some());
+    }
 }
 
 #[tokio::test]
@@ -289,32 +284,23 @@ async fn test_save_match_dedup_by_room() {
     let token = signup(&app, "grace", "pass").await;
 
     let match_body = serde_json::json!({
-        "date": 1700000000000i64,
-        "botDifficulty": "Easy",
+        "roomId": "dedup-room",
+        "createdAt": 1700000000000i64,
         "trumpSuit": "Hearts",
         "betSize": 2,
-        "betWinner": 1,
-        "partner": 3,
-        "wonMatch": 0,
-        "betWinnerUserId": 0,
-        "partnerUserId": 0,
+        "betWinnerIdx": 1,
+        "partnerIdx": 3,
+        "partnerCard": null,
         "winningTeam": 2,
-        "player1Sets": 2,
-        "player2Sets": 4,
-        "player3Sets": 3,
-        "player4Sets": 3,
-        "player1Hand": "[]",
-        "player2Hand": "[]",
-        "player3Hand": "[]",
-        "player4Hand": "[]",
         "setsData": "[]",
-        "players": serde_json::json!([
-            {"id": 0, "username": "grace"},
-            {"id": 0, "username": "Bot-Alpha"},
-            {"id": 0, "username": "Bot-Beta"},
-            {"id": 0, "username": "Bot-Gamma"}
-        ]).to_string(),
-        "roomId": "dedup-room"
+        "matchType": "single",
+        "isHidden": false,
+        "participants": [
+            {"username": "grace", "seatIndex": 0, "team": 2, "setsWon": 2, "cardsPlayed": "[]"},
+            {"username": "Bot-Alpha", "seatIndex": 1, "team": 1, "setsWon": 4, "cardsPlayed": "[]"},
+            {"username": "Bot-Beta", "seatIndex": 2, "team": 2, "setsWon": 3, "cardsPlayed": "[]"},
+            {"username": "Bot-Gamma", "seatIndex": 3, "team": 1, "setsWon": 3, "cardsPlayed": "[]"}
+        ]
     });
 
     // First save
