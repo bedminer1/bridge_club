@@ -57,7 +57,6 @@
     let lastEloChange = $state<number | null>(null)
     let loadingMatchResult = $state(false)
     let isGuest = $state(false) // true if created via guest flow
-    let isDefaultPassword = $state(false) // true if guest left password empty
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -788,8 +787,8 @@
             bind:lobbyPlayers
             bind:lobbyHiddenMode
             bind:difficulty={headerState.difficulty}
-            onguestlogin={(name: string, token: string, uid: number, defaultPw: boolean) => {
-                username = name; onlineToken = token; userID = uid; isGuest = true; isDefaultPassword = defaultPw;
+            onguestlogin={(name: string, token: string, uid: number) => {
+                username = name; onlineToken = token; userID = uid; isGuest = true;
                 const urlRoomId = page.url.searchParams.get("room")
                 if (urlRoomId && !isOnline) { loadRoomOrLobby(urlRoomId) }
             }}
@@ -858,22 +857,11 @@
                     Play Again
                 </Button>
             </Dialog.Footer>
-            <!-- Password change prompt for guest users -->
-            {#if isGuest && isDefaultPassword && !loadingMatchResult && lastMatchId}
-                <div class="px-6 pb-4 pt-1">
-                    <div class="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                        <span>🔑</span>
-                        <span>Update your password in</span>
-                        <a href="/user" class="text-accent hover:underline ml-auto shrink-0">Settings</a>
-                    </div>
-                </div>
-            {/if}
         </Dialog.Content>
     </Dialog.Root>
     {/if}
 
 {:else}
-    <!-- Lobby UI -->
     <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
         <Lobby
             {onlineToken}
@@ -886,8 +874,8 @@
             bind:lobbyPlayers
             bind:lobbyHiddenMode
             bind:difficulty={headerState.difficulty}
-            onguestlogin={(name: string, token: string, uid: number, defaultPw: boolean) => {
-                username = name; onlineToken = token; userID = uid; isGuest = true; isDefaultPassword = defaultPw;
+            onguestlogin={(name: string, token: string, uid: number) => {
+                username = name; onlineToken = token; userID = uid; isGuest = true;
                 // Auto-join room if there's a pending invite in the URL
                 const urlRoomId = page.url.searchParams.get("room")
                 if (urlRoomId && !isOnline) { loadExistingRoom(urlRoomId) }

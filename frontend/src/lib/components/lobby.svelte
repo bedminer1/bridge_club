@@ -23,7 +23,7 @@
         lobbyPlayers = $bindable<Array<{ name: string; seatIndex: number; isBot: boolean }>>([]),
         lobbyHiddenMode = $bindable(true),
         difficulty = $bindable("Easy"),
-        onguestlogin = (_username: string, _token: string, _userId: number, _defaultPw: boolean) => {},
+        onguestlogin = (_username: string, _token: string, _userId: number) => {},
     } = $props()
 
     // Internal lobby UI state
@@ -35,7 +35,6 @@
 
     // Guest login state
     let guestUsername = $state("")
-    let guestPassword = $state("")
     let guestChecking = $state(false)
     let guestError = $state("")
     let isGuest = $state(!onlineToken && !username)
@@ -61,42 +60,17 @@
         isGuest = !onlineToken && !username
     })
 
-    function generateFunName(): string {
-        const names = [
-            "SirBarksAlot", "CountBiscuit", "CaptainNoodle", "DoctorWaffle",
-            "ProfessorPickle", "LadyPancake", "LordToast", "MuffinMan",
-            "PuddingCat", "NuggetLord", "ToastMaster", "BiscuitBandit",
-            "NoodleNinja", "PickleRick", "SocksTheCat", "AngryBadger",
-            "TurboSnail", "QuantumPanda", "FlyingToast", "DancingLlama",
-            "ScreamingGoat", "ChaosPotato", "GentlemanToast", "MightySquid",
-            "CosmicWaffle", "JellyKing", "BurritoBandit", "TacoTitan",
-            "WobblingJelly", "CrispyPenguin", "FluffyOctopus", "RapidTurtle",
-            "SnoringDragon", "FuzzyBadger", "LeapingNoodle", "PsychicPickle",
-            "BionicPanda", "GlitterMuffin", "RocketToast", "VelvetSocks",
-            "MysticBiscuit", "DapperPancake", "ZestyNugget", "SillyGoose",
-        ]
-        return names[Math.floor(Math.random() * names.length)] + Math.floor(Math.random() * 100)
-    }
-
-    async function handleGuestLogin(autoGen = false): Promise<boolean> {
-        let name = guestUsername.trim()
-        const hadUserInput = !!name
-        if (!name && autoGen) {
-            name = generateFunName()
-            guestUsername = name
-        }
+    /** Guest login: signup if name available, login if returning guest. */
+    async function handleGuestLogin(): Promise<boolean> {
+        const name = guestUsername.trim()
         if (!name || name.length < 2) {
-            guestError = autoGen ? "" : "Username must be at least 2 characters"
-            return false
-        }
-        let pw = guestPassword.trim() || "Password123"
-        if (pw.length < 6) {
-            guestError = "Password must be at least 6 characters"
+            guestError = "Username must be at least 2 characters"
             return false
         }
         guestChecking = true
         guestError = ""
         try {
+            // Check if username is available
             const checkRes = await fetch(`${API_URL}/api/auth/check-username?username=${encodeURIComponent(name)}`)
             const checkData = await checkRes.json()
             if (!checkData.ok) {
@@ -105,11 +79,15 @@
                 return false
             }
 
+            let token: string
+            let userId: number
+
             if (checkData.available) {
+                // Sign up as a new guest (no password)
                 const signupRes = await fetch(`${API_URL}/api/auth/signup`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username: name, password: pw }),
+                    body: JSON.stringify({ username: name, password: "" }),
                 })
                 const signupData = await signupRes.json()
                 if (!signupData.ok) {
@@ -117,20 +95,29 @@
                     guestChecking = false
                     return false
                 }
-                document.cookie = `session=${signupData.token}; path=/; max-age=2592000; SameSite=Lax`
-                onguestlogin(name, signupData.token!, signupData.user_id!, pw === "Password123")
-                guestChecking = false
-                return true
+                token = signupData.token!
+                userId = signupData.user_id!
             } else {
-                if (autoGen && !hadUserInput) {
-                    guestUsername = ""
+                // Username taken — try logging in as a returning guest
+                const loginRes = await fetch(`${API_URL}/api/auth/login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: name, password: "" }),
+                })
+                const loginData = await loginRes.json()
+                if (!loginData.ok) {
+                    guestError = loginData.error || "Username taken"
                     guestChecking = false
-                    return handleGuestLogin(true)
+                    return false
                 }
-                guestError = "Username taken. Try another."
-                guestChecking = false
-                return false
+                token = loginData.token!
+                userId = loginData.user_id!
             }
+
+            document.cookie = `session=${token}; path=/; max-age=2592000; SameSite=Lax`
+            onguestlogin(name, token, userId)
+            guestChecking = false
+            return true
         } catch {
             guestError = "Connection error. Is the backend running?"
             guestChecking = false
@@ -179,7 +166,7 @@
 
     function handleCreate() {
         if (isGuest) {
-            handleGuestLogin(true).then(ok => { if (ok) { lobbyCreating = true; doCreateRoom() } }).catch(() => {})
+            handleGuestLogin().then(ok => { if (ok) { lobbyCreating = true; doCreateRoom() } }).catch(() => {})
             return
         }
         lobbyCreating = true
@@ -189,7 +176,7 @@
     function handleJoin() {
         if (!lobbyJoinRoomId.trim()) return
         if (isGuest) {
-            handleGuestLogin(true).then(ok => { if (ok) { lobbyJoining = true; lobbyJoinError = ""; doJoinRoom(lobbyJoinRoomId.trim()) } }).catch(() => {})
+            handleGuestLogin().then(ok => { if (ok) { lobbyJoining = true; lobbyJoinError = ""; doJoinRoom(lobbyJoinRoomId.trim()) } }).catch(() => {})
             return
         }
         lobbyJoining = true
@@ -254,22 +241,11 @@
                 <CardContent class="flex flex-col gap-4">
                     {#if isGuest}
                         <div class="flex flex-col gap-2">
-                            <label for="guest-username" class="text-xs text-muted-foreground">Username (leave empty for random)</label>
+                            <label for="guest-username" class="text-xs text-muted-foreground">Username</label>
                             <Input
                                 id="guest-username"
                                 bind:value={guestUsername}
-                                placeholder="(auto-generate)"
-                                onkeydown={(e) => { if (e.key === 'Enter') handleCreate() }}
-                                disabled={guestChecking}
-                            />
-                        </div>
-                        <div class="flex flex-col gap-2">
-                            <label for="guest-password" class="text-xs text-muted-foreground">Password (leave empty for default)</label>
-                            <Input
-                                id="guest-password"
-                                bind:value={guestPassword}
-                                type="password"
-                                placeholder="Password123"
+                                placeholder="Enter a username"
                                 onkeydown={(e) => { if (e.key === 'Enter') handleCreate() }}
                                 disabled={guestChecking}
                             />
@@ -295,21 +271,11 @@
                     <CardContent class="flex flex-col gap-4">
                         {#if isGuest}
                             <div class="flex flex-col gap-2">
-                                <label for="guest-username-join" class="text-xs text-muted-foreground">Username (leave empty for random)</label>
+                                <label for="guest-username-join" class="text-xs text-muted-foreground">Username</label>
                                 <Input
                                     id="guest-username-join"
                                     bind:value={guestUsername}
-                                    placeholder="(auto-generate)"
-                                    onkeydown={(e) => { if (e.key === 'Enter') handleJoin() }}
-                                />
-                            </div>
-                            <div class="flex flex-col gap-2">
-                                <label for="guest-password-join" class="text-xs text-muted-foreground">Password (leave empty for default)</label>
-                                <Input
-                                    id="guest-password-join"
-                                    bind:value={guestPassword}
-                                    type="password"
-                                    placeholder="Password123"
+                                    placeholder="Enter a username"
                                     onkeydown={(e) => { if (e.key === 'Enter') handleJoin() }}
                                 />
                             </div>

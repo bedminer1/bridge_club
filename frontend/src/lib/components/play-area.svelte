@@ -60,10 +60,10 @@
             {#if !hiddenMode || player.ID === humanPlayerId}
                 {#each player.Cards as card, index}
                     <button onclick={() => playCard(card)}
-                        disabled={disabled || player.ID !== humanPlayerId || isCardIllegal(card, game)}
+                        disabled={disabled || player.ID !== humanPlayerId || isCardIllegal(game, player, card)}
                         class="transition-transform brightness-105 dark:brightness-95 hover:brightness-130 dark:hover:brightness-120 hover:shadow-accent hover:shadow-xl/30 hover:-translate-y-1 active:brightness-125 active:shadow-accent rounded-sm disabled:opacity-50 disabled:grayscale disabled:hover:translate-y-0 disabled:cursor-not-allowed">
                         <HandDisplay index={index}>
-                            <PokerCard card={card} isIllegal={isCardIllegal(card, game)} minify={false}/>
+                            <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
                         </HandDisplay>
                     </button>
                 {/each}

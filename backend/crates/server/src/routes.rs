@@ -341,7 +341,7 @@ async fn signup(
     State(state): State<AppState>,
     Json(payload): Json<SignupRequest>,
 ) -> impl IntoResponse {
-    if payload.username.is_empty() || payload.password.is_empty() {
+    if payload.username.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(AuthResponse {
@@ -349,7 +349,7 @@ async fn signup(
                 token: None,
                 user_id: None,
                 username: None,
-                error: Some("Username and password are required".to_string()),
+                error: Some("Username is required".to_string()),
             }),
         );
     }
@@ -480,7 +480,7 @@ async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    if payload.username.is_empty() || payload.password.is_empty() {
+    if payload.username.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(AuthResponse {
@@ -488,14 +488,12 @@ async fn login(
                 token: None,
                 user_id: None,
                 username: None,
-                error: Some("Username and password are required".to_string()),
+                error: Some("Username is required".to_string()),
             }),
         );
     }
 
     let conn = state.db.conn().await;
-
-    let password_hash = auth::hash_password(&payload.password);
 
     let mut rows = match conn
         .query(
@@ -523,18 +521,23 @@ async fn login(
     let user = match rows.next().await {
         Ok(Some(row)) => {
             let db_password: String = row.get::<String>(2).unwrap();
-            if db_password != password_hash {
-                return (
-                    StatusCode::UNAUTHORIZED,
-                    Json(AuthResponse {
-                        ok: false,
-                        token: None,
-                        user_id: None,
-                        username: None,
-                        error: Some("Invalid username or password".to_string()),
-                    }),
-                );
+            // Guest accounts have empty password; any other account requires matching hash
+            if !db_password.is_empty() {
+                let password_hash = auth::hash_password(&payload.password);
+                if db_password != password_hash {
+                    return (
+                        StatusCode::UNAUTHORIZED,
+                        Json(AuthResponse {
+                            ok: false,
+                            token: None,
+                            user_id: None,
+                            username: None,
+                            error: Some("Invalid username or password".to_string()),
+                        }),
+                    );
+                }
             }
+            // Guest (empty password) or password matches
             UserRow {
                 id: row.get::<i64>(0).unwrap(),
                 username: row.get::<String>(1).unwrap(),
