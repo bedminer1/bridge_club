@@ -929,7 +929,24 @@ async fn save_match(
             let inserted_id = conn.last_insert_rowid();
             tracing::info!("Match saved: id={}", inserted_id);
 
-            // Insert participants + elo computation
+            // Insert participants
+            for (uid, seat_idx, team, sets_won, cards_played, preview) in &resolved_participants {
+                let _ = conn.execute(
+                    "INSERT INTO match_participants (match_id, user_id, seat_index, team, sets_won, cards_played, hand_preview, elo_change) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)",
+                    libsql::params![
+                        inserted_id,
+                        uid,
+                        seat_idx,
+                        team,
+                        sets_won,
+                        cards_played.clone(),
+                        preview.clone(),
+                    ],
+                ).await;
+            }
+
+            // Elo computation + stats (only for hidden/rated matches)
             let is_hidden = payload.is_hidden;
             let mut elo_delta_for_user: i64 = 0;
 
@@ -983,7 +1000,7 @@ async fn save_match(
                     team1_avg, team2_avg, delta1, delta2, team1_won
                 );
 
-                // Update Elo for all participants and store elo_change per participant
+                // Update Elo for all participants
                 for (seat, &pid) in player_ids.iter().enumerate() {
                     if pid > 0 {
                         let delta = if seat == bet_seat || seat == partner_seat { delta1 } else { delta2 };
@@ -994,12 +1011,6 @@ async fn save_match(
                         let _ = conn.execute(
                             "UPDATE users SET elo = MAX(1, elo + ?1) WHERE id = ?2",
                             libsql::params![delta_int, pid],
-                        ).await;
-
-                        // Update elo_change on the participant record
-                        let _ = conn.execute(
-                            "UPDATE match_participants SET elo_change = ?1 WHERE match_id = ?2 AND user_id = ?3",
-                            libsql::params![delta_int, inserted_id, pid],
                         ).await;
                     }
                 }
@@ -1024,23 +1035,18 @@ async fn save_match(
                         ],
                     ).await;
                 }
-            }
 
-            // Insert participants (now compute hand_preview)
-            for (uid, seat_idx, team, sets_won, cards_played, preview) in &resolved_participants {
-                let _ = conn.execute(
-                    "INSERT INTO match_participants (match_id, user_id, seat_index, team, sets_won, cards_played, hand_preview, elo_change) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)",
-                    libsql::params![
-                        inserted_id,
-                        uid,
-                        seat_idx,
-                        team,
-                        sets_won,
-                        cards_played.clone(),
-                        preview.clone(),
-                    ],
-                ).await;
+                // Update elo_change on participant records
+                for (seat, &pid) in player_ids.iter().enumerate() {
+                    if pid > 0 {
+                        let delta = if seat == bet_seat || seat == partner_seat { delta1 } else { delta2 };
+                        let delta_int = delta.round() as i64;
+                        let _ = conn.execute(
+                            "UPDATE match_participants SET elo_change = ?1 WHERE match_id = ?2 AND user_id = ?3",
+                            libsql::params![delta_int, inserted_id, pid],
+                        ).await;
+                    }
+                }
             }
 
             // Insert remaining bot slots if any are missing (some seats may not have been sent)
