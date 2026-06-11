@@ -711,7 +711,7 @@
                 {#each remainingDeck as card}
                     <button onclick={() => onlineSelectPartner(card)}
                         class="transition-transform brightness-105 dark:brightness-95 hover:brightness-130 dark:hover:brightness-120 hover:shadow-accent hover:shadow-xl/30 hover:-translate-y-1 active:brightness-125 active:shadow-accent rounded-sm">
-                        <PokerCard card={card} isIllegal={false} minify={true} />
+                        <PokerCard card={card} isIllegal={false} minify={false} />
                     </button>
                 {/each}
             </div>
@@ -720,7 +720,7 @@
                 <p class="text-xs text-muted-foreground mb-1">Your hand:</p>
                 <div class="flex flex-wrap gap-1 justify-center">
                     {#each game.Players[humanSeat].Cards as card, index (index)}
-                        <PokerCard card={card} isIllegal={false} minify={true} />
+                        <PokerCard card={card} isIllegal={false} minify={false} />
                     {/each}
                 </div>
             </div>

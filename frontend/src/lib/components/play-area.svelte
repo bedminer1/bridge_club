@@ -33,17 +33,10 @@
         }
     })
 
-    // Last completed set + which table position won it
+    // Last completed set (won trick stack, shown at bottom-left)
     let lastSet = $derived(game.CompletedSets?.[game.CompletedSets?.length - 1] ?? null)
-    let lastSetPosition = $derived.by(() => {
-        if (!lastSet || !tablePlayers.south) return null
-        for (const [pos, p] of Object.entries(tablePlayers)) {
-            if (p && p.ID === lastSet.WinnerID) return pos as 'south'|'west'|'north'|'east'
-        }
-        return null
-    })
 
-    /** Fan angle for horizontal rows (south, north). */
+    /** Fan angle for south cards. */
     function fanAngle(index: number, total: number): number {
         if (total <= 1) return 0
         const spread = 36
@@ -51,7 +44,7 @@
         return (index - center) * (spread / Math.max(total, 2))
     }
 
-    /** More aggressive fan for other players' hidden/visible cards. */
+    /** More aggressive fan for north cards. */
     function fanAngleOther(index: number, total: number): number {
         if (total <= 1) return 0
         const spread = 52
@@ -59,84 +52,65 @@
         return (index - center) * (spread / Math.max(total, 2))
     }
 
-    /** Fan angle for vertical columns (west, east). */
+    /** Fan angle for vertical columns (west, east) — scrunched tighter. */
     function fanAngleVertical(index: number, total: number, dir: 'left' | 'right'): number {
         if (total <= 1) return 0
-        const spread = 44
+        const spread = 32  // tighter than before
         const center = (total - 1) / 2
         const angle = (index - center) * (spread / Math.max(total, 2))
         return dir === 'left' ? -angle : angle
     }
 
-    const CARD_BACK = '<div class="w-[43px] h-[52px] sm:w-[50px] sm:h-[60px] rounded-sm bg-gradient-to-br from-indigo-950 via-blue-950 to-slate-900 border-2 border-indigo-800/40 shadow-inner flex items-center justify-center relative overflow-hidden flex-shrink-0"><div class="absolute inset-[3px] rounded-sm border border-indigo-500/15"></div><div class="absolute inset-[6px] rounded-sm border border-indigo-500/10"></div><span class="relative text-indigo-400/20 text-[10px] sm:text-xs select-none">♠</span></div>'
+    /** Static card back HTML — fully controlled, no XSS risk */
+    const CARD_BACK = '<div class="w-[35px] h-[40px] rounded-sm bg-gradient-to-br from-indigo-950 via-blue-950 to-slate-900 border-2 border-indigo-800/40 shadow-inner flex items-center justify-center relative overflow-hidden flex-shrink-0"><div class="absolute inset-[2px] rounded-sm border border-indigo-500/15"></div><div class="absolute inset-[4px] rounded-sm border border-indigo-500/10"></div><span class="relative text-indigo-400/20 text-[8px] select-none">♠</span></div>'
 </script>
 
 <!-- ── Table Layout ──────────────────────────────── -->
-<div class="flex flex-col items-center w-full max-w-4xl mx-auto gap-0.5">
+<div class="relative flex flex-col items-center w-full max-w-4xl mx-auto gap-0.5 min-h-[320px] sm:min-h-[400px]">
 
     <!-- ── North (player across) ──────────────────── -->
     {#if tablePlayers.north}
-    <div class="flex flex-col items-center">
-        <p class="text-{playerIDToColor.get(tablePlayers.north.ID)} text-xs">{tablePlayers.north.Username} ({tablePlayers.north.Sets} sets)</p>
-        <div class="flex items-end justify-center relative" style="min-height: 48px;">
+    <div class="flex flex-col items-center flex-shrink-0">
+        <p class="text-{playerIDToColor.get(tablePlayers.north.ID)} text-sm">{tablePlayers.north.Username} ({tablePlayers.north.Sets})</p>
+        <div class="flex items-end justify-center" style="min-height: 42px;">
             {#each tablePlayers.north.Cards as card, i}
                 {@const a = -fanAngleOther(i, tablePlayers.north.Cards.length)}
-                <div class="relative" style="margin-left: {i === 0 ? '0' : '-1.5rem'}; transform: rotate({a}deg); transform-origin: top center; z-index: {i};">
+                <div class="relative" style="margin-left: {i === 0 ? '0' : '-1.25rem'}; transform: rotate({a}deg); transform-origin: top center; z-index: {i};">
                     {#if hiddenMode && tablePlayers.north.ID !== humanPlayerId}
                         {@html CARD_BACK}
                     {:else}
-                        <PokerCard card={card} isIllegal={false} minify={false} />
+                        <PokerCard card={card} isIllegal={false} minify={true} />
                     {/if}
                 </div>
             {/each}
-            <!-- Last trick won by north -->
-            {#if lastSetPosition === 'north' && lastSet}
-                <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 flex gap-0">
-                    {#each lastSet.Cards as tc}
-                        <div class="-ml-2 first:ml-0 opacity-70">
-                            <PokerCard card={tc} isIllegal={false} minify={true} />
-                        </div>
-                    {/each}
-                </div>
-            {/if}
         </div>
     </div>
     {/if}
 
     <!-- ── Middle: West | Center | East ──────────── -->
-    <div class="flex w-full justify-between items-stretch gap-1 mt-1">
+    <div class="flex w-full justify-between items-stretch gap-1 flex-1 mt-1">
 
-        <!-- West (left opponent) -->
+        <!-- West (left opponent) — scrunched -->
         {#if tablePlayers.west}
-        <div class="flex items-center gap-1">
-            <div class="flex flex-col items-end relative" style="min-width: 45px;">
+        <div class="flex items-center gap-0.5">
+            <div class="flex flex-col items-end">
                 {#each tablePlayers.west.Cards as card, i}
                     {@const a = fanAngleVertical(i, tablePlayers.west.Cards.length, 'right')}
-                    <div class="relative" style="margin-top: {i === 0 ? '0' : '-1.5rem'}; transform: rotate({a}deg); transform-origin: right center; z-index: {i};">
+                    <div class="relative" style="margin-top: {i === 0 ? '0' : '-2rem'}; transform: rotate({a}deg); transform-origin: right center; z-index: {i};">
                         {#if hiddenMode && tablePlayers.west.ID !== humanPlayerId}
                             {@html CARD_BACK}
                         {:else}
-                            <PokerCard card={card} isIllegal={false} minify={false} />
+                            <PokerCard card={card} isIllegal={false} minify={true} />
                         {/if}
                     </div>
                 {/each}
-                <!-- Last trick won by west -->
-                {#if lastSetPosition === 'west' && lastSet}
-                    <div class="absolute -right-1 top-1/2 -translate-y-1/2 flex flex-col gap-0">
-                        {#each lastSet.Cards as tc}
-                            <div class="-mt-2 first:mt-0 opacity-70">
-                                <PokerCard card={tc} isIllegal={false} minify={true} />
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
             </div>
-            <p class="text-{playerIDToColor.get(tablePlayers.west.ID)} text-xs whitespace-nowrap">{tablePlayers.west.Username} {tablePlayers.west.Sets}</p>
+            <p class="text-{playerIDToColor.get(tablePlayers.west.ID)} text-xs whitespace-nowrap">{tablePlayers.west.Username} ({tablePlayers.west.Sets})</p>
         </div>
         {/if}
 
         <!-- Center: current trick + game info -->
-        <div class="flex-1 flex flex-col items-center justify-center min-h-[100px]">
+        <div class="flex-1 flex flex-col items-center justify-center min-h-[80px]">
             {#if game.Moves.length > 0}
                 <div class="flex gap-1 sm:gap-1.5 items-center justify-center">
                     {#each game.Moves as move, i}
@@ -149,46 +123,26 @@
             {:else}
                 <p class="text-xs text-muted-foreground/40 italic">no cards played yet</p>
             {/if}
-
-            <!-- Previous trick in center (if winner is south or unknown) -->
-            {#if lastSet && (!lastSetPosition || lastSetPosition === 'south')}
-                <div class="flex gap-0 mt-1 opacity-60">
-                    {#each lastSet.Cards as tc}
-                        <div class="-ml-3 first:ml-0">
-                            <PokerCard card={tc} isIllegal={false} minify={true} />
-                        </div>
-                    {/each}
-                </div>
-            {/if}
-
             <p class="text-xs text-muted-foreground mt-1">{playerName(game, game.WhoseTurn)}'s turn</p>
         </div>
 
-        <!-- East (right opponent) -->
+        <!-- East (right opponent) — scrunched -->
         {#if tablePlayers.east}
-        <div class="flex items-center gap-1">
-            <p class="text-{playerIDToColor.get(tablePlayers.east.ID)} text-xs whitespace-nowrap">{tablePlayers.east.Username} {tablePlayers.east.Sets}</p>
-            <div class="flex flex-col items-start relative" style="min-width: 45px;">
+        <div class="flex items-center gap-0.5">
+            <div class="flex flex-col items-end order-1">
+                <p class="text-{playerIDToColor.get(tablePlayers.east.ID)} text-xs whitespace-nowrap text-right">{tablePlayers.east.Username} ({tablePlayers.east.Sets})</p>
+            </div>
+            <div class="flex flex-col items-start order-2">
                 {#each tablePlayers.east.Cards as card, i}
                     {@const a = fanAngleVertical(i, tablePlayers.east.Cards.length, 'left')}
-                    <div class="relative" style="margin-top: {i === 0 ? '0' : '-1.5rem'}; transform: rotate({a}deg); transform-origin: left center; z-index: {i};">
+                    <div class="relative" style="margin-top: {i === 0 ? '0' : '-2rem'}; transform: rotate({a}deg); transform-origin: left center; z-index: {i};">
                         {#if hiddenMode && tablePlayers.east.ID !== humanPlayerId}
                             {@html CARD_BACK}
                         {:else}
-                            <PokerCard card={card} isIllegal={false} minify={false} />
+                            <PokerCard card={card} isIllegal={false} minify={true} />
                         {/if}
                     </div>
                 {/each}
-                <!-- Last trick won by east -->
-                {#if lastSetPosition === 'east' && lastSet}
-                    <div class="absolute -left-1 top-1/2 -translate-y-1/2 flex flex-col gap-0">
-                        {#each lastSet.Cards as tc}
-                            <div class="-mt-2 first:mt-0 opacity-70">
-                                <PokerCard card={tc} isIllegal={false} minify={true} />
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
             </div>
         </div>
         {/if}
@@ -196,8 +150,8 @@
 
     <!-- ── South (human) ──────────────────────────── -->
     {#if tablePlayers.south}
-    <div class="flex flex-col items-center mt-1">
-        <div class="flex items-start justify-center pb-1">
+    <div class="flex flex-col items-center mt-0.5 flex-shrink-0">
+        <div class="flex items-start justify-center">
             {#each tablePlayers.south.Cards as card, i}
                 {@const angle = fanAngle(i, tablePlayers.south.Cards.length)}
                 <button onclick={() => playCard(card)}
@@ -208,9 +162,19 @@
                 </button>
             {/each}
         </div>
-        <p class="text-{playerIDToColor.get(tablePlayers.south.ID)} text-xs">{tablePlayers.south.Username} ({tablePlayers.south.Sets} sets)</p>
+        <p class="text-{playerIDToColor.get(tablePlayers.south.ID)} text-sm">{tablePlayers.south.Username} ({tablePlayers.south.Sets})</p>
     </div>
     {/if}
+<!-- ── Won trick stack (top-left) ── -->
+{#if lastSet}
+    <div class="absolute top-2 left-2 z-10 flex gap-0 p-1.5 rounded-lg bg-card/70 backdrop-blur-sm border border-border/50 shadow-sm">
+        <div class="flex gap-0 items-end">
+            {#each lastSet.Cards as tc, i}
+                <div class="{i > 0 ? '-ml-3' : ''} opacity-80">
+                    <PokerCard card={tc} isIllegal={false} minify={true} />
+                </div>
+            {/each}
+        </div>
+    </div>
+{/if}
 </div>
-
-<!-- Trick cards that belong to west/north/east are shown near their position above -->

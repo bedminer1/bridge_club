@@ -21,8 +21,8 @@
             ? 'border-muted cursor-not-allowed brightness-75'
             : 'border-border cursor-grab'}"
     >
-        <!-- Rank + suit in top-right corner -->
-        <div class="flex flex-col items-end leading-none" style="color: {cardColor}">
+        <!-- Rank + suit in top-left corner -->
+        <div class="flex flex-col items-start leading-none" style="color: {cardColor}">
             <span class="font-bold {isIllegal ? 'opacity-70' : ''}">{card.Rank}</span>
             <span class="{isIllegal ? 'opacity-70' : ''}">{symbol}</span>
         </div>

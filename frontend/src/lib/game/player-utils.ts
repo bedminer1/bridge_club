@@ -1,10 +1,10 @@
 /** Shared player display utilities. */
 
 export const playerIDToColor = new Map<number, string>([
-    [1, "[var(--red)]"],
-    [2, "[var(--blue)]"],
-    [3, "[var(--yellow)]"],
-    [4, "[var(--green)]"],
+    [1, "red"],
+    [2, "blue"],
+    [3, "green"],
+    [4, "yellow"],
 ]);
 
 export function playerName(game: any, playerId: number): string {
