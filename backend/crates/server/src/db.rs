@@ -113,11 +113,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
     let conn = pool.conn().await;
-
-    // Move old tables out of the way (they'll be ported from backup JSON)
-    let _ = conn.execute_batch("ALTER TABLE matches RENAME TO matches_old;").await;
-    let _ = conn.execute_batch("ALTER TABLE match_participants RENAME TO match_participants_old;").await;
-
     conn.execute_batch(SCHEMA_SQL).await?;
 
     // Seed bot users
