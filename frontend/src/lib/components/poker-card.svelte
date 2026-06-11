@@ -21,6 +21,6 @@
             ? 'border-muted cursor-not-allowed brightness-75'
             : 'border-border cursor-grab'}"
     >
-        <p class="{isIllegal ? 'opacity-60' : ''} leading-none" style="color: {cardColor}">{card.Rank}<br>{symbol}</p>
+        <p class="{isIllegal ? 'opacity-70' : ''} leading-none" style="color: {cardColor}">{card.Rank}<br>{symbol}</p>
     </div>
 </div>
