@@ -602,7 +602,6 @@ fn decide_card_medium(table: &Table) -> Card {
     };
     let current_winner_player = (leader + current_winner_idx) % 4;
 
-    let is_last_to_play = num_cards == 3;
     let partner_winning = partner.map_or(false, |p| current_winner_player == p);
 
     // Partner is winning: dump the weakest legal card (feed)
@@ -611,55 +610,8 @@ fn decide_card_medium(table: &Table) -> Card {
         return legal[idx];
     }
 
-    // Opponent winning — check if this opponent is a threat
-    let threat = team.threat_level(current_winner_player);
-
-    // High threat (bet winner): try harder to beat them
-    if threat >= 1.0 && is_last_to_play {
-        // Last to play against the bet winner: win with minimal card
-        let current_best = &table.current_set_cards[current_winner_idx];
-        let winning_cards: Vec<&Card> = legal_refs
-            .iter()
-            .filter(|c| card_beats(c, current_best, trump, lead_suit))
-            .copied()
-            .collect();
-
-        if !winning_cards.is_empty() {
-            let idx = weakest_card_index(&winning_cards, trump, lead_suit);
-            return *winning_cards[idx];
-        }
-    }
-
-    // Low threat (bet winner's partner): let them have it if we can't beat cheaply
-    if threat < 1.0 && !is_last_to_play {
-        // Not last to play, opponent is the weak one — dump weakest and conserve
-        let idx = weakest_card_index(&legal_refs, trump, lead_suit);
-        return legal[idx];
-    }
-
-    // Opponent winning and I'm last to play: win with minimal card if possible
-    if is_last_to_play {
-        let current_best = &table.current_set_cards[current_winner_idx];
-        let winning_cards: Vec<&Card> = legal_refs
-            .iter()
-            .filter(|c| card_beats(c, current_best, trump, lead_suit))
-            .copied()
-            .collect();
-
-        if !winning_cards.is_empty() {
-            let idx = weakest_card_index(&winning_cards, trump, lead_suit);
-            return *winning_cards[idx];
-        }
-    }
-
-    // Default: try to win with strongest, or dump weakest
-    let current_best = if current_winner_idx < table.current_set_cards.len() {
-        &table.current_set_cards[current_winner_idx]
-    } else {
-        let idx = weakest_card_index(&legal_refs, trump, lead_suit);
-        return legal[idx];
-    };
-
+    // Opponent winning: try to beat them with the weakest card that can win
+    let current_best = &table.current_set_cards[current_winner_idx];
     let winning_cards: Vec<&Card> = legal_refs
         .iter()
         .filter(|c| card_beats(c, current_best, trump, lead_suit))
@@ -667,13 +619,14 @@ fn decide_card_medium(table: &Table) -> Card {
         .collect();
 
     if !winning_cards.is_empty() {
+        // We can win — play the weakest winning card (conserves strength)
         let idx = weakest_card_index(&winning_cards, trump, lead_suit);
-        *winning_cards[idx]
-    } else {
-        // Can't win — dump weakest
-        let idx = weakest_card_index(&legal_refs, trump, lead_suit);
-        legal[idx]
+        return *winning_cards[idx];
     }
+
+    // Can't win — dump the weakest legal card
+    let idx = weakest_card_index(&legal_refs, trump, lead_suit);
+    legal[idx]
 }
 
 /// Medium bot leading decision.

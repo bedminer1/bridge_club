@@ -65,7 +65,7 @@
         </div>
 
         <a
-            href={headerState.loggedIn ? "/user" : "/login"}
+            href={headerState.loggedIn ? "/user" : `/login${page.url.search}`}
             class="flex items-center gap-1.5 text-sm text-foreground hover:text-accent transition-colors no-underline"
         >
             <User class="w-4 h-4 text-muted-foreground" />

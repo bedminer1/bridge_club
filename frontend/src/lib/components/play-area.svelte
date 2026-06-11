@@ -3,6 +3,8 @@
     import PokerCard from "$lib/components/poker-card.svelte";
     import HandDisplay from "$lib/components/hand-display.svelte";
     import { isCardIllegal } from "$lib/game/legality";
+    import { wsClient } from "$lib/game/ws-client";
+    import { playerIDToColor, playerName } from "$lib/game/player-utils";
     import type { Game } from "$lib/game/types"
 
     let {
@@ -11,18 +13,13 @@
         humanPlayerId = 0,
         hiddenMode = true,
         disabled = false,
-        onPlayCard = (_card: any, _player: any) => {},
+        roomId = "",
     } = $props()
 
-    const playerIDToColor = new Map<number, string>([
-        [1, "[var(--red)]"],
-        [2, "[var(--blue)]"],
-        [3, "[var(--yellow)]"],
-        [4, "[var(--green)]"],
-    ])
-
-    function playerName(playerId: number): string {
-        return game.Players?.find((p: any) => p.ID === playerId)?.Username ?? `P${playerId}`
+    function playCard(card: any) {
+        if (!roomId || disabled) return
+        const apiCard = { suit: card.Suit, rank: String(card.Value) }
+        wsClient.gameAction("play", undefined, apiCard)
     }
 </script>
 
@@ -32,74 +29,54 @@
         {#each game.Moves as move, i}
         <div class="flex flex-col {i % 2 === 0 ? 'items-center mb-8' : 'items-center mt-8'}">
             <PokerCard card={move.CardPlayed} isIllegal={false} minify={false} />
-            <p class="text-{playerIDToColor.get(move.PlayerID)} text-2xs sm:text-xs whitespace-nowrap">{playerName(move.PlayerID)}</p>
+            <p class="text-{playerIDToColor.get(move.PlayerID)} text-2xs sm:text-xs whitespace-nowrap">{playerName(game, move.PlayerID)}</p>
         </div>
         {/each}
     </div>
 
-    {#if game.PreviousMoves.length !== 0} 
-    <div class="relative mr-7 flex-shrink-0" style="width: {game.PreviousMoves.length * 12 + 40}px; min-height: {game.PreviousMoves.length * 8 + 40}px;">
+    {#if game.PreviousMoves.length !== 0}
+    <Separator orientation="vertical" class="mx-2" />
+    <div class="flex gap-1.5 sm:gap-2 mr-2 sm:mr-4 items-start flex-shrink-0">
         {#each game.PreviousMoves as move, i}
-            <div class="absolute flex-col items-center gap-4" style="top: {i * 16}px; left: {i * 16}px; z-index: {i};">
-                <p class="text-2xs text-right text-{playerIDToColor.get(move.PlayerID)} whitespace-nowrap">P{move.PlayerID}</p>
-                <div>
-                    <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
-                </div>
-            </div>
+        <div class="flex flex-col {i % 2 === 0 ? 'items-center mb-8' : 'items-center mt-8'}">
+            <PokerCard card={move.CardPlayed} isIllegal={false} minify={true} />
+            <p class="text-2xs text-right text-{playerIDToColor.get(move.PlayerID)} whitespace-nowrap">P{move.PlayerID}</p>
+        </div>
         {/each}
     </div>
     {/if}
 </div>
 
-<!-- MAIN PHASE: player hands -->
-<div class="flex flex-col gap-10">
-    {#each hiddenMode ? [game.Players[humanSeat]] : game.Players as player}
-    <div>
-        <div class="flex gap-2">
-            <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
-            {#if !hiddenMode && player.Partner !== null}
-            <p>| Partner is {playerName(player.Partner?.ID ?? 0)}</p>
-            {/if}
-        </div>
-        
-        <div class="flex h-[100px] pl-4">
-            {#each player.Cards  as card, index}
-            <button
-                disabled={disabled || isCardIllegal(game, player, card)}
-                onclick={() => onPlayCard(card, player)}
-                class="text-left disabled:cursor-not-allowed">
-                <HandDisplay index={index}>
-                    <PokerCard card={card} isIllegal={isCardIllegal(game, player, card)} minify={false}/>
-                </HandDisplay>
-            </button>
-            {/each}
-            {#if !hiddenMode}
-            <Separator orientation="vertical" class="mx-10 h-full"/>
-                {#each player.PlayedCards as card, index}
-                 <button 
-                    disabled={true}>
-                    <HandDisplay index={index}>
-                        <PokerCard card={card} isIllegal={true} minify={false}/>
-                    </HandDisplay>
-                </button>
+<div class="flex flex-wrap justify-center gap-6 text-xs">
+    {#each game.Players as player}
+        <p class="text-{playerIDToColor.get(player.ID)}">{player.Username} ({player.Sets} sets) </p>
+    {/each}
+</div>
+<div class="flex flex-col gap-6 mt-6">
+    {#each game.Players as player, playerI}
+    <div class="flex flex-col mx-4">
+        <p class="text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
+        <div class="flex gap-1 justify-center">
+            {#if !hiddenMode || player.ID === humanPlayerId}
+                {#each player.Cards as card, index}
+                    <button onclick={() => playCard(card)}
+                        disabled={disabled || player.ID !== humanPlayerId || isCardIllegal(card, game)}
+                        class="transition-transform brightness-105 dark:brightness-95 hover:brightness-130 dark:hover:brightness-120 hover:shadow-accent hover:shadow-xl/30 hover:-translate-y-1 active:brightness-125 active:shadow-accent rounded-sm disabled:opacity-50 disabled:grayscale disabled:hover:translate-y-0 disabled:cursor-not-allowed">
+                        <HandDisplay index={index}>
+                            <PokerCard card={card} isIllegal={isCardIllegal(card, game)} minify={false}/>
+                        </HandDisplay>
+                    </button>
                 {/each}
+            {:else}
+                <div class="flex gap-1">
+                    {#each Array(player.Cards.length) as _, _i}
+                    <HandDisplay index={0}>
+                        <div class="w-[53px] h-[80px] rounded-[5px] border border-[oklch(47.63%_0.024_256.79)] bg-[oklch(10.41%_0.028_253.16)]"></div>
+                    </HandDisplay>
+                    {/each}
+                </div>
             {/if}
         </div>
     </div>
     {/each}
-
-    {#if hiddenMode}
-    <div class="flex gap-4">
-        {#each game.Players.slice(1, 4) as player, index}
-            <div class="flex flex-col gap-0">
-            <p class="text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
-            <p class="text-sm text-muted-foreground">({player.Sets} sets)</p>
-            </div>
-
-            {#if index < 2}
-            <Separator orientation="vertical" />
-            {/if}
-        {/each}
-    </div>
-    {/if}
 </div>

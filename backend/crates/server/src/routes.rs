@@ -16,6 +16,33 @@ use crate::session::AppState;
 
 // ── Request / Response types ──────────────────────────────────────────────
 
+#[derive(Deserialize)]
+pub struct CheckUsernameQuery {
+    pub username: String,
+}
+
+#[derive(Serialize)]
+pub struct CheckUsernameResponse {
+    pub ok: bool,
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Deserialize)]
+pub struct ChangeNameRequest {
+    pub password: String,
+    pub new_username: String,
+}
+
+// ── Request / Response types ──────────────────────────────────────────────
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomInfoResponse {
@@ -293,6 +320,9 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/auth/login", post(login))
         .route("/api/auth/session", get(get_session))
         .route("/api/auth/logout", post(logout))
+        .route("/api/auth/check-username", get(check_username))
+        .route("/api/auth/change-password", post(change_password))
+        .route("/api/auth/change-name", post(change_name))
         // Match history routes
         .route("/api/matches", get(get_matches).post(save_match))
         .route("/api/matches/{match_id}", get(get_match))
@@ -643,6 +673,138 @@ async fn logout(
             )
         }
     }
+}
+
+// ── Account Management Handlers ──────────────────────────────────────────
+
+/// GET /api/auth/check-username?username=X — check if a username is available.
+async fn check_username(
+    Query(query): Query<CheckUsernameQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if query.username.is_empty() || query.username.len() < 2 || query.username.len() > 20 {
+        return Json(CheckUsernameResponse {
+            ok: false,
+            available: false,
+            error: Some("Username must be 2-20 characters".to_string()),
+        });
+    }
+
+    let conn = state.db.conn().await;
+    let exists = match conn
+        .query("SELECT id FROM users WHERE username = ?1", libsql::params![query.username])
+        .await
+    {
+        Ok(mut rows) => rows.next().await.ok().flatten().is_some(),
+        Err(_) => false,
+    };
+
+    Json(CheckUsernameResponse {
+        ok: true,
+        available: !exists,
+        error: None,
+    })
+}
+
+#[derive(Serialize)]
+struct ChangeResponse {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+/// POST /api/auth/change-password — change password for the authenticated user.
+async fn change_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> impl IntoResponse {
+    let user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => {
+            return (status, Json(ChangeResponse {
+                ok: false,
+                error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
+            }));
+        }
+    };
+
+    if payload.new_password.len() < 6 {
+        return (StatusCode::BAD_REQUEST, Json(ChangeResponse {
+            ok: false,
+            error: Some("New password must be at least 6 characters".to_string()),
+        }));
+    }
+
+    let current_hash = auth::hash_password(&payload.current_password);
+    if current_hash != user.password {
+        return (StatusCode::UNAUTHORIZED, Json(ChangeResponse {
+            ok: false,
+            error: Some("Current password is incorrect".to_string()),
+        }));
+    }
+
+    let new_hash = auth::hash_password(&payload.new_password);
+    let conn = state.db.conn().await;
+    let _ = conn.execute(
+        "UPDATE users SET password = ?1 WHERE id = ?2",
+        libsql::params![new_hash, user.id],
+    ).await;
+
+    (StatusCode::OK, Json(ChangeResponse { ok: true, error: None }))
+}
+
+/// POST /api/auth/change-name — change username for the authenticated user.
+async fn change_name(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ChangeNameRequest>,
+) -> impl IntoResponse {
+    let user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => {
+            return (status, Json(ChangeResponse {
+                ok: false,
+                error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
+            }));
+        }
+    };
+
+    if payload.new_username.len() < 2 || payload.new_username.len() > 20 {
+        return (StatusCode::BAD_REQUEST, Json(ChangeResponse {
+            ok: false,
+            error: Some("Username must be 2-20 characters".to_string()),
+        }));
+    }
+
+    let password_hash = auth::hash_password(&payload.password);
+    if password_hash != user.password {
+        return (StatusCode::UNAUTHORIZED, Json(ChangeResponse {
+            ok: false,
+            error: Some("Password is incorrect".to_string()),
+        }));
+    }
+
+    let conn = state.db.conn().await;
+    // Check if new username is taken
+    if let Ok(mut rows) = conn
+        .query("SELECT id FROM users WHERE username = ?1 AND id != ?2", libsql::params![payload.new_username.clone(), user.id])
+        .await
+    {
+        if let Ok(Some(_)) = rows.next().await {
+            return (StatusCode::CONFLICT, Json(ChangeResponse {
+                ok: false,
+                error: Some("Username already taken".to_string()),
+            }));
+        }
+    }
+
+    let _ = conn.execute(
+        "UPDATE users SET username = ?1 WHERE id = ?2",
+        libsql::params![payload.new_username, user.id],
+    ).await;
+
+    (StatusCode::OK, Json(ChangeResponse { ok: true, error: None }))
 }
 
 // ── Match History Handlers ────────────────────────────────────────────────

@@ -3,6 +3,7 @@
     import * as Card from "$lib/components/ui/card/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
     import { goto } from "$app/navigation";
+    import { page } from "$app/state";
 
     let username = $state("")
     let password = $state("")
@@ -14,6 +15,23 @@
             return "http://127.0.0.1:3000"
         }
         return ""
+    }
+
+    /** Resolve the URL to redirect to after login. */
+    function getRedirectUrl(): string {
+        // 1. Check query param
+        const fromRoom = page.url.searchParams.get("room")
+        if (fromRoom) return `/?room=${encodeURIComponent(fromRoom)}`
+        // 2. Check sessionStorage (saved by +page.svelte)
+        try {
+            const saved = sessionStorage.getItem("bridgePendingRoom")
+            if (saved) {
+                sessionStorage.removeItem("bridgePendingRoom")
+                return `/?room=${encodeURIComponent(saved)}`
+            }
+        } catch {}
+        // 3. Fallback
+        return "/"
     }
 
     async function login() {
@@ -28,7 +46,7 @@
             const d = await res.json()
             if (!d.ok) { error = d.error || "Login failed"; return }
             document.cookie = `session=${d.token}; path=/; max-age=${30*24*60*60}; SameSite=Lax`
-            goto("/")
+            goto(getRedirectUrl())
         } catch (e) {
             error = "Failed to connect to server"
         } finally {
@@ -43,7 +61,7 @@
         <Card.Title>Log In</Card.Title>
         <Card.Description>Sign in to your account</Card.Description>
       </Card.Header>
-      <form onsubmit={(e) => { e.preventDefault(); login() }}>
+      <div onkeydown={(e) => { if (e.key === 'Enter') login() }}>
           <Card.Content>
               <div class="mb-4">
                   <label class="text-sm font-medium mb-1 block" for="username">Username</label>
@@ -62,11 +80,11 @@
                     <a href="/signup" class="text-xs italic underline text-foreground/60 h-full flex items-end pb-2">
                         Don't have an account?
                     </a>
-                    <Button type="submit" disabled={loading} class="w-[80px]">
+                    <Button onclick={login} disabled={loading} class="w-[80px]">
                         {loading ? "..." : "Login"}
                     </Button>
                 </div>
           </Card.Footer>
-        </form>
+        </div>
     </Card.Root>
 </div>

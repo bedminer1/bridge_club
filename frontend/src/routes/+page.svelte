@@ -13,7 +13,6 @@
     import { headerState } from "$lib/game/header-state.svelte";
 
     import {
-        createOnlineGame,
         getRoomState,
         apiStateToGame,
         frontendCardToApiCard,
@@ -22,6 +21,8 @@
     import { goto } from "$app/navigation";
 
     import { wsClient } from "$lib/game/ws-client";
+    import { playCardPlace, playCardDeal, playTrickWon, playGameWon, playGameLost } from "$lib/game/sound";
+    import { playerName } from "$lib/game/player-utils";
 
     // ── Import extracted components ─────────────────────────────────
     import Lobby from "$lib/components/lobby.svelte";
@@ -37,6 +38,7 @@
     // Online-only game state
     let isOnline = $state(false)
     let isOnlineLoading = $state(false)
+    let isJoiningRoom = $state(false)
     let game: Game = $state(EMPTY_GAME)
     let roomId = $state("")
     let onlineToken = $state(token ?? "")
@@ -54,6 +56,8 @@
     let lastMatchId = $state<number | null>(null)
     let lastEloChange = $state<number | null>(null)
     let loadingMatchResult = $state(false)
+    let isGuest = $state(false) // true if created via guest flow
+    let isDefaultPassword = $state(false) // true if guest left password empty
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -86,8 +90,16 @@
         if (urlRoomId) {
             // Save active room to localStorage so we can resume after navigation
             try { localStorage.setItem("bridgeActiveRoom", JSON.stringify({ roomId: urlRoomId, seat: page.url.searchParams.get("seat") })) } catch {}
-            if (loggedIn && onlineToken && !isOnline && !isOnlineLoading) {
-                loadExistingRoom(urlRoomId)
+            // Save to sessionStorage too — login page reads this to redirect back
+            try { sessionStorage.setItem("bridgePendingRoom", urlRoomId) } catch {}
+            if (loggedIn && onlineToken && !isOnline && !isOnlineLoading && !isJoiningRoom) {
+                if (page.url.searchParams.get("seat")) {
+                    // Has seat param — this is a game URL, load directly
+                    loadExistingRoom(urlRoomId)
+                } else if (!lobbyRoomId) {
+                    // No seat param and not already in a lobby — check room status
+                    loadRoomOrLobby(urlRoomId)
+                }
             }
         }
     })
@@ -95,6 +107,13 @@
     // Resume active room from localStorage when returning to page without ?room=
     $effect(() => {
         if (!page.url.searchParams.get("room") && loggedIn && onlineToken && !isOnline && !isOnlineLoading) {
+            // If a previous room load failed, don't re-resume for this cycle
+            try {
+                if (sessionStorage.getItem("bridgeRoomFailed")) {
+                    sessionStorage.removeItem("bridgeRoomFailed")
+                    return
+                }
+            } catch {}
             try {
                 const saved = localStorage.getItem("bridgeActiveRoom")
                 if (saved) {
@@ -115,9 +134,10 @@
     }
 
     // Determine which seat this user is in (for multiplayer)
+    let mySeatIndex = $state(0)  // Direct seat (set by lobby:started or loadExistingRoom)
     let humanSeat = $derived.by(() => {
         const s = page.url.searchParams.get("seat")
-        return s !== null ? parseInt(s) : 0
+        return s !== null ? parseInt(s) : mySeatIndex
     })
     let humanPlayerId = $derived(humanSeat + 1)
 
@@ -142,6 +162,10 @@
         const team2Ids = new Set(game.Team2?.map((t: any) => t.ID) ?? [])
         return s + (team2Ids.has(p.ID) ? (p.Sets ?? 0) : 0)
     }, 0) ?? 0)
+    const didWin = $derived(
+        (game.Winner === "Team 1" && game.Team1?.some((p: any) => p.ID === humanPlayerId)) ||
+        (game.Winner === "Team 2" && game.Team2?.some((p: any) => p.ID === humanPlayerId))
+    )
 
     // Sync user info to header
     $effect(() => { headerState.username = username })
@@ -159,44 +183,36 @@
     )
 
     // ── Online Game Actions ───────────────────────────────────────
-    async function startOnlineGame() {
-        if (!onlineToken) return
-        isOnlineLoading = true
-        try {
-            const result = await createOnlineGame(username, headerState.difficulty, onlineToken)
-            roomId = result.roomId
-            game = result.game
-            displayedPlayCount = extractPlayEvents(game).length
-            isOnline = true
-        } catch (e) {
-            console.error("Failed to start online game:", e)
-            alert("Failed to start online game. Is the backend running at http://127.0.0.1:3000?")
-        } finally {
-            isOnlineLoading = false
-        }
-    }
 
-    /** Load an existing room's state (from lobby flow). */
+    /** Load an existing room that has already started (game state). */
     async function loadExistingRoom(existingRoomId: string) {
         if (!onlineToken) return
         isOnlineLoading = true
         try {
             roomId = existingRoomId
-            const gameState = await getRoomState(existingRoomId, onlineToken)
-            fixupPlayerDisplay(gameState)
-            game = gameState
-            displayedPlayCount = extractPlayEvents(game).length
+            // Set isOnline immediately so the template switches to game view
             isOnline = true
+
             // Fetch room info for hidden mode setting
+            let hiddenMode = true
             try {
                 const infoRes = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(existingRoomId)}/info`, {
                     headers: { "X-Session-Token": onlineToken },
                 })
                 if (infoRes.ok) {
                     const info = await infoRes.json()
-                    headerState.hiddenMode = info.hiddenMode ?? true
+                    hiddenMode = info.hiddenMode ?? true
                 }
             } catch {}
+            headerState.hiddenMode = hiddenMode
+
+            // Load the actual game state
+            const gameState = await getRoomState(existingRoomId, onlineToken)
+            fixupPlayerDisplay(gameState)
+            game = gameState
+            displayedPlayCount = extractPlayEvents(game).length
+            // Play deal sound for initial load
+            setTimeout(() => { for (let i = 0; i < 4; i++) setTimeout(() => playCardDeal(), i * 90) }, 100)
         } catch (e) {
             console.error("Failed to load existing room:", e)
             try { localStorage.removeItem("bridgeActiveRoom") } catch {}
@@ -209,24 +225,43 @@
         }
     }
 
-    async function onlineRaiseBet(bs: number, suit: string) {
-        if (!isOnline || !roomId || !onlineToken || isPlaybackRunning) return
-        if (game.WhoseTurn !== humanPlayerId) return
-        try {
-            const call = { Bid: { level: bs, strain: FRONTEND_SUIT_TO_API[suit] ?? suit } }
-            wsClient.gameAction("bid", call)
-        } catch (e) {
-            console.error("Online raise failed:", e)
-        }
+    /** Clear all saved room references (use after failed room load). */
+    function clearSavedRoom() {
+        try { localStorage.removeItem("bridgeActiveRoom") } catch {}
+        try { sessionStorage.removeItem("bridgePendingRoom") } catch {}
+        try { sessionStorage.setItem("bridgeRoomFailed", "1") } catch {}
     }
 
-    async function onlinePassBet() {
-        if (!isOnline || !roomId || !onlineToken || isPlaybackRunning) return
-        if (game.WhoseTurn !== humanPlayerId) return
+    /** Check if a room has started; load game or join lobby accordingly. */
+    async function loadRoomOrLobby(roomIdToLoad: string) {
+        if (!onlineToken) return
+        isJoiningRoom = true
+        isOnlineLoading = true
         try {
-            wsClient.gameAction("bid", "Pass")
+            const infoRes = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(roomIdToLoad)}/info`, {
+                headers: { "X-Session-Token": onlineToken },
+            })
+            if (!infoRes.ok) {
+                console.error("Room not found:", roomIdToLoad)
+                clearSavedRoom()
+                isJoiningRoom = false
+                goto("/", { replaceState: true })
+                return
+            }
+            const info = await infoRes.json()
+            if (info.isStarted) {
+                await loadExistingRoom(roomIdToLoad)
+                isJoiningRoom = false
+            } else {
+                wsClient.joinLobby(roomIdToLoad)
+            }
         } catch (e) {
-            console.error("Online pass failed:", e)
+            console.error("Failed to load room or lobby:", e)
+            clearSavedRoom()
+            isJoiningRoom = false
+            goto("/", { replaceState: true })
+        } finally {
+            isOnlineLoading = false
         }
     }
 
@@ -240,27 +275,12 @@
         }
     }
 
-    async function onlinePlayCard(card: any, _player: any) {
-        if (!isOnline || !roomId || !onlineToken || isPlaybackRunning) return
-        if (game.WhoseTurn !== humanPlayerId) return
-        try {
-            wsClient.gameAction("play", undefined, frontendCardToApiCard(card))
-        } catch (e) {
-            console.error("Online play failed:", e)
-        }
-    }
-
     /** Fix up player display: ensure IsBot is correct without overwriting real names. */
     function fixupPlayerDisplay(g: any) {
         if (!g.Players) return
         for (let i = 0; i < g.Players.length; i++) {
             g.Players[i].IsBot = i !== humanSeat
         }
-    }
-
-    // Utility: get a player's display name from their ID
-    function playerName(playerId: number): string {
-        return game.Players?.find((p: any) => p.ID === playerId)?.Username ?? `P${playerId}`
     }
 
     // Win detection — auto-save match immediately, clear saved room
@@ -271,13 +291,7 @@
         }
     })
 
-    const FRONTEND_SUIT_TO_API: Record<string, string> = {
-        Club: "Clubs",
-        Diamond: "Diamonds",
-        Heart: "Hearts",
-        Spades: "Spades",
-    }
-
+    // Win detection — auto-save match immediately, clear saved room
     let API_URL: string
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         API_URL = "http://127.0.0.1:3000"
@@ -292,41 +306,6 @@
     let lobbyIsHost = $state(false)
     let lobbyPlayers = $state<Array<{ name: string; seatIndex: number; isBot: boolean }>>([])
     let lobbyHiddenMode = $state(true)
-
-    function lobbyCreateRoom() {
-        try {
-            wsClient.createLobby()
-        } catch (e) { console.error("Create room error:", e); alert("Failed. Is the backend running?") }
-    }
-
-    function lobbyJoinRoom(joinRoomId: string) {
-        if (!joinRoomId.trim()) return
-        try {
-            wsClient.joinLobby(joinRoomId.trim())
-        } catch (e) { console.error("Join error:", e); alert("Failed. Is the backend running?") }
-    }
-
-    function lobbyLeaveRoom() {
-        if (!lobbyRoomId || !lobbyPlayerId) return
-        try {
-            wsClient.leaveLobby()
-        } catch (e) { console.error("Leave error:", e) }
-        roomId = ""; lobbyRoomId = ""; lobbyPlayerId = ""; lobbyMySeatIndex = 0; lobbyIsHost = false; lobbyPlayers = []
-        try { localStorage.removeItem("bridgeActiveRoom") } catch {}
-    }
-
-    function lobbyStartGame() {
-        try {
-            wsClient.startGame(lobbyHiddenMode, headerState.difficulty || "Easy")
-        } catch (e) { console.error("Start error:", e); alert("Failed. Is the backend running?") }
-    }
-
-    function lobbyToggleHiddenMode() {
-        if (!lobbyRoomId || !lobbyPlayerId) return
-        try {
-            wsClient.toggleHidden(!lobbyHiddenMode)
-        } catch (e) { console.error("Toggle hidden mode error:", e) }
-    }
 
     // ── Chat ────────────────────────────────────────────────────────
     interface ChatMsg { id: number; playerName: string; text: string; timestamp: number }
@@ -356,6 +335,7 @@
             lobbyMySeatIndex = data.seatIndex
             lobbyIsHost = true
             lobbyPlayerId = data.playerId
+            lobbyPlayers = [{ name: username, seatIndex: data.seatIndex, isBot: false }]
         })
 
         const unsubJoined = wsClient.on("lobby:joined", (data) => {
@@ -364,12 +344,15 @@
             lobbyMySeatIndex = data.seatIndex
             lobbyIsHost = false
             lobbyPlayerId = data.playerId
+            lobbyPlayers = [{ name: username, seatIndex: data.seatIndex, isBot: false }]
+            isJoiningRoom = false
         })
 
         // Standalone game:state listener for realtime updates (handles both
         // lobby-created games and existing rooms loaded via loadExistingRoom)
+        // Only process when in game mode (has ?seat= param), not during lobby
         const unsubGameState = wsClient.on("game:state", (data) => {
-            if (data.roomId === roomId) {
+            if (data.roomId === roomId && isOnline) {
                 const updatedGame = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
                 console.log(updatedGame)
                 fixupPlayerDisplay(updatedGame)
@@ -385,7 +368,13 @@
         const unsubStarted = wsClient.on("lobby:started", (data) => {
             headerState.hiddenMode = lobbyHiddenMode
             hiddenModeLocked = lobbyHiddenMode
-            goto(`/?room=${encodeURIComponent(data.roomId)}&seat=${lobbyMySeatIndex}`)
+            // Set human seat directly (don't rely on URL param that may not persist)
+            mySeatIndex = lobbyMySeatIndex
+            // Play deal sound as the game starts
+            for (let i = 0; i < 4; i++) setTimeout(() => playCardDeal(), i * 90)
+            // Directly load the game state without navigation
+            // (goto would remount the component and lose all state)
+            loadExistingRoom(data.roomId)
         })
 
         const unsubLeft = wsClient.on("lobby:left", () => {
@@ -498,6 +487,11 @@
     function applyPlayEventToGame(gameEvent: GameEvent): void {
         if (gameEvent.kind === "win") {
             game.Winner = gameEvent.winner
+            // Play game over sound — check if human's team won
+            const humanOnTeam1 = game.Team1?.some((p: any) => p.ID === humanPlayerId) ?? false
+            const humanOnTeam2 = game.Team2?.some((p: any) => p.ID === humanPlayerId) ?? false
+            const humanWon = (humanOnTeam1 && gameEvent.winner === "Team 1") || (humanOnTeam2 && gameEvent.winner === "Team 2")
+            if (humanWon) { playGameWon() } else { playGameLost() }
             displayedPlayCount += 1
             return
         }
@@ -536,6 +530,7 @@
                 game.TurnSuit = cardToPlay.Suit
             }
             game.WhoseTurn = (gameEvent.playerId % 4) + 1
+            playCardPlace()
         } else {
             const winnerId = gameEvent.trickWinnerId ?? gameEvent.playerId
             const completedCards = currentMoves.map((move) => ({
@@ -566,6 +561,7 @@
                 game.Players[winningPlayerIndex].Sets += 1
             }
             game.WhoseTurn = winnerId
+            playTrickWon()
         }
 
         displayedPlayCount += 1
@@ -697,14 +693,14 @@
 
 <div class="flex flex-col gap-6 w-full items-center px-4 pt-20 pb-8">
 
-{#if page.url.searchParams.get("room")}
+{#if isOnline || page.url.searchParams.get("room")}
     {#if isOnlineLoading}
     <div class="text-lg text-muted-foreground animate-pulse">
         Starting game...
     </div>
     {:else if isOnline && game.Players}
     <div class="text-2xl text-muted-foreground">
-        <p>{playerName(game.WhoseTurn)}'s turn</p>
+        <p>{playerName(game, game.WhoseTurn)}'s turn</p>
     </div>
 
     {#if game.IsPartnerSelectionPhase && game.BetWinner.ID === humanPlayerId}
@@ -732,7 +728,7 @@
         </div>
     {:else if game.IsPartnerSelectionPhase}
         <div class="flex flex-col gap-4 items-center">
-            <p class="text-xl">{playerName(game.BetWinner.ID)} is selecting a partner...</p>
+            <p class="text-xl">{playerName(game, game.BetWinner.ID)} is selecting a partner...</p>
         </div>
     {:else}
     <!-- Play area table -->
@@ -766,9 +762,9 @@
         </div>
 
     {#if game.IsBettingPhase}
-        <BidArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} onRaise={onlineRaiseBet} onPass={onlinePassBet} />
+        <BidArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} {roomId} />
     {:else}
-        <PlayArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} onPlayCard={onlinePlayCard} />
+        <PlayArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} {roomId} />
     {/if}
     </div>
     </div>
@@ -778,47 +774,102 @@
 
     </div>
     {/if}
+    {:else}
+    <!-- Lobby UI (room hasn't started yet) -->
+    <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
+        <Lobby
+            {onlineToken}
+            {username}
+            {userID}
+            bind:lobbyRoomId
+            bind:lobbyPlayerId
+            bind:lobbyMySeatIndex
+            bind:lobbyIsHost
+            bind:lobbyPlayers
+            bind:lobbyHiddenMode
+            bind:difficulty={headerState.difficulty}
+            onguestlogin={(name: string, token: string, uid: number, defaultPw: boolean) => {
+                username = name; onlineToken = token; userID = uid; isGuest = true; isDefaultPassword = defaultPw;
+                const urlRoomId = page.url.searchParams.get("room")
+                if (urlRoomId && !isOnline) { loadRoomOrLobby(urlRoomId) }
+            }}
+        />
+
+        {#if lobbyRoomId}
+        <Chat roomId={roomId} lobbyPlayerId={lobbyPlayerId} bind:chatMessages onSend={chatSend} />
+        {/if}
+    </div>
+    {/if}
 
     <!-- Game-over dialog -->
     {#if showGameOverDialog}
     <Dialog.Root bind:open={showGameOverDialog}>
         <Dialog.Content class="max-w-sm">
             <Dialog.Header class="text-center">
-                <Dialog.Title
-                    class="text-2xl font-bold {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'text-[var(--blue)]' : 'text-[var(--red)]'}"
-                >
-                    {game.Winner === 'Team 1' && game.Team1?.some((p: any) => p.ID === humanPlayerId) || game.Winner === 'Team 2' && game.Team2?.some((p: any) => p.ID === humanPlayerId) ? 'Win!' : 'Loss'}
+                <Dialog.Title class="text-3xl font-bold {didWin ? 'text-[var(--blue)]' : 'text-[var(--red)]'}">
+                    {didWin ? 'You Won!' : 'Loss'}
                 </Dialog.Title>
-                <Dialog.Description class="flex flex-col gap-2 items-center pt-2">
-                    <span class="text-lg">Team 1 <span class="text-[var(--red)]">{team1Sets}</span> — <span class="text-[var(--blue)]">{team2Sets}</span> Team 2</span>
-                    <span class="text-xs text-muted-foreground mt-1">
-                        Bet: {game.BetSize}{suitToSymbol.get(game.Trump)}
-                    </span>
+                <Dialog.Description class="flex flex-col gap-3 items-center pt-3">
+                    <!-- Team scores -->
+                    <div class="flex items-center gap-4 text-lg">
+                        <div class="flex flex-col items-center gap-0.5">
+                            <span class="text-xs text-muted-foreground uppercase tracking-wide">Team 1</span>
+                            <span class="text-2xl font-bold tabular-nums">{team1Sets}</span>
+                        </div>
+                        <span class="text-xl text-muted-foreground/40 font-light">:</span>
+                        <div class="flex flex-col items-center gap-0.5">
+                            <span class="text-xs text-muted-foreground uppercase tracking-wide">Team 2</span>
+                            <span class="text-2xl font-bold tabular-nums">{team2Sets}</span>
+                        </div>
+                    </div>
+                    <!-- Bet info -->
+                    <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span class="rounded border border-border px-2 py-0.5">{game.BetSize}{suitToSymbol.get(game.Trump)}</span>
+                        <span>Target: {6 + game.BetSize}</span>
+                    </div>
+                    <!-- Per-player sets -->
+                    <div class="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
+                        {#each game.Players ?? [] as player, i}
+                            <span style="color: {['var(--red)', 'var(--blue)', 'var(--yellow)', 'var(--green)'][i]}">
+                                {player.Username}: {player.Sets ?? 0} sets
+                            </span>
+                        {/each}
+                    </div>
+                    <!-- Loading / Elo -->
                     {#if loadingMatchResult}
-                        <span class="text-sm mt-1 text-muted-foreground animate-pulse">Calculating Elo...</span>
+                        <span class="text-sm mt-1 text-muted-foreground animate-pulse">Saving match...</span>
                     {:else if lastEloChange !== null}
-                        <span class="text-sm mt-1 {lastEloChange > 0 ? 'text-green' : 'text-red'}">
-                            Elo: {lastEloChange > 0 ? '+' : ''}{lastEloChange}
+                        <span class="text-sm font-bold {lastEloChange > 0 ? 'text-green' : 'text-red'}">
+                            Elo {lastEloChange > 0 ? '+' : ''}{lastEloChange}
                         </span>
                     {/if}
                 </Dialog.Description>
             </Dialog.Header>
-            <Dialog.Footer class="justify-center gap-2">
-                <Button onclick={() => { showGameOverDialog = false }} variant="outline">OK</Button>
+            <Dialog.Footer class="justify-center gap-2 flex-wrap">
+                <Button onclick={() => { showGameOverDialog = false }} variant="outline" size="sm">Close</Button>
                 {#if loadingMatchResult}
-                    <Button disabled variant="outline">Saving...</Button>
+                    <Button disabled variant="outline" size="sm">Saving...</Button>
                 {:else if lastMatchId}
-                    <Button onclick={() => { showGameOverDialog = false; goto(`/user/${lastMatchId}`) }}>
+                    <Button onclick={() => { showGameOverDialog = false; goto(`/user/${lastMatchId}`) }} size="sm">
                         View Results
                     </Button>
                 {/if}
-                <Button onclick={() => { showGameOverDialog = false; try { localStorage.removeItem("bridgeActiveRoom") } catch {}; goto("/") }}>
+                <Button onclick={() => { showGameOverDialog = false; try { localStorage.removeItem("bridgeActiveRoom") } catch {}; goto("/") }} size="sm">
                     Play Again
                 </Button>
             </Dialog.Footer>
+            <!-- Password change prompt for guest users -->
+            {#if isGuest && isDefaultPassword && !loadingMatchResult && lastMatchId}
+                <div class="px-6 pb-4 pt-1">
+                    <div class="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                        <span>🔑</span>
+                        <span>Update your password in</span>
+                        <a href="/user" class="text-accent hover:underline ml-auto shrink-0">Settings</a>
+                    </div>
+                </div>
+            {/if}
         </Dialog.Content>
     </Dialog.Root>
-    {/if}
     {/if}
 
 {:else}
@@ -827,6 +878,7 @@
         <Lobby
             {onlineToken}
             {username}
+            {userID}
             bind:lobbyRoomId
             bind:lobbyPlayerId
             bind:lobbyMySeatIndex
@@ -834,11 +886,12 @@
             bind:lobbyPlayers
             bind:lobbyHiddenMode
             bind:difficulty={headerState.difficulty}
-            oncreate={lobbyCreateRoom}
-            onjoin={lobbyJoinRoom}
-            onleave={lobbyLeaveRoom}
-            onstart={lobbyStartGame}
-            ontogglehidden={lobbyToggleHiddenMode}
+            onguestlogin={(name: string, token: string, uid: number, defaultPw: boolean) => {
+                username = name; onlineToken = token; userID = uid; isGuest = true; isDefaultPassword = defaultPw;
+                // Auto-join room if there's a pending invite in the URL
+                const urlRoomId = page.url.searchParams.get("room")
+                if (urlRoomId && !isOnline) { loadExistingRoom(urlRoomId) }
+            }}
         />
 
         {#if lobbyRoomId}

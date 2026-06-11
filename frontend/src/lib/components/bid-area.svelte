@@ -6,7 +6,13 @@
     import HandDisplay from "$lib/components/hand-display.svelte";
     import { suitToSymbol } from "$lib/utils"
     import { isLegalRaise } from "$lib/game/betting";
+    import { wsClient } from "$lib/game/ws-client";
+    import { playerIDToColor, playerName } from "$lib/game/player-utils";
     import type { Game } from "$lib/game/types"
+
+    const FRONTEND_SUIT_TO_API: Record<string, string> = {
+        Club: "Clubs", Diamond: "Diamonds", Heart: "Hearts", Spades: "Spades",
+    }
 
     let {
         game = {} as Game,
@@ -14,22 +20,21 @@
         humanPlayerId = 0,
         hiddenMode = true,
         disabled = false,
-        onRaise = (_bs: number, _suit: string) => {},
-        onPass = () => {},
+        roomId = "",
     } = $props()
 
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
 
-    const playerIDToColor = new Map<number, string>([
-        [1, "[var(--red)]"],
-        [2, "[var(--blue)]"],
-        [3, "[var(--yellow)]"],
-        [4, "[var(--green)]"],
-    ])
+    function raiseBet() {
+        if (!roomId || disabled) return
+        const call = { Bid: { level: betSize, strain: FRONTEND_SUIT_TO_API[bettedSuit] ?? bettedSuit } }
+        wsClient.gameAction("bid", call)
+    }
 
-    function playerName(playerId: number): string {
-        return game.Players?.find((p: any) => p.ID === playerId)?.Username ?? `P${playerId}`
+    function passBet() {
+        if (!roomId || disabled) return
+        wsClient.gameAction("bid", "Pass")
     }
 </script>
 
@@ -37,7 +42,7 @@
 <div class="flex flex-col items-center gap-1">
     {#each game.Moves.slice(-3) as move}
         <div class="flex items-center gap-2 {move === game.Moves[game.Moves.length - 1] ? 'text-base font-medium' : 'text-xs text-muted-foreground/60'}">
-            <span class="text-{playerIDToColor.get(move.PlayerID)}">{playerName(move.PlayerID)}</span>
+            <span class="text-{playerIDToColor.get(move.PlayerID)}">{playerName(game, move.PlayerID)}</span>
             {#if move.CardPlayed.Value === 0}
                 <span>passed</span>
             {:else}
@@ -47,12 +52,12 @@
     {/each}
     {#if game.Moves.length < 4}
         <div class="text-xs text-muted-foreground/40 mt-1">
-            waiting for {playerName(game.WhoseTurn)}...
+            waiting for {playerName(game, game.WhoseTurn)}...
         </div>
     {/if}
     {#if game.Moves.length === 0}
         <div class="text-xs text-muted-foreground/40">
-            {playerName(game.WhoseTurn)} to bet
+            {playerName(game, game.WhoseTurn)} to bet
         </div>
     {/if}
 </div>
@@ -91,10 +96,10 @@
             </Select.Root>
         </div>
         <div class="flex gap-2 w-full">
-            <Button class="cursor-pointer flex-1" onclick={() => onPass()} disabled={disabled}>Pass</Button>
+            <Button class="cursor-pointer flex-1" onclick={passBet} disabled={disabled}>Pass</Button>
             <Button 
             variant="destructive"
-            onclick={() => onRaise(betSize, bettedSuit)}
+            onclick={raiseBet}
             disabled={disabled || !isLegalRaise(game, betSize, bettedSuit)}
             class="bg-red-500 cursor-pointer flex-1 disabled:cursor-not-allowed disabled:opacity-50"
             >Raise</Button>

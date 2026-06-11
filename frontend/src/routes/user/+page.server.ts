@@ -8,7 +8,8 @@ export async function load({ cookies }) {
             matchRecords: [],
             message: "Log in to view stats",
             userStats: null,
-            rank: 0
+            rank: 0,
+            token: ""
         }
     }
 
@@ -21,7 +22,8 @@ export async function load({ cookies }) {
             matchRecords: [],
             message: "Session expired",
             userStats: null,
-            rank: 0
+            rank: 0,
+            token: ""
         }
     }
 
@@ -37,6 +39,7 @@ export async function load({ cookies }) {
         username: sessionData.user?.username || "",
         userID: sessionData.user?.id ?? 0,
         rank: 0,
+        token,
         userStats: sessionData.user ? {
             gamesPlayed: sessionData.user.gamesPlayed,
             gamesWon: sessionData.user.gamesWon,
