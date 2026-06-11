@@ -23,6 +23,7 @@
     // Parse each participant's played cards
     const participantsWithCards = $derived(
         (matchRecord?.participants ?? [])
+            .slice()
             .sort((a: any, b: any) => a.seatIndex - b.seatIndex)
             .map((p: any) => ({
                 ...p,
@@ -88,7 +89,7 @@
 
         <!-- Score display -->
         <div class="rounded-lg w-auto border border-border bg-card/60 p-3 text-sm">
-            <ScoreDisplay matchRecord={matchRecord ?? {}} />
+            <ScoreDisplay matchRecord={matchRecord} />
         </div>
 
         <!-- Played cards per participant -->
