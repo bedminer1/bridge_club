@@ -45,6 +45,13 @@
             >
                 <Info class="w-4 h-4" />
             </a>
+            <a
+                href="/playground"
+                class="p-1.5 rounded-md {page.url.pathname === '/playground' ? 'text-accent bg-accent/10' : 'text-muted-foreground'} hover:text-accent hover:bg-accent/10 transition-colors"
+                title="Playground"
+            >
+                <Info class="w-4 h-4" />
+            </a>
             
             
         </div>

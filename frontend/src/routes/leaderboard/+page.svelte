@@ -50,7 +50,7 @@
     {:else if error}
         <p class="text-sm text-red">{error}</p>
     {:else}
-        <div class="w-full max-w-2xl">
+        <div class="w-full max-w-2xl mb-10">
             <!-- Header row -->
             <div class="flex items-center px-4 py-2 text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
                 <span class="w-10 text-center">#</span>
