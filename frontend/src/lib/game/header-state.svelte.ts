@@ -8,6 +8,7 @@ class HeaderState {
     difficulty = $state("Medium")
     botSpeed = $state(2)
     hiddenMode = $state(true)
+    showSiteHeader = $state(true)
     isLightMode = $state(false)
     username = $state("")
     loggedIn = $state(false)
