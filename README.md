@@ -1,6 +1,6 @@
 # Bridge Club
 
-[https://bridge-club.vercel.app/](https://bridge-club.duckdns.org/)
+https://bridge-club.duckdns.org/
 
 ## Team Information
 
