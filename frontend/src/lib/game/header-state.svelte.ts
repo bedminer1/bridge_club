@@ -14,4 +14,4 @@ class HeaderState {
     loggedIn = $state(false)
 }
 
-export const headerState = new HeaderState()
+export const headerState = $state(new HeaderState());
