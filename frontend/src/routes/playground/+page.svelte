@@ -1,8 +1,7 @@
 <script lang="ts">
     import { Gamepad2, Crown, Github } from "@lucide/svelte"
     import { suitToSymbol } from "$lib/utils"
-
-    const suits = { c: "Club", d: "Diamond", h: "Heart", s: "Spades" }
+    import Card  from "$lib/components/ui/new_card/card.svelte";
 </script>
 
 <div class="flex flex-col items-center w-full pt-20 px-4">
@@ -12,7 +11,9 @@
     <div class="w-full max-w-lg flex flex-col gap-4 text-sm">
         <!-- How to Play -->
         <div class="rounded-lg border border-border bg-card p-4">
-            
+            <div class="flex">
+                <Card></Card>
+            </div>
         </div>
 
         <!-- About -->

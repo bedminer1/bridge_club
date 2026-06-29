@@ -11,6 +11,7 @@
     
     import { suitToSymbol } from "$lib/utils"
     import { headerState } from "$lib/game/header-state.svelte";
+    import { shouldShowSiteHeader } from "$lib/game/header-visibility";
 
     import {
         getRoomState,
@@ -231,6 +232,36 @@
         try { sessionStorage.setItem("bridgeRoomFailed", "1") } catch {}
     }
 
+    /** Reset the active game/session state so the lobby can render cleanly. */
+    function resetGameSession() {
+        clearSavedRoom()
+        showGameOverDialog = false
+        loadingMatchResult = false
+        lastMatchId = null
+        lastEloChange = null
+        roomId = ""
+        isOnline = false
+        isOnlineLoading = false
+        isJoiningRoom = false
+        game = structuredClone(EMPTY_GAME)
+        playbackQueue = []
+        isPlaybackRunning = false
+        displayedPlayCount = 0
+        playbackGenerationKey += 1
+        hiddenModeLocked = false
+        lobbyRoomId = ""
+        lobbyPlayerId = ""
+        lobbyMySeatIndex = 0
+        lobbyIsHost = false
+        lobbyPlayers = []
+        chatMessages = []
+    }
+
+    function goHome() {
+        resetGameSession()
+        goto("/", { replaceState: true })
+    }
+
     /** Check if a room has started; load game or join lobby accordingly. */
     async function loadRoomOrLobby(roomIdToLoad: string) {
         if (!onlineToken) return
@@ -305,6 +336,15 @@
     let lobbyIsHost = $state(false)
     let lobbyPlayers = $state<Array<{ name: string; seatIndex: number; isBot: boolean }>>([])
     let lobbyHiddenMode = $state(true)
+
+    $effect(() => {
+        headerState.showSiteHeader = shouldShowSiteHeader({
+            roomParam: page.url.searchParams.get("room"),
+            isOnline,
+            isJoiningRoom,
+            lobbyRoomId,
+        })
+    })
 
     // ── Chat ────────────────────────────────────────────────────────
     interface ChatMsg { id: number; playerName: string; text: string; timestamp: number }
@@ -844,8 +884,8 @@
                     {/if}
                 </Dialog.Description>
             </Dialog.Header>
-            <Dialog.Footer class="justify-center gap-2 flex-wrap">
-                <Button onclick={() => { showGameOverDialog = false }} variant="outline" size="sm">Close</Button>
+            <Dialog.Footer class="justify-center gap-3 flex-wrap">
+                <Button size="sm" onclick={goHome}>Home</Button>
                 {#if loadingMatchResult}
                     <Button disabled variant="outline" size="sm">Saving...</Button>
                 {:else if lastMatchId}
@@ -853,9 +893,6 @@
                         View Results
                     </Button>
                 {/if}
-                <Button onclick={() => { showGameOverDialog = false; try { localStorage.removeItem("bridgeActiveRoom") } catch {}; goto("/") }} size="sm">
-                    Play Again
-                </Button>
             </Dialog.Footer>
         </Dialog.Content>
     </Dialog.Root>
