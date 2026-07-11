@@ -423,7 +423,7 @@
                     <span>Loading match history...</span>
                 </div>
             {:else if matchRecords.length > 0}
-                <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-3 mb-20">
                     {#each matchRecords as matchRecord}
                         {@const { didWin, eloChange } = matchResult(matchRecord)}
                         <a href="/user/{matchRecord.id}" class="block">

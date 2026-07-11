@@ -943,7 +943,7 @@ async fn get_matches(
         ).await
     } else if let Some(after_id) = query.after_id {
         conn.query(
-            "SELECT DISTINCT match_id FROM match_participants WHERE user_id = ?1 AND match_id > ?2 ORDER BY match_id DESC LIMIT ?3",
+            "SELECT DISTINCT match_id FROM match_participants WHERE user_id = ?1 AND match_id > ?2 ORDER BY match_id ASC LIMIT ?3",
             libsql::params![user.id, after_id, fetch_limit as i64],
         ).await
     } else {
