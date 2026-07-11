@@ -207,6 +207,27 @@ pub struct SessionQuery {
     pub token: Option<String>,
 }
 
+// ── Feedback request / response types ──────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackRequest {
+    pub match_id: i64,
+    pub player_id: i64,
+    pub feature_requests: String,
+    pub bug_reports: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 // ── Single-player game request / response types ────────────────────────────
 
 #[derive(Deserialize)]
@@ -330,6 +351,8 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/leaderboard", get(get_leaderboard))
         // Webhook for auto-deploy
         .route("/api/deploy", post(deploy_webhook))
+        // Feedback
+        .route("/api/feedback", post(submit_feedback))
         // Single-player game routes
         .route("/api/game/new", post(create_single_player_game))
         .with_state(state)
@@ -1562,4 +1585,67 @@ async fn deploy_webhook() -> impl IntoResponse {
             });
     });
     (StatusCode::ACCEPTED, Json(serde_json::json!({"ok": true, "message": "Deploy started"})))
+}
+
+// ── Feedback ────────────────────────────────────────────────────────────────
+
+async fn submit_feedback(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<FeedbackRequest>,
+) -> impl IntoResponse {
+    let _user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => {
+            return (
+                status,
+                Json(FeedbackResponse {
+                    ok: false,
+                    id: None,
+                    error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
+                }),
+            );
+        }
+    };
+
+    let conn = state.db.conn().await;
+
+    let result = conn
+        .execute(
+            "INSERT INTO feedback (match_id, player_id, feature_requests, bug_reports) \
+             VALUES (?1, ?2, ?3, ?4)",
+            libsql::params![
+                payload.match_id,
+                payload.player_id,
+                payload.feature_requests,
+                payload.bug_reports,
+            ],
+        )
+        .await;
+
+    match result {
+        Ok(_) => {
+            let inserted_id = conn.last_insert_rowid();
+            tracing::info!("Feedback saved: id={}, match={}, player={}", inserted_id, payload.match_id, payload.player_id);
+            (
+                StatusCode::CREATED,
+                Json(FeedbackResponse {
+                    ok: true,
+                    id: Some(inserted_id),
+                    error: None,
+                }),
+            )
+        }
+        Err(e) => {
+            tracing::error!("Feedback insert error: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(FeedbackResponse {
+                    ok: false,
+                    id: None,
+                    error: Some("Failed to save feedback".to_string()),
+                }),
+            )
+        }
+    }
 }
