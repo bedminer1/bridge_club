@@ -17,9 +17,9 @@
         host.appendChild(playerHand.container)
 
         pile.container.addEventListener("click", () => {
-        pile.topCardElement.flip();
-        playerHand.applyCascadeLayout("cascade");
-});
+            pile.topCardElement.flip();
+            playerHand.applyCascadeLayout("cascade");
+        });
 
         pile.cascade()
     })
