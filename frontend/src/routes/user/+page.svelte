@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte"
     import ScoreDisplay from "./ScoreDisplay.svelte";
     import PokerCard from "$lib/components/poker-card.svelte";
     import * as Card from "$lib/components/ui/card/index"
@@ -9,6 +10,13 @@
     import { Switch } from "$lib/components/ui/switch/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
+    import {
+        getCachedMatchHistory,
+        mergeMatchRecords,
+        setCachedMatchHistory,
+        USER_HISTORY_PAGE_SIZE,
+        USER_HISTORY_REFRESH_LIMIT,
+    } from "$lib/user-history-cache"
 
     /** Parse a compact preview string like "2cw3hlAdw..." into Card objects. */
     function parsePreview(preview: string): Card[] {
@@ -43,7 +51,7 @@
     }
 
     let { data } = $props()
-    let { matchRecords, message, username, userID, rank, userStats, token } = $state(data)
+    let { message, username, userID, rank, userStats, token } = $state(data)
 
     let API_URL: string
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
@@ -55,6 +63,121 @@
     // Default stats to 0 when not logged in
     let s = $derived(userStats ?? { gamesPlayed: 0, gamesWon: 0, totalSetsWon: 0, mostSetsWon: 0, elo: 500 })
 
+    let matchRecords = $state<any[]>(data.matchRecords ?? [])
+    let historyLoading = $state(message === "success" && !!token)
+    let historyLoadingMore = $state(false)
+    let historyError = $state("")
+    let historyHasMoreOlder = $state(false)
+    let historyLatestId = $state<number | null>(null)
+    let historyOldestId = $state<number | null>(null)
+
+    function syncHistoryState(records: any[], hasMoreOlder: boolean) {
+        matchRecords = records
+        historyHasMoreOlder = hasMoreOlder
+        historyLatestId = records.length > 0 ? Number(records[0].id) : null
+        historyOldestId = records.length > 0 ? Number(records[records.length - 1].id) : null
+    }
+
+    async function fetchMatchHistory(query: URLSearchParams) {
+        const res = await fetch(`${API_URL}/api/matches?${query.toString()}`, {
+            headers: { "X-Session-Token": token },
+        })
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}))
+            throw new Error(errorData?.error || "Failed to load match history")
+        }
+
+        return res.json()
+    }
+
+    async function refreshMatchHistory() {
+        if (message !== "success" || !token || !userID) {
+            historyLoading = false
+            return
+        }
+
+        historyError = ""
+        const cached = getCachedMatchHistory(userID)
+
+        if (cached) {
+            syncHistoryState(cached.matchRecords, cached.hasMoreOlder)
+            historyLatestId = cached.newestMatchId
+            historyOldestId = cached.oldestMatchId
+        }
+
+        historyLoading = true
+
+        try {
+            if (!cached) {
+                const query = new URLSearchParams({ limit: String(USER_HISTORY_PAGE_SIZE) })
+                const data = await fetchMatchHistory(query)
+                const records = Array.isArray(data.matches) ? data.matches : []
+                syncHistoryState(records, Boolean(data.hasMoreOlder))
+                setCachedMatchHistory(userID, matchRecords, historyHasMoreOlder)
+                return
+            }
+
+            let nextAfterId = cached.newestMatchId
+            if (nextAfterId === null) {
+                historyLoading = false
+                return
+            }
+
+            let hasMoreNewer = true
+            while (hasMoreNewer) {
+                const query = new URLSearchParams({
+                    limit: String(USER_HISTORY_REFRESH_LIMIT),
+                    afterId: String(nextAfterId),
+                })
+                const data = await fetchMatchHistory(query)
+                const records = Array.isArray(data.matches) ? data.matches : []
+
+                if (records.length === 0) {
+                    break
+                }
+
+                syncHistoryState(mergeMatchRecords(matchRecords, records), historyHasMoreOlder)
+                setCachedMatchHistory(userID, matchRecords, historyHasMoreOlder)
+
+                nextAfterId = historyLatestId
+                hasMoreNewer = Boolean(data.hasMoreNewer)
+                if (!hasMoreNewer || nextAfterId === null) {
+                    break
+                }
+            }
+        } catch (error) {
+            historyError = error instanceof Error ? error.message : "Failed to load match history"
+        } finally {
+            historyLoading = false
+        }
+    }
+
+    async function loadOlderMatches() {
+        if (!historyHasMoreOlder || historyLoadingMore || !historyOldestId || message !== "success" || !token || !userID) {
+            return
+        }
+
+        historyLoadingMore = true
+        historyError = ""
+
+        try {
+            const query = new URLSearchParams({
+                limit: String(USER_HISTORY_PAGE_SIZE),
+                beforeId: String(historyOldestId),
+            })
+            const data = await fetchMatchHistory(query)
+            const records = Array.isArray(data.matches) ? data.matches : []
+            const merged = mergeMatchRecords(matchRecords, records)
+            syncHistoryState(merged, Boolean(data.hasMoreOlder))
+            setCachedMatchHistory(userID, merged, historyHasMoreOlder)
+        } catch (error) {
+            historyError = error instanceof Error ? error.message : "Failed to load more matches"
+        } finally {
+            historyLoadingMore = false
+        }
+    }
+
     // Determine match result for the current user
     let matchResult = $derived.by(() => {
         return (m: any) => {
@@ -65,6 +188,19 @@
             }
             return { didWin: false, eloChange: 0 }
         }
+    })
+
+    if (typeof window !== "undefined" && message === "success" && userID) {
+        const cached = getCachedMatchHistory(userID)
+        if (cached) {
+            syncHistoryState(cached.matchRecords, cached.hasMoreOlder)
+            historyLatestId = cached.newestMatchId
+            historyOldestId = cached.oldestMatchId
+        }
+    }
+
+    onMount(() => {
+        void refreshMatchHistory()
     })
 
     // Settings state
@@ -267,54 +403,79 @@
 
         <!-- Match history -->
         <div class="w-full max-w-3xl">
-            <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Match History</h2>
+            <div class="mb-4 flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Match History</h2>
+                {#if historyLoading && matchRecords.length > 0}
+                    <span class="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span class="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/30 border-t-accent animate-spin"></span>
+                        Syncing history
+                    </span>
+                {/if}
+            </div>
 
-            {#if matchRecords.length > 0}
+            {#if historyError}
+                <p class="mb-3 text-xs text-destructive">{historyError}</p>
+            {/if}
+
+            {#if historyLoading && matchRecords.length === 0}
+                <div class="flex items-center gap-2 text-sm text-muted-foreground py-6">
+                    <span class="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-accent animate-spin"></span>
+                    <span>Loading match history...</span>
+                </div>
+            {:else if matchRecords.length > 0}
                 <div class="flex flex-col gap-3">
-                            {#each matchRecords as matchRecord}
-                                {@const { didWin, eloChange } = matchResult(matchRecord)}
-                                <a href="/user/{matchRecord.id}" class="block">
-                                    <Card.Root class="w-full rounded-lg border-border hover:border-accent/30 transition-colors">
-                                        <div class="flex items-center justify-between p-4 gap-4">
-                                            <!-- Info + Result badge inline -->
-                                            <div class="flex items-center gap-3 flex-1 min-w-0">
-                                                <span class="text-sm font-bold shrink-0 {didWin ? 'text-blue' : 'text-red'}">
-                                                    {didWin ? "Win" : "Loss"}
-                                                </span>
-                                                <span class="flex gap-3 text-xs text-muted-foreground flex-wrap items-center">
-                                                    <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>
-                                                    <span>|</span>
-                                                    {#if matchRecord.isHidden}
-                                                        <span class="text-purple font-semibold">Hidden Only</span>
-                                                    {:else}
-                                                        <span class="text-muted-foreground">Open</span>
-                                                    {/if}
-                                                    <span>|</span>
-                                                    <span>{formatDate(matchRecord.createdAt)}</span>
-                                                    {#if eloChange !== 0}
-                                                        <span>|</span>
-                                                        <span class="{eloChange > 0 ? 'text-green' : 'text-red'}">{eloChange > 0 ? '+' : ''}{eloChange}</span>
-                                                    {/if}
-                                                </span>
-                                            </div>
+                    {#each matchRecords as matchRecord}
+                        {@const { didWin, eloChange } = matchResult(matchRecord)}
+                        <a href="/user/{matchRecord.id}" class="block">
+                            <Card.Root class="w-full rounded-lg border-border hover:border-accent/30 transition-colors">
+                                <div class="flex items-center justify-between p-4 gap-4">
+                                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                                        <span class="text-sm font-bold shrink-0 {didWin ? 'text-blue' : 'text-red'}">
+                                            {didWin ? "Win" : "Loss"}
+                                        </span>
+                                        <span class="flex gap-3 text-xs text-muted-foreground flex-wrap items-center">
+                                            <span>{matchRecord.betSize}{matchRecord.trumpSuit.toUpperCase()}</span>
+                                            <span>|</span>
+                                            {#if matchRecord.isHidden}
+                                                <span class="text-purple font-semibold">Hidden Only</span>
+                                            {:else}
+                                                <span class="text-muted-foreground">Open</span>
+                                            {/if}
+                                            <span>|</span>
+                                            <span>{formatDate(matchRecord.createdAt)}</span>
+                                            {#if eloChange !== 0}
+                                                <span>|</span>
+                                                <span class="{eloChange > 0 ? 'text-green' : 'text-red'}">{eloChange > 0 ? '+' : ''}{eloChange}</span>
+                                            {/if}
+                                        </span>
+                                    </div>
 
-                                            <!-- Scores -->
-                                            <div class="hidden sm:block shrink-0">
-                                                <ScoreDisplay {matchRecord} />
-                                            </div>
-                                        </div>
-                                        <!-- Hand preview (from current user's participant entry) -->
-                                        {@const previewCards = getUserPreview(matchRecord)}
-                                        {#if previewCards.length > 0}
-                                            <div class="px-4 pb-2 flex flex-wrap gap-0.5">
-                                                {#each previewCards as card, ci (ci)}
-                                                    <PokerCard card={card} isIllegal={false} minify={true} />
-                                                {/each}
-                                            </div>
-                                        {/if}
-                                    </Card.Root>
-                                </a>
+                                    <div class="hidden sm:block shrink-0">
+                                        <ScoreDisplay {matchRecord} />
+                                    </div>
+                                </div>
+                                {@const previewCards = getUserPreview(matchRecord)}
+                                {#if previewCards.length > 0}
+                                    <div class="px-4 pb-2 flex flex-wrap gap-0.5">
+                                        {#each previewCards as card, ci (ci)}
+                                            <PokerCard card={card} isIllegal={false} minify={true} />
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </Card.Root>
+                        </a>
                     {/each}
+
+                    {#if historyHasMoreOlder}
+                        <Button
+                            onclick={loadOlderMatches}
+                            disabled={historyLoadingMore}
+                            variant="outline"
+                            class="self-center mt-2"
+                        >
+                            {historyLoadingMore ? "Loading older matches..." : "Load older matches"}
+                        </Button>
+                    {/if}
                 </div>
             {:else}
                 <p class="text-sm text-muted-foreground">No matches played yet.</p>

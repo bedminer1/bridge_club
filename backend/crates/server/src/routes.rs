@@ -172,12 +172,29 @@ pub struct SaveMatchRequest {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MatchesResponse {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matches: Option<Vec<MatchResponse>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_more_older: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_more_newer: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest_match_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newest_match_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchHistoryQuery {
+    pub limit: Option<usize>,
+    pub before_id: Option<i64>,
+    pub after_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -878,6 +895,7 @@ async fn build_match_response(conn: &libsql::Connection, match_id: i64) -> Optio
 async fn get_matches(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<MatchHistoryQuery>,
 ) -> impl IntoResponse {
     let user = match require_user(&state.db, &headers, None).await {
         Ok(u) => u,
@@ -887,22 +905,53 @@ async fn get_matches(
                 Json(MatchesResponse {
                     ok: false,
                     matches: None,
+                    has_more_older: None,
+                    has_more_newer: None,
+                    oldest_match_id: None,
+                    newest_match_id: None,
                     error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
                 }),
             );
         }
     };
 
+    if query.before_id.is_some() && query.after_id.is_some() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(MatchesResponse {
+                ok: false,
+                matches: None,
+                has_more_older: None,
+                has_more_newer: None,
+                oldest_match_id: None,
+                newest_match_id: None,
+                error: Some("Use either beforeId or afterId, not both".to_string()),
+            }),
+        );
+    }
+
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+    let fetch_limit = limit + 1;
+
     let conn = state.db.conn().await;
 
-    // Get match IDs for this user via match_participants
-    let mut id_rows = match conn
-        .query(
-            "SELECT match_id FROM match_participants WHERE user_id = ?1 ORDER BY match_id DESC",
-            libsql::params![user.id],
-        )
-        .await
-    {
+    // Get match IDs for this user via match_participants, with optional cursors.
+    let mut id_rows = match if let Some(before_id) = query.before_id {
+        conn.query(
+            "SELECT DISTINCT match_id FROM match_participants WHERE user_id = ?1 AND match_id < ?2 ORDER BY match_id DESC LIMIT ?3",
+            libsql::params![user.id, before_id, fetch_limit as i64],
+        ).await
+    } else if let Some(after_id) = query.after_id {
+        conn.query(
+            "SELECT DISTINCT match_id FROM match_participants WHERE user_id = ?1 AND match_id > ?2 ORDER BY match_id DESC LIMIT ?3",
+            libsql::params![user.id, after_id, fetch_limit as i64],
+        ).await
+    } else {
+        conn.query(
+            "SELECT DISTINCT match_id FROM match_participants WHERE user_id = ?1 ORDER BY match_id DESC LIMIT ?2",
+            libsql::params![user.id, fetch_limit as i64],
+        ).await
+    } {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("DB query error: {}", e);
@@ -911,6 +960,10 @@ async fn get_matches(
                 Json(MatchesResponse {
                     ok: false,
                     matches: None,
+                    has_more_older: None,
+                    has_more_newer: None,
+                    oldest_match_id: None,
+                    newest_match_id: None,
                     error: Some("Internal server error".to_string()),
                 }),
             );
@@ -926,9 +979,10 @@ async fn get_matches(
         }
     }
 
-    // Deduplicate (same match shouldn't appear twice)
-    match_ids.sort_unstable();
-    match_ids.dedup();
+    let has_more = match_ids.len() > limit;
+    if has_more {
+        match_ids.truncate(limit);
+    }
 
     let mut matches = Vec::new();
     for mid in match_ids {
@@ -937,14 +991,20 @@ async fn get_matches(
         }
     }
 
-    // Sort by created_at descending
-    matches.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    matches.sort_by(|a, b| b.id.cmp(&a.id));
+
+    let newest_match_id = matches.first().map(|m| m.id);
+    let oldest_match_id = matches.last().map(|m| m.id);
 
     (
         StatusCode::OK,
         Json(MatchesResponse {
             ok: true,
             matches: Some(matches),
+            has_more_older: if query.after_id.is_some() { None } else { Some(has_more) },
+            has_more_newer: if query.after_id.is_some() { Some(has_more) } else { None },
+            oldest_match_id,
+            newest_match_id,
             error: None,
         }),
     )

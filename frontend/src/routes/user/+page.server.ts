@@ -27,14 +27,8 @@ export async function load({ cookies }) {
         }
     }
 
-    // Fetch matches
-    const matchesRes = await fetch(`${API_URL}/api/matches`, {
-        headers: { "X-Session-Token": token }
-    })
-    const matchesData = await matchesRes.json()
-
     return {
-        matchRecords: matchesData.matches || [],
+        matchRecords: [],
         message: "success",
         username: sessionData.user?.username || "",
         userID: sessionData.user?.id ?? 0,
