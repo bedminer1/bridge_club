@@ -14,6 +14,12 @@
         host.replaceChildren()
         host.appendChild(pile.container)
         host.appendChild(discardPile.container)
+        host.appendChild(playerHand.container)
+
+        pile.container.addEventListener("click", () => {
+        pile.topCardElement.flip();
+        playerHand.applyCascadeLayout("cascade");
+});
 
         pile.cascade()
     })

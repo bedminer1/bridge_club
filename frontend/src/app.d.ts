@@ -60,6 +60,32 @@ interface Move {
 	PlayerID: number
 }
 
+interface TrickEndEvent {
+	kind: "trick-end"
+	id: string
+	trickIndex: number
+	winnerId: number
+}
+
+interface PlayEvent {
+	kind: "play"
+	id: string
+	trickIndex: number
+	position: number
+	playerId: number
+	card: Card
+	isTrickEnd: boolean
+	trickWinnerId?: number | null
+}
+
+interface WinEvent {
+	kind: "win"
+	id: string
+	winner: string
+}
+
+type GameEvent = PlayEvent | TrickEndEvent | WinEvent
+
 type MatchRecord = {
 	id: number
 	userID: number
