@@ -31,6 +31,7 @@
     import BidArea from "$lib/components/bid-area.svelte";
     import PlayArea from "$lib/components/play-area.svelte";
     import Chat from "$lib/components/chat.svelte";
+    import FeedbackForm from "$lib/components/feedback-form.svelte";
     import { EMPTY_GAME } from "$lib/game/types.js"
 
     let { data } = $props()
@@ -884,6 +885,13 @@
                     {/if}
                 </Dialog.Description>
             </Dialog.Header>
+            {#if lastMatchId}
+                <FeedbackForm
+                    matchId={lastMatchId}
+                    playerId={userID}
+                    onlineToken={onlineToken}
+                />
+            {/if}
             <Dialog.Footer class="justify-center gap-3 flex-wrap">
                 <Button size="sm" onclick={goHome}>Home</Button>
                 {#if loadingMatchResult}

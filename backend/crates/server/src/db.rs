@@ -109,6 +109,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id     INTEGER NOT NULL REFERENCES users(id),
     expires_at  INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id        INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    player_id       INTEGER NOT NULL REFERENCES users(id),
+    feature_requests TEXT NOT NULL DEFAULT '',
+    bug_reports     TEXT NOT NULL DEFAULT '',
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+);
 ";
 
 pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
