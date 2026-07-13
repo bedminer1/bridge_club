@@ -49,6 +49,8 @@
     let isPlaybackRunning = $state(false)
     let displayedPlayCount = $state(0)
     let playbackGenerationKey: number = $state(0)
+    let playPhasePlaybackPrimed = $state(false)
+    let playbackNeedsInitialDelay = $state(false)
     const PLAY_DELAY_MS = 1000
 
     // Lock hidden mode toggle if it was on at game start
@@ -210,8 +212,16 @@
             // Load the actual game state
             const gameState = await getRoomState(existingRoomId, onlineToken)
             fixupPlayerDisplay(gameState)
-            game = gameState
-            displayedPlayCount = extractPlayEvents(game).length
+            playPhasePlaybackPrimed = false
+            if (isPlayingPhase(gameState)) {
+                primePlayPhasePlayback(gameState)
+            } else {
+                game = gameState
+                displayedPlayCount = extractPlayEvents(game).length
+                playbackQueue = []
+                isPlaybackRunning = false
+                playbackGenerationKey += 1
+            }
             // Play deal sound for initial load
             setTimeout(() => { for (let i = 0; i < 4; i++) setTimeout(() => playCardDeal(), i * 90) }, 100)
         } catch (e) {
@@ -249,6 +259,7 @@
         isPlaybackRunning = false
         displayedPlayCount = 0
         playbackGenerationKey += 1
+        playPhasePlaybackPrimed = false
         hiddenModeLocked = false
         lobbyRoomId = ""
         lobbyPlayerId = ""
@@ -312,6 +323,40 @@
         for (let i = 0; i < g.Players.length; i++) {
             g.Players[i].IsBot = i !== humanSeat
         }
+    }
+
+    function isPlayingPhase(g: Game | null): boolean {
+        return !!g && !g.IsBettingPhase && !g.IsPartnerSelectionPhase
+    }
+
+    function primePlayPhasePlayback(sourceGame: Game): void {
+        console.log("primePlayPhasePlayback reached!")
+        game = makePlaybackBaseline(sourceGame)
+        displayedPlayCount = 0
+        playbackQueue = diffGameState(sourceGame, game)
+        isPlaybackRunning = false
+        playbackGenerationKey += 1
+        playPhasePlaybackPrimed = true
+        playbackNeedsInitialDelay = true
+        processPlaybackQueue()
+    }
+
+    /** Start from an empty visual board, then replay the backend state into it. */
+    function makePlaybackBaseline(sourceGame: Game): Game {
+        console.log("makePlaybackBaseline reached!")
+        const baseline = structuredClone(sourceGame)
+        baseline.Moves = []
+        baseline.PreviousMoves = []
+        baseline.CompletedSets = []
+        baseline.Winner = ""
+        baseline.TurnSuit = ""
+        baseline.TrumpPlayed = false
+        baseline.Players = baseline.Players.map((player) => ({
+            ...player,
+            PlayedCards: [],
+            Sets: 0,
+        }))
+        return baseline
     }
 
     // Win detection — auto-save match immediately, clear saved room
@@ -491,10 +536,16 @@
                         position: j,
                         playerId,
                         card,
-                        isTrickEnd: j === set.Cards.length - 1,
-                        trickWinnerId: j === set.Cards.length - 1 ? set.WinnerID : null,
+                        isTrickEnd: false,
+                        trickWinnerId: null,
                     })
                 }
+                events.push({
+                    kind: "trick-end",
+                    id: `trick-end-${i}-${set.WinnerID}`,
+                    trickIndex: i,
+                    winnerId: set.WinnerID,
+                })
             }
         }
 
@@ -509,7 +560,7 @@
                 position: i,
                 playerId: m.PlayerID,
                 card: m.CardPlayed,
-                isTrickEnd: i === 3,
+                isTrickEnd: false,
                 trickWinnerId: null,
             })
         }
@@ -532,6 +583,42 @@
             const humanOnTeam2 = game.Team2?.some((p: any) => p.ID === humanPlayerId) ?? false
             const humanWon = (humanOnTeam1 && gameEvent.winner === "Team 1") || (humanOnTeam2 && gameEvent.winner === "Team 2")
             if (humanWon) { playGameWon() } else { playGameLost() }
+            displayedPlayCount += 1
+            return
+        }
+
+        if (gameEvent.kind === "trick-end") {
+            const winnerId = gameEvent.winnerId
+            const currentMoves = [...(game.Moves ?? [])]
+            const completedCards = currentMoves.map((move) => ({
+                ...move.CardPlayed,
+                WonSet: move.PlayerID === winnerId,
+            }))
+
+            game.PreviousMoves = currentMoves.map((move) => ({
+                CardPlayed: {
+                    ...move.CardPlayed,
+                    WonSet: move.PlayerID === winnerId,
+                },
+                PlayerID: move.PlayerID,
+            }))
+            game.CompletedSets = [
+                ...(game.CompletedSets ?? []),
+                {
+                    Cards: completedCards,
+                    WinnerID: winnerId,
+                    PlayerIDs: currentMoves.map((move) => move.PlayerID),
+                },
+            ]
+            game.Moves = []
+            game.TurnSuit = ""
+
+            const winningPlayerIndex = game.Players.findIndex((player) => player.ID === winnerId)
+            if (winningPlayerIndex !== -1) {
+                game.Players[winningPlayerIndex].Sets += 1
+            }
+            game.WhoseTurn = winnerId
+            playTrickWon()
             displayedPlayCount += 1
             return
         }
@@ -564,45 +651,12 @@
         const currentMoves: Move[] = [...(game.Moves ?? []), { CardPlayed: cardToPlay, PlayerID: gameEvent.playerId }]
         game.TrumpPlayed = game.TrumpPlayed || cardToPlay.Suit === game.Trump
 
-        if (currentMoves.length < 4) {
-            game.Moves = currentMoves
-            if (currentMoves.length === 1) {
-                game.TurnSuit = cardToPlay.Suit
-            }
-            game.WhoseTurn = (gameEvent.playerId % 4) + 1
-            playCardPlace()
-        } else {
-            const winnerId = gameEvent.trickWinnerId ?? gameEvent.playerId
-            const completedCards = currentMoves.map((move) => ({
-                ...move.CardPlayed,
-                WonSet: move.PlayerID === winnerId,
-            }))
-
-            game.PreviousMoves = currentMoves.map((move) => ({
-                CardPlayed: {
-                    ...move.CardPlayed,
-                    WonSet: move.PlayerID === winnerId,
-                },
-                PlayerID: move.PlayerID,
-            }))
-            game.CompletedSets = [
-                ...(game.CompletedSets ?? []),
-                {
-                    Cards: completedCards,
-                    WinnerID: winnerId,
-                    PlayerIDs: currentMoves.map((move) => move.PlayerID),
-                },
-            ]
-            game.Moves = []
-            game.TurnSuit = ""
-
-            const winningPlayerIndex = game.Players.findIndex((player) => player.ID === winnerId)
-            if (winningPlayerIndex !== -1) {
-                game.Players[winningPlayerIndex].Sets += 1
-            }
-            game.WhoseTurn = winnerId
-            playTrickWon()
+        game.Moves = currentMoves
+        if (currentMoves.length === 1) {
+            game.TurnSuit = cardToPlay.Suit
         }
+        game.WhoseTurn = (gameEvent.playerId % 4) + 1
+        playCardPlace()
 
         displayedPlayCount += 1
     }
@@ -612,6 +666,10 @@
         if (isPlaybackRunning) return
         isPlaybackRunning = true
         const key = ++playbackGenerationKey
+        if (playbackNeedsInitialDelay) {
+            playbackNeedsInitialDelay = false
+            await new Promise(r => setTimeout(r, PLAY_DELAY_MS))
+        }
         while (playbackQueue.length > 0 && key === playbackGenerationKey) {
             const playEvent = playbackQueue.shift()!
             applyPlayEventToGame(playEvent)
@@ -623,12 +681,19 @@
     // orchestrator for all the helper functions
     function renderGame(updatedGame: Game): void {
         try {
+            if (isPlayingPhase(updatedGame) && !playPhasePlaybackPrimed) {
+                primePlayPhasePlayback(updatedGame)
+                return
+            }
+
             if (!sameVisualPhase(updatedGame, game)) {
                 game = updatedGame
                 playbackQueue = []
                 isPlaybackRunning = false
                 playbackGenerationKey += 1
                 displayedPlayCount = extractPlayEvents(game).length
+                playPhasePlaybackPrimed = isPlayingPhase(updatedGame)
+                playbackNeedsInitialDelay = false
                 return
             }
             const diff = diffGameState(updatedGame, game)
@@ -644,6 +709,7 @@
             isPlaybackRunning = false
             playbackGenerationKey += 1
             displayedPlayCount = extractPlayEvents(game).length
+            playbackNeedsInitialDelay = false
         }
     }
 

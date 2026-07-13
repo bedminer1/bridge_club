@@ -279,6 +279,66 @@ async fn test_save_and_retrieve_match() {
 }
 
 #[tokio::test]
+async fn test_matches_pagination_and_incremental_fetch() {
+    let (app, _dir) = build_test_app().await;
+    let token = signup(&app, "iris", "pass").await;
+
+    let make_match = |room_id: &str, created_at: i64| {
+        serde_json::json!({
+            "roomId": room_id,
+            "createdAt": created_at,
+            "trumpSuit": "Spades",
+            "betSize": 2,
+            "betWinnerIdx": 0,
+            "partnerIdx": 2,
+            "partnerCard": null,
+            "winningTeam": 1,
+            "setsData": "[]",
+            "matchType": "single",
+            "isHidden": false,
+            "participants": [
+                {"username": "iris", "seatIndex": 0, "team": 1, "setsWon": 6, "cardsPlayed": "[]"},
+                {"username": "Bot-Alpha", "seatIndex": 1, "team": 2, "setsWon": 2, "cardsPlayed": "[]"},
+                {"username": "Bot-Beta", "seatIndex": 2, "team": 1, "setsWon": 3, "cardsPlayed": "[]"},
+                {"username": "Bot-Gamma", "seatIndex": 3, "team": 2, "setsWon": 1, "cardsPlayed": "[]"}
+            ]
+        })
+    };
+
+    for i in 0..3 {
+        let created_at = 1700000000000i64 + i;
+        let room_id = format!("pagination-room-{}", i + 1);
+        let (status, _) = post(&app, "/api/matches", &token, &make_match(&room_id, created_at)).await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    let (status, json) = get(&app, "/api/matches?limit=2", &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let matches = json["matches"].as_array().unwrap();
+    assert_eq!(matches.len(), 2);
+    assert_eq!(json["hasMoreOlder"], true);
+
+    let oldest_cached_id = matches.last().unwrap()["id"].as_i64().unwrap();
+
+    let (status, json) = get(&app, &format!("/api/matches?beforeId={}&limit=2", oldest_cached_id), &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let older_matches = json["matches"].as_array().unwrap();
+    assert_eq!(older_matches.len(), 1);
+    assert_eq!(json["hasMoreOlder"], false);
+
+    let (status, _) = post(&app, "/api/matches", &token, &make_match("pagination-room-4", 1700000000003i64)).await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let newest_cached_id = matches.first().unwrap()["id"].as_i64().unwrap();
+    let (status, json) = get(&app, &format!("/api/matches?afterId={}&limit=10", newest_cached_id), &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let newer_matches = json["matches"].as_array().unwrap();
+    assert_eq!(newer_matches.len(), 1);
+    assert_eq!(newer_matches[0]["roomId"], "pagination-room-4");
+    assert_eq!(json["hasMoreNewer"], false);
+}
+
+#[tokio::test]
 async fn test_save_match_dedup_by_room() {
     let (app, _dir) = build_test_app().await;
     let token = signup(&app, "grace", "pass").await;

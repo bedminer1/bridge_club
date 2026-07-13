@@ -137,13 +137,20 @@ interface PlayEvent {
     trickWinnerId?: number | null
 }
 
+interface TrickEndEvent {
+    kind: "trick-end"
+    id: string
+    trickIndex: number
+    winnerId: number
+}
+
 interface WinEvent { 
     kind: "win"
     id: string
     winner: string 
 }
 
-export type GameEvent = PlayEvent | WinEvent
+export type GameEvent = PlayEvent | TrickEndEvent | WinEvent
 
 export const EMPTY_PLAYER: Player = {
         ID: 0,
