@@ -361,6 +361,9 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/auth/check-username", get(check_username))
         .route("/api/auth/change-password", post(change_password))
         .route("/api/auth/change-name", post(change_name))
+        // Google OAuth routes
+        .route("/api/auth/google/login", get(google_login_handler))
+        .route("/api/auth/google/callback", get(google_callback_handler))
         // Match history routes
         .route("/api/matches", get(get_matches).post(save_match))
         .route("/api/matches/{match_id}", get(get_match))
@@ -716,6 +719,19 @@ async fn logout(
             )
         }
     }
+}
+
+// ── Google OAuth Handlers ─────────────────────────────────────────────────
+
+async fn google_login_handler() -> impl IntoResponse {
+    crate::oauth::google_login().await
+}
+
+async fn google_callback_handler(
+    State(state): State<AppState>,
+    Query(params): Query<crate::oauth::OAuthCallbackQuery>,
+) -> impl IntoResponse {
+    crate::oauth::google_callback(Query(params), &state.db).await
 }
 
 // ── Account Management Handlers ──────────────────────────────────────────

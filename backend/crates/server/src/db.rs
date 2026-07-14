@@ -138,6 +138,13 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Err
         libsql::params![3i64, "Bot-Gamma"],
     ).await;
 
+    // OAuth migration: add columns for Google sign-in (ignore errors if they already exist)
+    let _ = conn.execute("ALTER TABLE users ADD COLUMN email TEXT", ()).await;
+    let _ = conn.execute("ALTER TABLE users ADD COLUMN google_id TEXT", ()).await;
+    let _ = conn.execute("ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'password'", ()).await;
+    // Create a unique index on google_id for fast lookups
+    let _ = conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)", ()).await;
+
     tracing::info!("Database schema up to date");
     Ok(())
 }
