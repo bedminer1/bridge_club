@@ -30,14 +30,8 @@ pub struct CheckUsernameResponse {
 }
 
 #[derive(Deserialize)]
-pub struct ChangePasswordRequest {
-    pub current_password: String,
-    pub new_password: String,
-}
-
-#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChangeNameRequest {
-    pub password: String,
     pub new_username: String,
 }
 
@@ -359,8 +353,10 @@ pub fn routes(state: AppState) -> Router {
         .route("/api/auth/session", get(get_session))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/check-username", get(check_username))
-        .route("/api/auth/change-password", post(change_password))
         .route("/api/auth/change-name", post(change_name))
+        // Google OAuth routes
+        .route("/api/auth/google/login", get(google_login_handler))
+        .route("/api/auth/google/callback", get(google_callback_handler))
         // Match history routes
         .route("/api/matches", get(get_matches).post(save_match))
         .route("/api/matches/{match_id}", get(get_match))
@@ -718,6 +714,19 @@ async fn logout(
     }
 }
 
+// ── Google OAuth Handlers ─────────────────────────────────────────────────
+
+async fn google_login_handler() -> impl IntoResponse {
+    crate::oauth::google_login().await
+}
+
+async fn google_callback_handler(
+    State(state): State<AppState>,
+    Query(params): Query<crate::oauth::OAuthCallbackQuery>,
+) -> impl IntoResponse {
+    crate::oauth::google_callback(Query(params), &state.db).await
+}
+
 // ── Account Management Handlers ──────────────────────────────────────────
 
 /// GET /api/auth/check-username?username=X — check if a username is available.
@@ -757,47 +766,7 @@ struct ChangeResponse {
 }
 
 /// POST /api/auth/change-password — change password for the authenticated user.
-async fn change_password(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<ChangePasswordRequest>,
-) -> impl IntoResponse {
-    let user = match require_user(&state.db, &headers, None).await {
-        Ok(u) => u,
-        Err((status, json)) => {
-            return (status, Json(ChangeResponse {
-                ok: false,
-                error: Some(json.0.error.unwrap_or_else(|| "Unauthorized".to_string())),
-            }));
-        }
-    };
-
-    if payload.new_password.len() < 6 {
-        return (StatusCode::BAD_REQUEST, Json(ChangeResponse {
-            ok: false,
-            error: Some("New password must be at least 6 characters".to_string()),
-        }));
-    }
-
-    let current_hash = auth::hash_password(&payload.current_password);
-    if current_hash != user.password {
-        return (StatusCode::UNAUTHORIZED, Json(ChangeResponse {
-            ok: false,
-            error: Some("Current password is incorrect".to_string()),
-        }));
-    }
-
-    let new_hash = auth::hash_password(&payload.new_password);
-    let conn = state.db.conn().await;
-    let _ = conn.execute(
-        "UPDATE users SET password = ?1 WHERE id = ?2",
-        libsql::params![new_hash, user.id],
-    ).await;
-
-    (StatusCode::OK, Json(ChangeResponse { ok: true, error: None }))
-}
-
-/// POST /api/auth/change-name — change username for the authenticated user.
+// ── Account Management Handlers ──────────────────────────────────────────
 async fn change_name(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -817,14 +786,6 @@ async fn change_name(
         return (StatusCode::BAD_REQUEST, Json(ChangeResponse {
             ok: false,
             error: Some("Username must be 2-20 characters".to_string()),
-        }));
-    }
-
-    let password_hash = auth::hash_password(&payload.password);
-    if password_hash != user.password {
-        return (StatusCode::UNAUTHORIZED, Json(ChangeResponse {
-            ok: false,
-            error: Some("Password is incorrect".to_string()),
         }));
     }
 
@@ -1036,8 +997,18 @@ async fn get_matches(
 /// GET /api/matches/{match_id} — get a single match by ID.
 async fn get_match(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(match_id): Path<i64>,
 ) -> impl IntoResponse {
+    let _user = match require_user(&state.db, &headers, None).await {
+        Ok(u) => u,
+        Err((status, json)) => {
+            return (status, Json(serde_json::json!({
+                "ok": false,
+                "error": json.0.error.unwrap_or_else(|| "Unauthorized".to_string())
+            })));
+        }
+    };
     let conn = state.db.conn().await;
 
     match build_match_response(&conn, match_id).await {

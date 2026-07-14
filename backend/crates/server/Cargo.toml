@@ -21,6 +21,8 @@ dotenvy = "0.15"
 # Auth
 sha2 = "0.10"
 base64 = "0.22"
+oauth2 = { version = "5", features = ["reqwest"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 tower = "0.5"
