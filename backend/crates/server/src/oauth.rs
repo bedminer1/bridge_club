@@ -146,7 +146,7 @@ pub async fn google_callback(
     );
 
     // 3. Look up or create the user
-    let user_id = find_or_create_user(pool, &userinfo).await;
+    let (user_id, is_new) = find_or_create_user(pool, &userinfo).await;
 
     if user_id == 0 {
         tracing::error!("Failed to create/find user for google_id={}", userinfo.sub);
@@ -156,10 +156,11 @@ pub async fn google_callback(
     // 4. Create a session
     match auth::create_session(pool, user_id).await {
         Ok((_session_id, token)) => {
-            tracing::info!("Created session for google user id={}", user_id);
+            tracing::info!("Created session for google user id={} (new={})", user_id, is_new);
+            let dest = if is_new { "user?new=1" } else { "" };
             Redirect::to(&format!(
-                "{}/oauth/callback?token={}",
-                frontend_url, token
+                "{}/oauth/callback?token={}&dest={}",
+                frontend_url, token, dest
             ))
         }
         Err(e) => {
@@ -171,7 +172,7 @@ pub async fn google_callback(
 
 // ── User lookup / creation ──────────────────────────────────────────────────
 
-async fn find_or_create_user(pool: &DbPool, info: &GoogleUserInfo) -> i64 {
+async fn find_or_create_user(pool: &DbPool, info: &GoogleUserInfo) -> (i64, bool) {
     let conn = pool.conn().await;
     let sub = &info.sub;
     let email = &info.email;
@@ -185,7 +186,7 @@ async fn find_or_create_user(pool: &DbPool, info: &GoogleUserInfo) -> i64 {
         .await
     {
         if let Ok(Some(row)) = rows.next().await {
-            return row.get(0).unwrap_or(0);
+            return (row.get(0).unwrap_or(0), false);
         }
     }
 
@@ -206,7 +207,7 @@ async fn find_or_create_user(pool: &DbPool, info: &GoogleUserInfo) -> i64 {
                 )
                 .await;
             tracing::info!("Linked Google account to existing user: id={}", id);
-            return id;
+            return (id, false);
         }
     }
 
@@ -234,10 +235,10 @@ async fn find_or_create_user(pool: &DbPool, info: &GoogleUserInfo) -> i64 {
                         "Created new Google user: id={}, username={}",
                         id, username
                     );
-                    return id;
+                    return (id, true);
                 }
             }
-            0
+            (0, true)
         }
         Err(e) => {
             tracing::warn!(
@@ -259,10 +260,10 @@ async fn find_or_create_user(pool: &DbPool, info: &GoogleUserInfo) -> i64 {
                 .await
             {
                 if let Ok(Some(row)) = rows.next().await {
-                    return row.get(0).unwrap_or(0);
+                    return (row.get(0).unwrap_or(0), true);
                 }
             }
-            0
+            (0, true)
         }
     }
 }

@@ -7,6 +7,7 @@
 
     onMount(() => {
         const token = page.url.searchParams.get("token");
+        const dest = page.url.searchParams.get("dest") || "/";
         const err = page.url.searchParams.get("error");
 
         if (err) {
@@ -15,9 +16,8 @@
         }
 
         if (token) {
-            // Set the session cookie and redirect to home
             document.cookie = `session=${token}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
-            goto("/");
+            goto(dest);
         } else {
             error = "No session token received";
         }

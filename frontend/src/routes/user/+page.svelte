@@ -1,5 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte"
+    import { goto } from "$app/navigation"
+    import { page } from "$app/state"
     import ScoreDisplay from "./ScoreDisplay.svelte";
     import PokerCard from "$lib/components/poker-card.svelte";
     import * as Card from "$lib/components/ui/card/index"
@@ -205,46 +207,16 @@
 
     // Settings state
     let showSettings = $state(false)
-    // Change password
-    let cpCurrent = $state("")
-    let cpNew = $state("")
-    let cpError = $state("")
-    let cpSuccess = $state(false)
-    let cpLoading = $state(false)
+    // Show welcome + settings by default for new OAuth users
+    let isNewUser = $state(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('new') === '1')
+    $effect(() => {
+        if (isNewUser) showSettings = true
+    })
     // Change name
-    let cnPassword = $state("")
     let cnNew = $state("")
     let cnError = $state("")
     let cnSuccess = $state(false)
     let cnLoading = $state(false)
-
-    async function changePassword() {
-        cpError = ""
-        cpSuccess = false
-        if (!cpCurrent || !cpNew || cpNew.length < 6) {
-            cpError = "New password must be at least 6 characters"
-            return
-        }
-        cpLoading = true
-        try {
-            const res = await fetch(`${API_URL}/api/auth/change-password`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Session-Token": token },
-                body: JSON.stringify({ currentPassword: cpCurrent, newPassword: cpNew }),
-            })
-            const data = await res.json()
-            if (data.ok) {
-                cpSuccess = true
-                cpCurrent = ""
-                cpNew = ""
-            } else {
-                cpError = data.error || "Failed to change password"
-            }
-        } catch {
-            cpError = "Connection error"
-        }
-        cpLoading = false
-    }
 
     async function changeName() {
         cnError = ""
@@ -258,14 +230,23 @@
             const res = await fetch(`${API_URL}/api/auth/change-name`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-Session-Token": token },
-                body: JSON.stringify({ password: cnPassword, newUsername: cnNew }),
+                body: JSON.stringify({ newUsername: cnNew }),
             })
             const data = await res.json()
             if (data.ok) {
                 cnSuccess = true
                 username = cnNew
-                cnPassword = ""
                 cnNew = ""
+                // If new user coming from a room invite, redirect to the room
+                if (isNewUser) {
+                    try {
+                        const pendingRoom = sessionStorage.getItem("bridgePendingRoom")
+                        if (pendingRoom) {
+                            sessionStorage.removeItem("bridgePendingRoom")
+                            setTimeout(() => goto(`/?room=${encodeURIComponent(pendingRoom)}`), 800)
+                        }
+                    } catch {}
+                }
             } else {
                 cnError = data.error || "Failed to change username"
             }
@@ -344,6 +325,14 @@
             </div>
         {/if}
 
+        <!-- Welcome prompt for new OAuth users -->
+        {#if isNewUser && !cnSuccess}
+            <div class="w-full max-w-md mb-6 p-4 rounded-lg border border-accent/30 bg-accent/5 text-center">
+                <p class="text-sm font-semibold text-accent mb-2">Welcome! Choose a username</p>
+                <p class="text-xs text-muted-foreground mb-3">Your auto-generated username is <strong>{username}</strong>. Pick one you like below.</p>
+            </div>
+        {/if}
+
         <!-- Logout + Settings toggle -->
         <div class="flex items-center gap-4 mb-4">
             <form action="?/logout" method="POST">
@@ -374,32 +363,17 @@
                     </Card.CardHeader>
                     <Card.CardContent class="flex flex-col gap-3">
                         <Input bind:value={cnNew} placeholder="New username" disabled={cnLoading} />
-                        <Input bind:value={cnPassword} type="password" placeholder="Current password" disabled={cnLoading} />
                         {#if cnError}<p class="text-xs text-destructive">{cnError}</p>{/if}
                         {#if cnSuccess}<p class="text-xs text-green">Username changed!</p>{/if}
-                        <Button onclick={changeName} disabled={cnLoading || !cnNew || !cnPassword} size="sm" class="self-end">
+                        <Button onclick={changeName} disabled={cnLoading || !cnNew} size="sm" class="self-end">
                             {cnLoading ? "Saving..." : "Save"}
-                        </Button>
-                    </Card.CardContent>
-                </Card.Root>
-
-                <!-- Change Password -->
-                <Card.Root>
-                    <Card.CardHeader>
-                        <Card.CardTitle class="text-sm">Change Password</Card.CardTitle>
-                    </Card.CardHeader>
-                    <Card.CardContent class="flex flex-col gap-3">
-                        <Input bind:value={cpCurrent} type="password" placeholder="Current password" disabled={cpLoading} />
-                        <Input bind:value={cpNew} type="password" placeholder="New password (min 6 chars)" disabled={cpLoading} />
-                        {#if cpError}<p class="text-xs text-destructive">{cpError}</p>{/if}
-                        {#if cpSuccess}<p class="text-xs text-green">Password changed!</p>{/if}
-                        <Button onclick={changePassword} disabled={cpLoading || !cpCurrent || !cpNew} size="sm" class="self-end">
-                            {cpLoading ? "Saving..." : "Save"}
                         </Button>
                     </Card.CardContent>
                 </Card.Root>
             </div>
         {/if}
+
+        <!-- Theme toggle -->
 
         <!-- Match history -->
         <div class="w-full max-w-3xl">

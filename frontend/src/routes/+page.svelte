@@ -60,7 +60,7 @@
     let lastMatchId = $state<number | null>(null)
     let lastEloChange = $state<number | null>(null)
     let loadingMatchResult = $state(false)
-    let isGuest = $state(false) // true if created via guest flow
+    let isGuest = false  // guest login removed — OAuth only
 
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
@@ -95,6 +95,11 @@
             try { localStorage.setItem("bridgeActiveRoom", JSON.stringify({ roomId: urlRoomId, seat: page.url.searchParams.get("seat") })) } catch {}
             // Save to sessionStorage too — login page reads this to redirect back
             try { sessionStorage.setItem("bridgePendingRoom", urlRoomId) } catch {}
+            if (!loggedIn && !onlineToken) {
+                // Not authenticated — redirect to login with room param
+                goto(`/login?room=${encodeURIComponent(urlRoomId)}`, { replaceState: true })
+                return
+            }
             if (loggedIn && onlineToken && !isOnline && !isOnlineLoading && !isJoiningRoom) {
                 if (page.url.searchParams.get("seat")) {
                     // Has seat param — this is a game URL, load directly
@@ -894,11 +899,6 @@
             bind:lobbyPlayers
             bind:lobbyHiddenMode
             bind:difficulty={headerState.difficulty}
-            onguestlogin={(name: string, token: string, uid: number) => {
-                username = name; onlineToken = token; userID = uid; isGuest = true;
-                const urlRoomId = page.url.searchParams.get("room")
-                if (urlRoomId && !isOnline) { loadRoomOrLobby(urlRoomId) }
-            }}
         />
 
         {#if lobbyRoomId}
@@ -985,12 +985,6 @@
             bind:lobbyPlayers
             bind:lobbyHiddenMode
             bind:difficulty={headerState.difficulty}
-            onguestlogin={(name: string, token: string, uid: number) => {
-                username = name; onlineToken = token; userID = uid; isGuest = true;
-                // Auto-join room if there's a pending invite in the URL
-                const urlRoomId = page.url.searchParams.get("room")
-                if (urlRoomId && !isOnline) { loadExistingRoom(urlRoomId) }
-            }}
         />
 
         {#if lobbyRoomId}

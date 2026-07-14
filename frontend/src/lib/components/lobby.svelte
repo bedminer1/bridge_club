@@ -8,9 +8,9 @@
         CardDescription,
     } from "$lib/components/ui/card/index.js";
     import { Button } from "$lib/components/ui/button/index.js";
-    import { Input } from "$lib/components/ui/input/index.js";
     import * as Select from "$lib/components/ui/select/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
+    import { goto } from "$app/navigation";
 
     let {
         onlineToken = "",
@@ -23,109 +23,15 @@
         lobbyPlayers = $bindable<Array<{ name: string; seatIndex: number; isBot: boolean }>>([]),
         lobbyHiddenMode = $bindable(true),
         difficulty = $bindable("Easy"),
-        onguestlogin = (_username: string, _token: string, _userId: number) => {},
     } = $props()
 
-    // Internal lobby UI state
-    let lobbyMode = $state<"" | "create" | "join">("create")
     let lobbyCreating = $state(false)
-    let lobbyJoinRoomId = $state("")
-    let lobbyJoining = $state(false)
-    let lobbyJoinError = $state("")
+    let loggedIn = $derived(!!onlineToken && userID > 0)
 
-    // Guest login state
-    let guestUsername = $state("")
-    let guestChecking = $state(false)
-    let guestError = $state("")
-    let isGuest = $state(!onlineToken && !username)
-
-    // API URL
-    let API_URL: string
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-        API_URL = "http://127.0.0.1:3000"
-    } else {
-        API_URL = "https://bridge-club.duckdns.org"
-    }
-
-    // Reset loading flags when room is created/joined successfully
+    // Reset loading when room is created
     $effect(() => {
-        if (lobbyRoomId) {
-            lobbyCreating = false
-            lobbyJoining = false
-        }
+        if (lobbyRoomId) lobbyCreating = false
     })
-
-    // Update isGuest when token changes
-    $effect(() => {
-        isGuest = !onlineToken && !username
-    })
-
-    /** Guest login: signup if name available, login if returning guest. */
-    async function handleGuestLogin(): Promise<boolean> {
-        const name = guestUsername.trim()
-        if (!name || name.length < 2) {
-            guestError = "Username must be at least 2 characters"
-            return false
-        }
-        guestChecking = true
-        guestError = ""
-        try {
-            // Check if username is available
-            const checkRes = await fetch(`${API_URL}/api/auth/check-username?username=${encodeURIComponent(name)}`)
-            const checkData = await checkRes.json()
-            if (!checkData.ok) {
-                guestError = checkData.error || "Failed to check username"
-                guestChecking = false
-                return false
-            }
-
-            let token: string
-            let userId: number
-
-            if (checkData.available) {
-                // Sign up as a new guest (no password)
-                const signupRes = await fetch(`${API_URL}/api/auth/signup`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username: name, password: "" }),
-                })
-                const signupData = await signupRes.json()
-                if (!signupData.ok) {
-                    guestError = signupData.error || "Failed to create account"
-                    guestChecking = false
-                    return false
-                }
-                token = signupData.token!
-                userId = signupData.user_id!
-            } else {
-                // Username taken — try logging in as a returning guest
-                const loginRes = await fetch(`${API_URL}/api/auth/login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username: name, password: "" }),
-                })
-                const loginData = await loginRes.json()
-                if (!loginData.ok) {
-                    guestError = loginData.error || "Username taken"
-                    guestChecking = false
-                    return false
-                }
-                token = loginData.token!
-                userId = loginData.user_id!
-            }
-
-            document.cookie = `session=${token}; path=/; max-age=2592000; SameSite=Lax`
-            onguestlogin(name, token, userId)
-            guestChecking = false
-            return true
-        } catch {
-            guestError = "Connection error. Is the backend running?"
-            guestChecking = false
-            return false
-        }
-    }
-
-    // ── Lobby actions (call wsClient directly) ─────────────────────
 
     function doCreateRoom() {
         try {
@@ -133,18 +39,9 @@
         } catch (e) { console.error("Create room error:", e); alert("Failed. Is the backend running?") }
     }
 
-    function doJoinRoom(joinRoomId: string) {
-        if (!joinRoomId.trim()) return
-        try {
-            wsClient.joinLobby(joinRoomId.trim())
-        } catch (e) { console.error("Join error:", e); alert("Failed. Is the backend running?") }
-    }
-
     function doLeaveRoom() {
         if (!lobbyRoomId || !lobbyPlayerId) return
-        try {
-            wsClient.leaveLobby()
-        } catch (e) { console.error("Leave error:", e) }
+        try { wsClient.leaveLobby() } catch (e) { console.error("Leave error:", e) }
         lobbyRoomId = ""; lobbyPlayerId = ""; lobbyMySeatIndex = 0; lobbyIsHost = false; lobbyPlayers = []
         try { localStorage.removeItem("bridgeActiveRoom") } catch {}
     }
@@ -157,44 +54,21 @@
 
     function doToggleHidden() {
         if (!lobbyRoomId || !lobbyPlayerId) return
-        try {
-            wsClient.toggleHidden(!lobbyHiddenMode)
-        } catch (e) { console.error("Toggle hidden mode error:", e) }
+        try { wsClient.toggleHidden(!lobbyHiddenMode) } catch (e) { console.error("Toggle hidden mode error:", e) }
     }
 
-    // ── UI handlers ───────────────────────────────────────────────
-
     function handleCreate() {
-        if (isGuest) {
-            handleGuestLogin().then(ok => { if (ok) { lobbyCreating = true; doCreateRoom() } }).catch(() => {})
+        if (!loggedIn) {
+            goto("/login")
             return
         }
         lobbyCreating = true
         doCreateRoom()
     }
 
-    function handleJoin() {
-        if (!lobbyJoinRoomId.trim()) return
-        if (isGuest) {
-            handleGuestLogin().then(ok => { if (ok) { lobbyJoining = true; lobbyJoinError = ""; doJoinRoom(lobbyJoinRoomId.trim()) } }).catch(() => {})
-            return
-        }
-        lobbyJoining = true
-        lobbyJoinError = ""
-        doJoinRoom(lobbyJoinRoomId.trim())
-    }
-
-    function handleLeave() {
-        doLeaveRoom()
-    }
-
-    function handleStart() {
-        doStartGame()
-    }
-
-    function handleToggleHidden() {
-        doToggleHidden()
-    }
+    function handleLeave() { doLeaveRoom() }
+    function handleStart() { doStartGame() }
+    function handleToggleHidden() { doToggleHidden() }
 
     let shareUrl = $derived(lobbyRoomId
         ? `${typeof window !== 'undefined' ? window.location.origin : ''}/?room=${lobbyRoomId}`
@@ -213,90 +87,29 @@
 
 <div class="w-full max-w-md">
     {#if !lobbyRoomId}
-        <!-- Mode Selector -->
-        <div class="relative flex justify-center mb-6 items-center">
-            {#if lobbyMode}
-            <button onclick={() => lobbyMode = ""} class="absolute left-0 p-1.5 rounded-md text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors text-4xl leading-none" title="Back">
-                &larr;
-            </button>
-            {/if}
-            <div class="flex gap-2">
-                <Button class = "cursor-pointer" onclick={() => { if (lobbyMode === "create") handleCreate(); else lobbyMode = "create" }}
-                    variant={lobbyMode === "create" ? "default" : "outline"}>
-                    Create Room
-                </Button>
-                <Button class="cursor-pointer" onclick={() => { lobbyMode = "join" }}
-                    variant={lobbyMode === "join" ? "default" : "outline"}>
-                    Join Room
-                </Button>
-            </div>
-        </div>
-
-        {#if lobbyMode === "create"}
-            <Card>
-                <CardHeader>
-                    <CardTitle class="text-center">Create a Room</CardTitle>
-                    <CardDescription class="text-center max-w-[220px] mx-auto">Create a new game room</CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-4">
-                    {#if isGuest}
-                        <div class="flex flex-col gap-2">
-                            <label for="guest-username" class="text-xs text-muted-foreground">Username</label>
-                            <Input
-                                id="guest-username"
-                                bind:value={guestUsername}
-                                placeholder="Enter a username"
-                                onkeydown={(e) => { if (e.key === 'Enter') handleCreate() }}
-                                disabled={guestChecking}
-                            />
-                        </div>
-                        {#if guestError}
-                            <p class="text-xs text-destructive">{guestError}</p>
-                        {/if}
-                        <p class="text-[10px] text-muted-foreground text-center">
-                            · <a href="/login" class="text-accent hover:underline">log in</a> if returning
-                        </p>
+        <Card>
+            <CardHeader>
+                <CardTitle class="text-center">Play Bridge</CardTitle>
+                <CardDescription class="text-center max-w-[220px] mx-auto">
+                    {#if loggedIn}
+                        Create a room and invite friends
+                    {:else}
+                        Sign in to start playing
                     {/if}
-                    <Button class = "cursor-pointer" onclick={handleCreate} disabled={lobbyCreating || (isGuest && guestChecking)}>
-                        {lobbyCreating ? "Creating..." : isGuest ? "Create Account & Room" : "Create Room"}
+                </CardDescription>
+            </CardHeader>
+            <CardContent class="flex flex-col gap-4">
+                {#if loggedIn}
+                    <Button class="cursor-pointer" onclick={handleCreate} disabled={lobbyCreating} size="lg">
+                        {lobbyCreating ? "Creating..." : "Create Lobby"}
                     </Button>
-                </CardContent>
-            </Card>
-        {:else if lobbyMode === "join"}
-                <Card>
-                    <CardHeader>
-                        <CardTitle class="text-center">Join a Room</CardTitle>
-                        <CardDescription class="text-center max-w-[220px] mx-auto">Paste the room ID from the host</CardDescription>
-                    </CardHeader>
-                    <CardContent class="flex flex-col gap-4">
-                        {#if isGuest}
-                            <div class="flex flex-col gap-2">
-                                <label for="guest-username-join" class="text-xs text-muted-foreground">Username</label>
-                                <Input
-                                    id="guest-username-join"
-                                    bind:value={guestUsername}
-                                    placeholder="Enter a username"
-                                    onkeydown={(e) => { if (e.key === 'Enter') handleJoin() }}
-                                />
-                            </div>
-                            {#if guestError}
-                                <p class="text-xs text-destructive">{guestError}</p>
-                            {/if}
-                            <p class="text-[10px] text-muted-foreground text-center">
-                                · <a href="/login" class="text-accent hover:underline">log in</a> if returning
-                            </p>
-                        {/if}
-                        <div class="flex flex-col gap-2">
-                            <label for="room-id" class="text-sm text-muted-foreground">Room ID</label>
-                            <Input id="room-id" bind:value={lobbyJoinRoomId} placeholder="Enter room ID" />
-                        </div>
-                        {#if lobbyJoinError}<p class="text-sm text-destructive">{lobbyJoinError}</p>{/if}
-                        <Button onclick={handleJoin} disabled={lobbyJoining || !lobbyJoinRoomId.trim() || (isGuest && guestChecking)}>
-                            {lobbyJoining ? "Joining..." : isGuest ? "Create Account & Join" : "Join Room"}
-                        </Button>
-                    </CardContent>
-                </Card>
-            {/if}
+                {:else}
+                    <Button class="cursor-pointer" onclick={() => goto("/login")} size="lg">
+                        Sign in to Play
+                    </Button>
+                {/if}
+            </CardContent>
+        </Card>
     {:else}
         <!-- Lobby View (waiting room) -->
         <Card>
