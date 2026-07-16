@@ -146,6 +146,7 @@ pub struct SaveParticipant {
     pub team: i64,
     pub sets_won: i64,
     pub cards_played: String,
+    pub hand_preview: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1096,8 +1097,9 @@ async fn save_match(
             player_ids[seat] = uid;
         }
 
-        // Generate hand preview from cards_played
-        let preview = compact_hand_preview(&p.cards_played);
+        // Use hand_preview from frontend if provided, else derive from cards_played
+        let preview = p.hand_preview.clone()
+            .unwrap_or_else(|| compact_hand_preview(&p.cards_played));
 
         resolved_participants.push((
             uid,

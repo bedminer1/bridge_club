@@ -113,14 +113,19 @@ fn legal_plays(table: &Table) -> Vec<Card> {
     }
 
     // If leading: cannot lead trump before trump has been played
+    // (but if no non-trump cards, must lead trump)
     if table.current_set_cards.is_empty() {
         if let Some(tr) = table.trump_suit {
             if !table.trump_played {
-                return hand
+                let non_trump: Vec<Card> = hand
                     .iter()
                     .filter(|c| c.suit != tr)
                     .copied()
                     .collect();
+                if !non_trump.is_empty() {
+                    return non_trump;
+                }
+                // Only trump cards available — must lead trump
             }
         }
     }

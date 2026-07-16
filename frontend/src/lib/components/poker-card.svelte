@@ -2,9 +2,11 @@
     import { suitToSymbol } from "$lib/utils";
     import { Crown } from "@lucide/svelte"
 
-    let { card, isIllegal, minify }: { card: Card, isIllegal: boolean | undefined, minify: boolean | undefined } = $props()
+    let { card, isIllegal, minify, isHistory }: { card: Card, isIllegal: boolean | undefined, minify: boolean | undefined, isHistory?: boolean } = $props()
 
     const symbol = $derived(suitToSymbol.get(card.Suit))
+
+    const isLost = $derived(isHistory && !card.WonSet)
 
     /** Card suit text color — use explicit hex values to avoid Tailwind JIT issues */
     const cardColor = $derived(
@@ -17,8 +19,8 @@
         <Crown class="absolute -top-6 left-0 text-accent w-5 pl-1" />
     {/if}
     <div
-        class="w-full h-full rounded-sm border bg-white p-0.5 {isIllegal
-            ? 'border-muted cursor-not-allowed brightness-75'
+        class="w-full h-full rounded-sm border bg-white p-0.5 {isIllegal || isLost
+            ? 'border-muted cursor-not-allowed brightness-75 opacity-60'
             : 'border-border cursor-grab'}"
     >
         <!-- Rank + suit in top-left corner -->

@@ -28,11 +28,47 @@
             .map((p: any) => ({
                 ...p,
                 cards: (() => {
-                    try { return JSON.parse(p.cardsPlayed) }
-                    catch { return [] }
+                    return parsePreview(p.handPreview || p.cardsPlayed || "[]")
                 })(),
             }))
     )
+
+    function parsePreview(preview: string): Card[] {
+        const suitMap: Record<string, string> = { c: "Club", d: "Diamond", h: "Heart", s: "Spades" }
+        const rankToValue: Record<string, number> = {
+            "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+            "10": 10, "J": 11, "Q": 12, "K": 13, "A": 14,
+        }
+        const valueToRank: Record<number, string> = {
+            2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9",
+            10: "10", 11: "J", 12: "Q", 13: "K", 14: "A",
+        }
+        if (!preview || preview === "[]") return []
+        // If it's JSON (cardsPlayed format), parse as JSON
+        if (preview.startsWith("[")) {
+            try { return JSON.parse(preview) } catch { return [] }
+        }
+        // Compact hand_preview format: "2cw3hlAdw..."
+        const cards: Card[] = []
+        let i = 0
+        while (i < preview.length) {
+            const isTen = preview[i] === "1" && preview[i + 1] === "0"
+            const rankStr = isTen ? "10" : preview[i]
+            const suitLetter = preview[isTen ? i + 2 : i + 1]
+            const won = preview[isTen ? i + 3 : i + 2] === "w"
+            const value = rankToValue[rankStr]
+            if (value && suitLetter) {
+                cards.push({
+                    Rank: valueToRank[value] ?? rankStr,
+                    Value: value,
+                    Suit: suitMap[suitLetter] ?? "Club",
+                    WonSet: won,
+                })
+            }
+            i += isTen ? 4 : 3
+        }
+        return cards
+    }
 
     const playerColor: Record<number, string> = {
         0: 'var(--red)',
@@ -116,7 +152,7 @@
                     </div>
                     <div class="flex flex-wrap gap-1.5">
                         {#each participant.cards as card}
-                            <PokerCard card={card} isIllegal={false} minify={true} />
+                            <PokerCard card={card} isIllegal={false} minify={true} isHistory={true} />
                         {/each}
                     </div>
                 </div>

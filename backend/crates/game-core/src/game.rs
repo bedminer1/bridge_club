@@ -298,10 +298,17 @@ impl Table {
 
         // Rule: Cannot LEAD trump before trump has been played
         // (Only applies when leading, i.e., first card of the set)
+        // Exception: if the player has no non-trump cards, they must lead trump.
         if self.current_set_cards.is_empty() {
             if let Some(tr) = self.trump_suit {
                 if played_card.suit == tr && !self.trump_played {
-                    return Err("Cannot lead trump until trump has been played");
+                    let has_non_trump = self.players[player_idx]
+                        .hand
+                        .iter()
+                        .any(|c| c.suit != tr);
+                    if has_non_trump {
+                        return Err("Cannot lead trump until trump has been played");
+                    }
                 }
             }
         }
