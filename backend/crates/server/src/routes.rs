@@ -13,6 +13,7 @@ use crate::bot::BotDifficulty;
 use crate::db::{DbPool, MatchResponse, ParticipantResponse, UserRow};
 use crate::game_session;
 use crate::session::AppState;
+use tokio::sync::broadcast;
 
 // ── Request / Response types ──────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ pub struct RoomPlayerInfo {
     pub is_bot: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TableStateResponse {
     pub phase: String,
@@ -1577,6 +1578,9 @@ async fn create_single_player_game(
 
     let state_resp = build_table_state(&room.table);
     let room_id = room.room_id;
+
+    let (tx, _) = broadcast::channel(256);
+    state.room_broadcast.write().await.insert(room_id, tx);
 
     let mut rooms = state.rooms.write().await;
     rooms.insert(room_id, room);

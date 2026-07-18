@@ -5,12 +5,20 @@
 type WsEventCallback = (data: any) => void
 
 type WsEventMap = {
+    "ws:open": { reconnect: boolean }
+    "ws:closed": { code?: number; reason?: string }
     "auth:ok": { userId: number; username: string }
     "auth:error": { error: string }
     "lobby:created": { roomId: string; playerId: string; seatIndex: number }
-    "lobby:joined": { roomId: string; playerId: string; seatIndex: number }
+    "lobby:joined": {
+        roomId: string;
+        playerId: string;
+        seatIndex: number;
+        players: Array<{ name: string; seatIndex: number; isBot: boolean }>;
+        hiddenMode: boolean;
+    }
     "lobby:update": { players: Array<{ name: string; seatIndex: number; isBot: boolean }>; hiddenMode: boolean }
-    "lobby:started": { roomId: string }
+    "lobby:started": { roomId: string; state: any }
     "lobby:left": {}
     "game:state": { state: any; roomId: string }
     "chat:message": { id: number; playerName: string; text: string; timestamp: number }
@@ -37,6 +45,7 @@ class WsClient {
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null
     private pendingMessages: string[] = []
     private _token: string = ""
+    private hasEverConnected = false
 
     /** Create and connect. Call after getting an auth token. */
     connect(token: string): void {
@@ -63,9 +72,13 @@ class WsClient {
                 this.send(JSON.parse(msg))
             }
             this.pendingMessages = []
+            const reconnect = this.hasEverConnected
+            this.hasEverConnected = true
+            this.emit("ws:open", { reconnect })
         }
 
         ws.onmessage = (event) => {
+            if (this.ws !== ws) return
             try {
                 const data = JSON.parse(event.data)
                 const type: string = data.type || "unknown"
@@ -82,6 +95,7 @@ class WsClient {
             this._connected = false
             this._connectionPromise = null
             this._connectionResolve = null
+            this.emit("ws:closed", {})
             // Auto-reconnect after 3s
             if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
             this.reconnectTimer = setTimeout(() => {
