@@ -1,6 +1,6 @@
 use crate::bot::BotDifficulty;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use uuid::Uuid;
@@ -147,6 +147,8 @@ pub struct AppState {
     pub db: DbPool,
     /// WebSocket broadcast channels per room ID.
     pub room_broadcast: Arc<RwLock<HashMap<Uuid, broadcast::Sender<String>>>>,
+    /// Connected WebSocket listener IDs per room ID.
+    pub room_listeners: Arc<RwLock<HashMap<Uuid, HashSet<Uuid>>>>,
 }
 
 /// Create a fresh shared state with a database pool.
@@ -155,5 +157,6 @@ pub async fn new_app_state(db_pool: DbPool) -> AppState {
         rooms: Arc::new(RwLock::new(HashMap::new())),
         db: db_pool,
         room_broadcast: Arc::new(RwLock::new(HashMap::new())),
+        room_listeners: Arc::new(RwLock::new(HashMap::new())),
     }
 }

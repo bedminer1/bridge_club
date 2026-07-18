@@ -198,6 +198,8 @@
         isOnlineLoading = true
         try {
             roomId = existingRoomId
+            lobbyRoomId = existingRoomId
+            subscribeRoomState("loadExistingRoom")
             // Set isOnline immediately so the template switches to game view
             isOnline = true
 
@@ -400,6 +402,14 @@
     // ── Chat ────────────────────────────────────────────────────────
     interface ChatMsg { id: number; playerName: string; text: string; timestamp: number }
     let chatMessages = $state<ChatMsg[]>([])
+    let gameStateRxSeq = $state(0)
+
+    function subscribeRoomState(reason: string) {
+        const targetRoomId = roomId || lobbyRoomId || page.url.searchParams.get("room") || ""
+        if (!targetRoomId) return
+        console.log("[WS][SUBSCRIBE] Requesting room subscription", { reason, targetRoomId })
+        wsClient.joinLobby(targetRoomId)
+    }
 
     function chatSend(text: string) {
         if (!text || !roomId || !lobbyPlayerId) return
@@ -418,8 +428,24 @@
         wsClient.connect(onlineToken)
         console.log("[WS] Effect running, onlineToken present")
 
+        const unsubWsOpen = wsClient.on("ws:open", (data) => {
+            console.log("[WS][OPEN] socket open", data)
+            if (data.reconnect) {
+                subscribeRoomState("ws:open:reconnect")
+            }
+        })
+
+        const unsubWsClosed = wsClient.on("ws:closed", () => {
+            console.log("[WS][CLOSE] socket closed")
+        })
+
+        const unsubAuthOk = wsClient.on("auth:ok", (data) => {
+            console.log("[WS][AUTH] auth:ok", data)
+            subscribeRoomState("auth:ok")
+        })
+
         const unsubCreated = wsClient.on("lobby:created", (data) => {
-            console.log("[WS] lobby:created", data)
+            console.log("[WS][LOBBY] lobby:created", data)
             roomId = data.roomId
             lobbyRoomId = data.roomId
             lobbyMySeatIndex = data.seatIndex
@@ -429,12 +455,14 @@
         })
 
         const unsubJoined = wsClient.on("lobby:joined", (data) => {
+            console.log("[WS][LOBBY] lobby:joined", data)
             roomId = data.roomId
             lobbyRoomId = data.roomId
             lobbyMySeatIndex = data.seatIndex
             lobbyIsHost = false
             lobbyPlayerId = data.playerId
-            lobbyPlayers = [{ name: username, seatIndex: data.seatIndex, isBot: false }]
+            lobbyPlayers = data.players
+            lobbyHiddenMode = data.hiddenMode
             isJoiningRoom = false
         })
 
@@ -442,7 +470,14 @@
         // lobby-created games and existing rooms loaded via loadExistingRoom)
         // Only process when in game mode (has ?seat= param), not during lobby
         const unsubGameState = wsClient.on("game:state", (data) => {
-            if (data.roomId === roomId && isOnline) {
+            gameStateRxSeq += 1
+            console.log("[WS][GAME_STATE_RX]", {
+                seq: gameStateRxSeq,
+                roomId: data.roomId,
+                currentRoomId: roomId,
+                isOnline,
+            })
+            if (data.roomId === roomId) {
                 const updatedGame = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
                 console.log(updatedGame)
                 fixupPlayerDisplay(updatedGame)
@@ -451,23 +486,32 @@
         })
 
         const unsubUpdate = wsClient.on("lobby:update", (data) => {
+            console.log("[WS][LOBBY] lobby:update", data)
             lobbyPlayers = data.players
             lobbyHiddenMode = data.hiddenMode
         })
 
         const unsubStarted = wsClient.on("lobby:started", (data) => {
+            console.log("[WS][LOBBY] lobby:started", data)
             headerState.hiddenMode = lobbyHiddenMode
             hiddenModeLocked = lobbyHiddenMode
             // Set human seat directly (don't rely on URL param that may not persist)
             mySeatIndex = lobbyMySeatIndex
+            isOnline = true
             // Play deal sound as the game starts
             for (let i = 0; i < 4; i++) setTimeout(() => playCardDeal(), i * 90)
-            // Directly load the game state without navigation
-            // (goto would remount the component and lose all state)
-            loadExistingRoom(data.roomId)
+            if (data.state) {
+                const updatedGame = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
+                fixupPlayerDisplay(updatedGame)
+                renderGame(updatedGame)
+            } else {
+                // Fallback for older server payloads.
+                loadExistingRoom(data.roomId)
+            }
         })
 
         const unsubLeft = wsClient.on("lobby:left", () => {
+            console.log("[WS][LOBBY] lobby:left")
             roomId = ""
             lobbyRoomId = ""
             lobbyPlayerId = ""
@@ -477,10 +521,12 @@
         })
 
         const unsubHiddenToggled = wsClient.on("lobby:hidden_toggled", (data) => {
+            console.log("[WS][LOBBY] lobby:hidden_toggled", data)
             lobbyHiddenMode = data.enabled
         })
 
         const unsubChatMessage = wsClient.on("chat:message", (data) => {
+            console.log("[WS][CHAT] chat:message", data)
             chatMessages = [...chatMessages, data]
         })
 
@@ -494,6 +540,9 @@
             unsubHiddenToggled()
             unsubChatMessage()
             unsubGameState()
+            unsubAuthOk()
+            unsubWsOpen()
+            unsubWsClosed()
             wsClient.disconnect()
         }
     })
