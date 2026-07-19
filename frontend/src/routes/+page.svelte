@@ -51,6 +51,9 @@
     let playbackGenerationKey: number = $state(0)
     let playPhasePlaybackPrimed = $state(false)
     let playbackNeedsInitialDelay = $state(false)
+    // A restored room already has its full history. Render that initial snapshot
+    // directly; only plays received after restoration should be animated.
+    let isRestoringExistingRoom = false
     const PLAY_DELAY_MS = 1000
 
     // Lock hidden mode toggle if it was on at game start
@@ -149,6 +152,14 @@
     })
     let humanPlayerId = $derived(humanSeat + 1)
 
+    function saveActiveRoom(activeRoomId: string, seatIndex?: number) {
+        try {
+            const payload: Record<string, string> = { roomId: activeRoomId }
+            if (seatIndex !== undefined) payload.seat = String(seatIndex)
+            localStorage.setItem("bridgeActiveRoom", JSON.stringify(payload))
+        } catch {}
+    }
+
     // Sync reactive game state to shared header state
     $effect(() => { headerState.game = game })
 
@@ -196,6 +207,7 @@
     async function loadExistingRoom(existingRoomId: string) {
         if (!onlineToken) return
         isOnlineLoading = true
+        isRestoringExistingRoom = true
         try {
             roomId = existingRoomId
             lobbyRoomId = existingRoomId
@@ -205,6 +217,7 @@
 
             // Fetch room info for hidden mode setting
             let hiddenMode = true
+            let resolvedSeat: number | null = null
             try {
                 const infoRes = await fetch(`${API_URL}/api/rooms/${encodeURIComponent(existingRoomId)}/info`, {
                     headers: { "X-Session-Token": onlineToken },
@@ -212,23 +225,28 @@
                 if (infoRes.ok) {
                     const info = await infoRes.json()
                     hiddenMode = info.hiddenMode ?? true
+                    if (info.mySeatIndex !== null && info.mySeatIndex !== undefined) {
+                        mySeatIndex = info.mySeatIndex
+                        lobbyMySeatIndex = info.mySeatIndex
+                        resolvedSeat = info.mySeatIndex
+                    }
+                    if (info.myPlayerId) {
+                        lobbyPlayerId = info.myPlayerId
+                    }
                 }
             } catch {}
+
+            if (resolvedSeat === null || resolvedSeat < 0 || resolvedSeat > 3) {
+                throw new Error("Unable to restore player seat for active room")
+            }
+
+            saveActiveRoom(existingRoomId, resolvedSeat)
             headerState.hiddenMode = hiddenMode
 
             // Load the actual game state
             const gameState = await getRoomState(existingRoomId, onlineToken)
             fixupPlayerDisplay(gameState)
-            playPhasePlaybackPrimed = false
-            if (isPlayingPhase(gameState)) {
-                primePlayPhasePlayback(gameState)
-            } else {
-                game = gameState
-                displayedPlayCount = extractPlayEvents(game).length
-                playbackQueue = []
-                isPlaybackRunning = false
-                playbackGenerationKey += 1
-            }
+            renderGame(gameState)
             // Play deal sound for initial load
             setTimeout(() => { for (let i = 0; i < 4; i++) setTimeout(() => playCardDeal(), i * 90) }, 100)
         } catch (e) {
@@ -239,6 +257,7 @@
                 goto("/", { replaceState: true })
             }
         } finally {
+            isRestoringExistingRoom = false
             isOnlineLoading = false
         }
     }
@@ -267,6 +286,7 @@
         displayedPlayCount = 0
         playbackGenerationKey += 1
         playPhasePlaybackPrimed = false
+        isRestoringExistingRoom = false
         hiddenModeLocked = false
         lobbyRoomId = ""
         lobbyPlayerId = ""
@@ -298,7 +318,21 @@
                 return
             }
             const info = await infoRes.json()
+            if (info.mySeatIndex !== null && info.mySeatIndex !== undefined) {
+                mySeatIndex = info.mySeatIndex
+                lobbyMySeatIndex = info.mySeatIndex
+            }
+            if (info.myPlayerId) {
+                lobbyPlayerId = info.myPlayerId
+            }
+
             if (info.isStarted) {
+                if (info.mySeatIndex === null || info.mySeatIndex === undefined) {
+                    clearSavedRoom()
+                    isJoiningRoom = false
+                    goto("/", { replaceState: true })
+                    return
+                }
                 await loadExistingRoom(roomIdToLoad)
                 isJoiningRoom = false
             } else {
@@ -449,9 +483,11 @@
             roomId = data.roomId
             lobbyRoomId = data.roomId
             lobbyMySeatIndex = data.seatIndex
+            mySeatIndex = data.seatIndex
             lobbyIsHost = true
             lobbyPlayerId = data.playerId
             lobbyPlayers = [{ name: username, seatIndex: data.seatIndex, isBot: false }]
+            saveActiveRoom(data.roomId, data.seatIndex)
         })
 
         const unsubJoined = wsClient.on("lobby:joined", (data) => {
@@ -459,11 +495,13 @@
             roomId = data.roomId
             lobbyRoomId = data.roomId
             lobbyMySeatIndex = data.seatIndex
+            mySeatIndex = data.seatIndex
             lobbyIsHost = false
             lobbyPlayerId = data.playerId
             lobbyPlayers = data.players
             lobbyHiddenMode = data.hiddenMode
             isJoiningRoom = false
+            saveActiveRoom(data.roomId, data.seatIndex)
         })
 
         // Standalone game:state listener for realtime updates (handles both
@@ -497,6 +535,7 @@
             hiddenModeLocked = lobbyHiddenMode
             // Set human seat directly (don't rely on URL param that may not persist)
             mySeatIndex = lobbyMySeatIndex
+            saveActiveRoom(data.roomId, mySeatIndex)
             isOnline = true
             // Play deal sound as the game starts
             for (let i = 0; i < 4; i++) setTimeout(() => playCardDeal(), i * 90)
@@ -735,6 +774,20 @@
     // orchestrator for all the helper functions
     function renderGame(updatedGame: Game): void {
         try {
+            // The snapshots delivered while restoring a page are authoritative
+            // state, not new plays. Applying them directly prevents a refresh
+            // from replaying the entire match, without changing live playback.
+            if (isRestoringExistingRoom) {
+                game = updatedGame
+                playbackQueue = []
+                isPlaybackRunning = false
+                playbackGenerationKey += 1
+                displayedPlayCount = extractPlayEvents(game).length
+                playPhasePlaybackPrimed = isPlayingPhase(updatedGame)
+                playbackNeedsInitialDelay = false
+                return
+            }
+
             if (isPlayingPhase(updatedGame) && !playPhasePlaybackPrimed) {
                 primePlayPhasePlayback(updatedGame)
                 return

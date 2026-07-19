@@ -46,6 +46,10 @@ pub struct RoomInfoResponse {
     pub phase: String,
     pub players: Vec<RoomPlayerInfo>,
     pub hidden_mode: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub my_seat_index: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub my_player_id: Option<Uuid>,
 }
 
 #[derive(Serialize)]
@@ -1386,8 +1390,19 @@ async fn get_leaderboard(
 
 async fn get_room_info(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(room_id): Path<Uuid>,
 ) -> impl IntoResponse {
+    let token = extract_token(&headers, None);
+    let requesting_user_id = if let Some(token) = token {
+        match auth::validate_session(&state.db, &token).await {
+            Ok(Some((user, _session))) => Some(user.id),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
     let rooms = state.rooms.read().await;
     let room = match rooms.get(&room_id) {
         Some(r) => r,
@@ -1397,6 +1412,8 @@ async fn get_room_info(
             phase: String::new(),
             players: vec![],
             hidden_mode: false,
+            my_seat_index: None,
+            my_player_id: None,
         })),
     };
 
@@ -1409,12 +1426,28 @@ async fn get_room_info(
     }).collect();
     players.sort_by_key(|p| p.seat_index);
 
+    let (my_seat_index, my_player_id) = if let Some(user_id) = requesting_user_id {
+        if let Some((pid, session)) = room
+            .sessions
+            .iter()
+            .find(|(_, session)| session.user_id == Some(user_id))
+        {
+            (Some(session.seat_index), Some(*pid))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
     (StatusCode::OK, Json(RoomInfoResponse {
         room_id,
         is_started: room.is_started,
         phase: format!("{:?}", room.table.phase),
         players,
         hidden_mode: room.hidden_mode,
+        my_seat_index,
+        my_player_id,
     }))
 }
 

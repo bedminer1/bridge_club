@@ -354,7 +354,7 @@ async fn handle_auth(
             conn.username = Some(user.username.clone());
 
             if let Some((room_id, player_id, seat_index, is_started)) =
-                find_existing_player_session(&state.rooms, &user.username).await
+                find_existing_player_session(&state.rooms, user.id).await
             {
                 conn.current_room = Some(room_id);
                 conn.player_id = Some(player_id);
@@ -389,8 +389,9 @@ async fn handle_lobby_create(
     state: &AppState,
 ) -> Result<Option<String>, String> {
     let username = conn.username.as_deref().unwrap_or("Player");
+    let user_id = conn.user_id;
     let mut room = crate::session::GameRoom::new();
-    let (player_id, seat_index) = room.add_player(username).unwrap();
+    let (player_id, seat_index) = room.add_player_with_user(username, user_id).unwrap();
     let room_id = room.room_id;
 
     // Create broadcast channel for this room
@@ -425,6 +426,7 @@ async fn handle_lobby_join(
     })?;
 
     let username = conn.username.as_deref().unwrap_or("Player");
+    let user_id = conn.user_id;
 
     let mut rooms = state.rooms.write().await;
     let room = rooms.get_mut(&room_id).ok_or_else(|| {
@@ -435,7 +437,7 @@ async fn handle_lobby_join(
         if let Some((existing_player_id, existing_session)) = room
             .sessions
             .iter()
-            .find(|(_, s)| s.player_name == username)
+            .find(|(_, s)| s.user_id == user_id && user_id.is_some())
         {
             tracing::info!(
                 %room_id,
@@ -450,7 +452,7 @@ async fn handle_lobby_join(
                 "{\"type\":\"error\",\"error\":\"Game already started and user is not seated\"}".to_string(),
             );
         } else {
-            let (new_player_id, new_seat_index) = room.add_player(username).map_err(|e| {
+            let (new_player_id, new_seat_index) = room.add_player_with_user(username, user_id).map_err(|e| {
                 format!("{{\"type\":\"error\",\"error\":\"{}\"}}", e)
             })?;
             (new_player_id, new_seat_index, true)
@@ -551,12 +553,9 @@ async fn handle_lobby_start(
     room.is_started = true;
 
     // Auto-advance any initial bot turns (before first human move)
-    let username = conn.username.as_deref().unwrap_or("");
-    let human_seat = room
-        .sessions
-        .values()
-        .find(|s| s.player_name == username)
-        .map(|s| s.seat_index)
+    let human_seat = conn
+        .player_id
+        .and_then(|pid| room.sessions.get(&pid).map(|s| s.seat_index))
         .unwrap_or(0);
     use game_core::GamePhase;
     loop {
@@ -748,14 +747,14 @@ async fn handle_chat_send(
 
 async fn find_existing_player_session(
     rooms_lock: &tokio::sync::RwLock<std::collections::HashMap<Uuid, crate::session::GameRoom>>,
-    username: &str,
+    user_id: i64,
 ) -> Option<(Uuid, Uuid, usize, bool)> {
     let rooms = rooms_lock.read().await;
     for (room_id, room) in rooms.iter() {
         if let Some((player_id, session)) = room
             .sessions
             .iter()
-            .find(|(_, session)| session.player_name == username)
+            .find(|(_, session)| session.user_id == Some(user_id))
         {
             return Some((*room_id, *player_id, session.seat_index, room.is_started));
         }
@@ -853,12 +852,11 @@ async fn handle_game_action(
         "{\"type\":\"error\",\"error\":\"Room not found\"}".to_string()
     })?;
 
-    let username = conn.username.as_deref().unwrap_or("");
-    let human_seat = match room
-        .sessions
-        .values()
-        .find(|s| s.player_name == username)
-    {
+    let player_id = conn.player_id.ok_or_else(|| {
+        "{\"type\":\"error\",\"error\":\"You are not bound to a room player\"}".to_string()
+    })?;
+
+    let human_seat = match room.sessions.get(&player_id) {
         Some(s) => s.seat_index,
         None => {
             return Err(
