@@ -28,6 +28,7 @@ pub struct ChatMessage {
 #[allow(dead_code)]
 pub struct PlayerSession {
     pub player_id: Uuid,
+    pub user_id: Option<i64>,
     pub player_name: String,
     pub seat_index: usize, // 0..3
 }
@@ -84,6 +85,15 @@ impl GameRoom {
     /// Add a player to this room. Returns their seat index (0..3) or error
     /// if the room is full.
     pub fn add_player(&mut self, player_name: &str) -> Result<(Uuid, usize), &'static str> {
+        self.add_player_with_user(player_name, None)
+    }
+
+    /// Add a player and optionally bind to an authenticated account ID.
+    pub fn add_player_with_user(
+        &mut self,
+        player_name: &str,
+        user_id: Option<i64>,
+    ) -> Result<(Uuid, usize), &'static str> {
         if self.sessions.len() >= 4 {
             return Err("Room is full (max 4 players)");
         }
@@ -106,6 +116,7 @@ impl GameRoom {
             player_id,
             PlayerSession {
                 player_id,
+                user_id,
                 player_name: player_name.to_string(),
                 seat_index,
             },
