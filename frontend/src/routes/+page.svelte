@@ -1062,13 +1062,13 @@
             {/if}
             <Dialog.Footer class="justify-center gap-3 flex-wrap">
                 <Button size="sm" onclick={goHome}>Home</Button>
-                {#if loadingMatchResult}
+                <!-- {#if loadingMatchResult}
                     <Button disabled variant="outline" size="sm">Saving...</Button>
                 {:else if lastMatchId}
                     <Button onclick={() => { showGameOverDialog = false; goto(`/user/${lastMatchId}`) }} size="sm">
                         View Results
                     </Button>
-                {/if}
+                {/if} -->
             </Dialog.Footer>
         </Dialog.Content>
     </Dialog.Root>
