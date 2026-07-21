@@ -9,7 +9,7 @@ impl Card {
 	}
 	pub const fn suit(self) -> u8 { self.0 & 0b11 }
 	pub const fn rank(self) -> u8 { (self.0 >> 2) & 0b111 }
-	pub const fn index(self) -> u8 { self.0.suit * 13 + self.0.rank }
+	pub const fn index(self) -> u8 { self.suit() * 13 + self.rank() }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -18,7 +18,7 @@ pub struct Hand(u64);
 impl Hand {
 	// Checks if hand has a card
 	pub fn has(&self, card: Card) -> bool {
-		(self.0 & (1u64 << card.index()))
+		(self.0 & (1u64 << card.index())) == 1
 	}
 
 	// PLay card from a hand

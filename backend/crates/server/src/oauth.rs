@@ -157,10 +157,10 @@ pub async fn google_callback(
     match auth::create_session(pool, user_id).await {
         Ok((_session_id, token)) => {
             tracing::info!("Created session for google user id={} (new={})", user_id, is_new);
-            let dest = if is_new { "user?new=1" } else { "" };
+            let new_param = if is_new { "&new=1" } else { "" };
             Redirect::to(&format!(
-                "{}/oauth/callback?token={}&dest={}",
-                frontend_url, token, dest
+                "{}/oauth/callback?token={}{}",
+                frontend_url, token, new_param
             ))
         }
         Err(e) => {
