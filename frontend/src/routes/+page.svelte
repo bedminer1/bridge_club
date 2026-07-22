@@ -51,6 +51,13 @@
     let playbackGenerationKey: number = $state(0)
     let playPhasePlaybackPrimed = $state(false)
     let playbackNeedsInitialDelay = $state(false)
+    let partnerCelebration = $state({
+        active: false,
+        key: 0,
+        betWinnerId: null as number | null,
+        partnerId: null as number | null,
+    })
+    let partnerCelebrationTimer: ReturnType<typeof setTimeout> | null = null
     // A restored room already has its full history. Render that initial snapshot
     // directly; only plays received after restoration should be animated.
     let isRestoringExistingRoom = false
@@ -190,7 +197,43 @@
     $effect(() => { headerState.username = username })
     $effect(() => { headerState.loggedIn = loggedIn })
 
-    const suitOrder: Record<string, number> = { Spades: 0, Heart: 1, Club: 2, Diamond: 3 }
+    function clearPartnerCelebration(): void {
+        if (partnerCelebrationTimer) {
+            clearTimeout(partnerCelebrationTimer)
+            partnerCelebrationTimer = null
+        }
+        if (partnerCelebration.active) {
+            partnerCelebration = { ...partnerCelebration, active: false }
+        }
+    }
+
+    function triggerPartnerCelebration(): void {
+        const betWinnerId = game.BetWinner?.ID ?? null
+        const partnerId = game.BetWinner?.Partner?.ID ?? null
+        if (betWinnerId === null || partnerId === null) return
+
+        clearPartnerCelebration()
+        partnerCelebration = {
+            active: true,
+            key: partnerCelebration.key + 1,
+            betWinnerId,
+            partnerId,
+        }
+        playGameWon()
+        partnerCelebrationTimer = setTimeout(() => {
+            partnerCelebration = { ...partnerCelebration, active: false }
+            partnerCelebrationTimer = null
+        }, PLAY_DELAY_MS)
+    }
+
+    const suitOrder: Record<string, number> = {
+        Club: 0,
+        Diamond: 1,
+        Heart: 2,
+        Hearts: 2,
+        Spade: 3,
+        Spades: 3,
+    }
     let remainingDeck = $derived(
         game.FullDeck
             ?.filter((fc: any) => !game.Players?.[humanSeat]?.Cards?.some((pc: any) => pc.Suit === fc.Suit && pc.Value === fc.Value))
@@ -751,6 +794,13 @@
         game.WhoseTurn = (gameEvent.playerId % 4) + 1
         playCardPlace()
 
+        if (
+            game.PartnerCard?.Suit === cardToPlay.Suit &&
+            game.PartnerCard?.Value === cardToPlay.Value
+        ) {
+            triggerPartnerCelebration()
+        }
+
         displayedPlayCount += 1
     }
 
@@ -785,6 +835,7 @@
                 displayedPlayCount = extractPlayEvents(game).length
                 playPhasePlaybackPrimed = isPlayingPhase(updatedGame)
                 playbackNeedsInitialDelay = false
+                clearPartnerCelebration()
                 return
             }
 
@@ -801,6 +852,7 @@
                 displayedPlayCount = extractPlayEvents(game).length
                 playPhasePlaybackPrimed = isPlayingPhase(updatedGame)
                 playbackNeedsInitialDelay = false
+                clearPartnerCelebration()
                 return
             }
             const diff = diffGameState(updatedGame, game)
@@ -817,6 +869,7 @@
             playbackGenerationKey += 1
             displayedPlayCount = extractPlayEvents(game).length
             playbackNeedsInitialDelay = false
+            clearPartnerCelebration()
         }
     }
 
@@ -977,7 +1030,7 @@
     {#if game.IsBettingPhase}
         <BidArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} {roomId} />
     {:else}
-        <PlayArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} {roomId} />
+        <PlayArea {game} {humanSeat} {humanPlayerId} hiddenMode={headerState.hiddenMode} disabled={isPlaybackRunning} {roomId} {partnerCelebration} />
     {/if}
     </div>
     </div>

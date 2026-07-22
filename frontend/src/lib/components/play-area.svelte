@@ -13,7 +13,12 @@
         hiddenMode = true,
         disabled = false,
         roomId = "",
+        partnerCelebration = { active: false, key: 0, betWinnerId: null, partnerId: null },
     } = $props()
+
+    function isPartnerCelebrationTarget(playerId: number): boolean {
+        return partnerCelebration.active && (playerId === partnerCelebration.betWinnerId || playerId === partnerCelebration.partnerId)
+    }
 
     function playCard(card: any) {
         if (!roomId || disabled) return
@@ -47,7 +52,9 @@
     {#if tablePlayers.north}
     <div class="flex flex-col items-center flex-shrink-0">
         <div class="flex flex-col items-center mb-2">
-            <p class="text-{playerIDToColor.get(tablePlayers.north.ID)} text-sm">{tablePlayers.north.Username}</p>
+            {#key isPartnerCelebrationTarget(tablePlayers.north.ID) ? `celebrate-${partnerCelebration.key}-${tablePlayers.north.ID}` : `north-${tablePlayers.north.ID}`}
+                <p class="text-{playerIDToColor.get(tablePlayers.north.ID)} text-sm {isPartnerCelebrationTarget(tablePlayers.north.ID) ? 'partner-celebrate' : ''}">{tablePlayers.north.Username}</p>
+            {/key}
             <p class="text-{playerIDToColor.get(tablePlayers.north.ID)} text-sm">{tablePlayers.north.Sets} sets</p>        
         </div>
         
@@ -85,8 +92,10 @@
                 {/each}
             </div>
             <div class="flex flex-col items-start leading-tight">
-                <p class="text-{playerIDToColor.get(tablePlayers.west.ID)} text-xs whitespace-nowrap">{tablePlayers.west.Username}</p>
-                <p class="text-{playerIDToColor.get(tablePlayers.west.ID)} text-xs whitespace-nowrap">{tablePlayers.west.Sets} sets</p>
+                {#key isPartnerCelebrationTarget(tablePlayers.west.ID) ? `celebrate-${partnerCelebration.key}-${tablePlayers.west.ID}` : `west-${tablePlayers.west.ID}`}
+                    <p class="text-{playerIDToColor.get(tablePlayers.west.ID)} text-sm whitespace-nowrap {isPartnerCelebrationTarget(tablePlayers.west.ID) ? 'partner-celebrate' : ''}">{tablePlayers.west.Username}</p>
+                {/key}
+                <p class="text-{playerIDToColor.get(tablePlayers.west.ID)} text-sm whitespace-nowrap">{tablePlayers.west.Sets} sets</p>
             </div>
         </div>
         {/if}
@@ -94,7 +103,7 @@
         <!-- Center: current trick + game info -->
         <div class="flex-1 flex flex-col items-center justify-center min-h-[80px]">
             {#if game.Moves.length > 0}
-                <div class="flex items-center justify-center" style="gap: max(3rem, 1.2vw);">
+                <div class="flex items-center justify-center" style="gap: max(2rem, 1.2vw);">
                     {#each game.Moves as move, i}
                         <div class="flex flex-col items-center scale-[1.2] origin-center">
                             <CardArt card={move.CardPlayed} isIllegal={false} minify={false} />
@@ -125,8 +134,10 @@
                 {/each}
             </div>
             <div class="flex flex-col items-end leading-tight order-1">
-                <p class="text-{playerIDToColor.get(tablePlayers.east.ID)} text-xs whitespace-nowrap text-right">{tablePlayers.east.Username}</p>
-                <p class="text-{playerIDToColor.get(tablePlayers.east.ID)} text-xs whitespace-nowrap text-right">{tablePlayers.east.Sets} sets</p>
+                {#key isPartnerCelebrationTarget(tablePlayers.east.ID) ? `celebrate-${partnerCelebration.key}-${tablePlayers.east.ID}` : `east-${tablePlayers.east.ID}`}
+                    <p class="text-{playerIDToColor.get(tablePlayers.east.ID)} text-sm whitespace-nowrap text-right {isPartnerCelebrationTarget(tablePlayers.east.ID) ? 'partner-celebrate' : ''}">{tablePlayers.east.Username}</p>
+                {/key}
+                <p class="text-{playerIDToColor.get(tablePlayers.east.ID)} text-sm whitespace-nowrap text-right">{tablePlayers.east.Sets} sets</p>
             </div>
         </div>
         {/if}
@@ -146,7 +157,9 @@
             {/each}
         </div>
         <div class="flex flex-col items-center mt-2">
-            <p class="text-{playerIDToColor.get(tablePlayers.south.ID)} text-sm">{tablePlayers.south.Username}</p>
+            {#key isPartnerCelebrationTarget(tablePlayers.south.ID) ? `celebrate-${partnerCelebration.key}-${tablePlayers.south.ID}` : `south-${tablePlayers.south.ID}`}
+                <p class="text-{playerIDToColor.get(tablePlayers.south.ID)} text-sm {isPartnerCelebrationTarget(tablePlayers.south.ID) ? 'partner-celebrate' : ''}">{tablePlayers.south.Username}</p>
+            {/key}
             <p class="text-{playerIDToColor.get(tablePlayers.south.ID)} text-sm">{tablePlayers.south.Sets} sets</p>
         </div>
         
@@ -165,3 +178,24 @@
     </div>
 {/if}
 </div>
+
+<style>
+    @keyframes partner-celebrate-pop {
+        0% {
+            transform: scale(1);
+        }
+        35% {
+            transform: scale(1.28);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    .partner-celebrate {
+        display: inline-block;
+        transform-origin: center;
+        animation: partner-celebrate-pop 1s ease-in-out;
+        will-change: transform;
+    }
+</style>

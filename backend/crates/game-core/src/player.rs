@@ -28,18 +28,18 @@ impl Player {
         self.hand.len()
     }
 
-    /// Sort hand by suit then rank (bridge standard order).
+    /// Sort hand by suit then rank.
     ///
-    /// Suit order: Spades (first), Hearts, Clubs, Diamonds.
+    /// Suit order: Clubs (first), Diamonds, Hearts, Spades.
     /// Within each suit, ascending by rank (2 low, Ace high).
     pub fn sort_hand(&mut self) {
-        // Suit sort order: Spades=0, Hearts=1, Clubs=2, Diamonds=3
+        // Suit sort order: Clubs=0, Diamonds=1, Hearts=2, Spades=3
         fn suit_order(suit: Suit) -> u8 {
             match suit {
-                Suit::Spades => 0,
-                Suit::Hearts => 1,
-                Suit::Clubs => 2,
-                Suit::Diamonds => 3,
+                Suit::Clubs => 0,
+                Suit::Diamonds => 1,
+                Suit::Hearts => 2,
+                Suit::Spades => 3,
             }
         }
         self.hand.sort_by_key(|c| (suit_order(c.suit), c.rank));
@@ -62,18 +62,18 @@ impl Player {
     /// Cards are grouped by suit and displayed in descending rank order
     /// (Ace first) for readability.
     pub fn hand_string(&self) -> String {
-        // Collect cards by suit in display order: Spades, Hearts, Clubs, Diamonds
-        let mut spades = Vec::new();
-        let mut hearts = Vec::new();
+        // Collect cards by suit in display order: Clubs, Diamonds, Hearts, Spades
         let mut clubs = Vec::new();
         let mut diamonds = Vec::new();
+        let mut hearts = Vec::new();
+        let mut spades = Vec::new();
 
         for card in &self.hand {
             match card.suit {
-                Suit::Spades => spades.push(card),
-                Suit::Hearts => hearts.push(card),
                 Suit::Clubs => clubs.push(card),
                 Suit::Diamonds => diamonds.push(card),
+                Suit::Hearts => hearts.push(card),
+                Suit::Spades => spades.push(card),
             }
         }
 
@@ -88,10 +88,10 @@ impl Player {
 
         let mut parts = Vec::new();
         for (suit_sym, cards) in [
-            ('♠', &spades),
-            ('♥', &hearts),
             ('♣', &clubs),
             ('♦', &diamonds),
+            ('♥', &hearts),
+            ('♠', &spades),
         ] {
             if !cards.is_empty() {
                 let ranks: String = cards.iter().map(|c| c.rank.abbrev()).collect();
