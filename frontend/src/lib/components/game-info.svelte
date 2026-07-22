@@ -10,7 +10,7 @@
     } = $props()
 </script>
 
-<div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-xs text-muted-foreground px-1 overflow-x-auto scrollbar-none">
+<div class="flex flex-nowrap gap-x-2 sm:gap-x-4 text-2xs sm:text-base text-muted-foreground px-1 overflow-x-auto scrollbar-none">
     {#if game.BetSize > 0 || !game.IsBettingPhase}
     <span>Trump <strong class="text-accent font-medium">{suitToSymbol.get(game.Trump)} {game.Trump}</strong></span>
     <span>Bet <strong class="text-foreground font-medium">{game.BetSize}</strong></span>

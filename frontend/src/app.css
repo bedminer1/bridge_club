@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Rye&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Abril+Fatface&family=IM+Fell+French+Canon&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin '@tailwindcss/forms';
@@ -12,7 +13,8 @@
 :root {
   --radius: 0.5rem;
 
-  --font-family: 'Abril Fatface', serif;
+  --font-family: 'Playfair Display', serif;
+  --font-weight: 600;
 
   --background:   #eff1f5;  /* base */
   --foreground:   #4c4f69;  /* text */
@@ -86,7 +88,7 @@
   --red:    #f38ba8;
   --blue:   #89b4fa;
   --yellow: #f9e2af;
-  --green:  #a6e3a1;
+  --green:  #5fc256;
 }
 
 /* ── Theme tokens ─────────────────────────────────────────────── */
@@ -137,11 +139,13 @@
   * {
     @apply border-border outline-ring/50;
     font-family: var(--font-family);
+    font-weight: var(--font-weight);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-family);
+    font-weight: var(--font-weight);
   }
 }

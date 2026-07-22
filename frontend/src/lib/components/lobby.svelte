@@ -26,11 +26,15 @@
     } = $props()
 
     let lobbyCreating = $state(false)
+    let lobbyStartingSolo = $state(false)
     let loggedIn = $derived(!!onlineToken && userID > 0)
 
     // Reset loading when room is created
     $effect(() => {
-        if (lobbyRoomId) lobbyCreating = false
+        if (lobbyRoomId) {
+            lobbyCreating = false
+            lobbyStartingSolo = false
+        }
     })
 
     function doCreateRoom() {
@@ -66,6 +70,22 @@
         doCreateRoom()
     }
 
+    function handleSinglePlayer() {
+        if (!loggedIn) {
+            goto("/login")
+            return
+        }
+        lobbyStartingSolo = true
+        try {
+            wsClient.createLobby()
+            wsClient.startGame(lobbyHiddenMode, difficulty || "Easy")
+        } catch (e) {
+            console.error("Single-player start error:", e)
+            alert("Failed. Is the backend running?")
+            lobbyStartingSolo = false
+        }
+    }
+
     function handleLeave() { doLeaveRoom() }
     function handleStart() { doStartGame() }
     function handleToggleHidden() { doToggleHidden() }
@@ -89,7 +109,7 @@
     {#if !lobbyRoomId}
         <Card>
             <CardHeader>
-                <CardTitle class="text-center">Play Bridge</CardTitle>
+                <CardTitle class="text-center text-2xl">Welcome to Bridge Club!</CardTitle>
                 <CardDescription class="text-center max-w-[220px] mx-auto">
                     {#if loggedIn}
                         Create a room and invite friends
@@ -100,8 +120,11 @@
             </CardHeader>
             <CardContent class="flex flex-col gap-4">
                 {#if loggedIn}
-                    <Button class="cursor-pointer" onclick={handleCreate} disabled={lobbyCreating} size="lg">
-                        {lobbyCreating ? "Creating..." : "Create Lobby"}
+                    <Button class="cursor-pointer" onclick={handleCreate} disabled={lobbyCreating || lobbyStartingSolo} size="lg">
+                        {lobbyCreating ? "Creating lobby..." : "Multiplayer"}
+                    </Button>
+                    <Button class="cursor-pointer" onclick={handleSinglePlayer} disabled={lobbyCreating || lobbyStartingSolo} size="lg" variant="outline">
+                        {lobbyStartingSolo ? "Starting..." : "Single Player"}
                     </Button>
                 {:else}
                     <Button class="cursor-pointer" onclick={() => goto("/login")} size="lg">

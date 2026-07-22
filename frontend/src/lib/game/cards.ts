@@ -23,10 +23,10 @@ export const VALUE_TO_RANK: Record<number, string> = {
  * Spades first (highest), then Hearts, Clubs, Diamonds.
  */
 export const SUIT_SORT_ORDER: Record<string, number> = {
-    Spades: 0,
-    Heart: 1,
-    Club: 2,
-    Diamond: 3,
+    Club: 0,
+    Diamond: 1,
+    Heart: 2,
+    Spades: 3,
 }
 
 /**
