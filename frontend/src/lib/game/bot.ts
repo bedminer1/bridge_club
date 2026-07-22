@@ -8,27 +8,21 @@ import type { Game, Card, Move, Player } from "./types"
 
 // ── Betting ────────────────────────────────────────────────────────
 
+/** Per-suit strength assessment used when choosing a bid suit. */
+interface SuitStrength {
+    numberOfCards: number
+    /** Sum of (value - 10) for each J/Q/K/A in this suit */
+    picturesValue: number
+}
+
 /**
- * Bot betting strategy: scores each suit by (card count × 2 + picture value),
- * then bids the strongest suit at an appropriate level.
+ * Finds a player's strongest suit using the bot's bidding heuristic:
+ * card count × 2 plus the value of its picture cards.
  *
- * - Score ≥ 16 → bet 3
- * - Score ≥ 13 → bet 2
- * - Otherwise  → bet 1
- *
- * If the calculated raise isn't legal (outranked), the bot passes.
+ * Ties retain the first suit encountered in the player's hand, matching the
+ * previous automatic-bidding behaviour.
  */
-export function autoBet(game: Game): void {
-    const player = game.Players[game.WhoseTurn - 1]
-
-    /** Per-suit strength assessment */
-    interface SuitStrength {
-        numberOfCards: number
-        /** Sum of (value - 10) for each J/Q/K/A in this suit */
-        picturesValue: number
-    }
-
-    // Analyze card distribution by suit
+export function findStrongestSuit(player: Pick<Player, "Cards">): string {
     const strengths = new Map<string, SuitStrength>()
     for (const card of player.Cards) {
         const current = strengths.get(card.Suit)
@@ -43,16 +37,43 @@ export function autoBet(game: Game): void {
         }
     }
 
-    // Pick the strongest suit, determine bid level
-    let bestBet = { betSize: 1, suit: "Club" as string, score: 0 }
+    let strongestSuit = "Club"
+    let highestScore = 0
     for (const [suit, strength] of strengths) {
         const score = strength.numberOfCards * 2 + strength.picturesValue
-        if (score <= bestBet.score) continue
-        bestBet = {
-            score,
-            suit,
-            betSize: score >= 16 ? 3 : score >= 13 ? 2 : 1,
-        }
+        if (score <= highestScore) continue
+        strongestSuit = suit
+        highestScore = score
+    }
+
+    return strongestSuit
+}
+
+/** Returns the bidding-heuristic score for a particular suit. */
+function suitStrengthScore(player: Pick<Player, "Cards">, suit: string): number {
+    return player.Cards.reduce((score, card) => {
+        if (card.Suit !== suit) return score
+        return score + 2 + (card.Value > 10 ? card.Value - 10 : 0)
+    }, 0)
+}
+
+/**
+ * Bot betting strategy: scores each suit by (card count × 2 + picture value),
+ * then bids the strongest suit at an appropriate level.
+ *
+ * - Score ≥ 16 → bet 3
+ * - Score ≥ 13 → bet 2
+ * - Otherwise  → bet 1
+ *
+ * If the calculated raise isn't legal (outranked), the bot passes.
+ */
+export function autoBet(game: Game): void {
+    const player = game.Players[game.WhoseTurn - 1]
+    const suit = findStrongestSuit(player)
+    const score = suitStrengthScore(player, suit)
+    const bestBet = {
+        suit,
+        betSize: score >= 16 ? 3 : score >= 13 ? 2 : 1,
     }
 
     if (isLegalRaise(game, bestBet.betSize, bestBet.suit)) {
