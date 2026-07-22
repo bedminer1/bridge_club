@@ -5,7 +5,7 @@
     import Minus from "@lucide/svelte/icons/minus";
     import Plus from "@lucide/svelte/icons/plus";
     import CircleX from "@lucide/svelte/icons/circle-x";
-    import PokerCard from "$lib/components/poker-card.svelte";
+    import CardArt from "$lib/components/card-art.svelte";
     import HandDisplay from "$lib/components/hand-display.svelte";
     import { suitToSymbol } from "$lib/utils"
     import { findStrongestSuit } from "$lib/game/bot";
@@ -117,14 +117,14 @@
 </div>
 
 <!-- Player hands during betting -->
-<div class="flex flex-col gap-10">
+<div class="flex flex-col gap-10 mb-4">
     {#each hiddenMode ? [game.Players[humanSeat]] : game.Players as player}
     <div class="flex flex-col h-[100px]">
         <p class="mb-2 text-{playerIDToColor.get(player.ID)}">{player.Username}</p>
         <div class="flex pl-4">
             {#each !hiddenMode || player.ID === humanPlayerId ? player.Cards : []  as card, index}
                 <HandDisplay index={index}>
-                    <PokerCard card={card} isIllegal={false} minify={false}/>
+                    <CardArt card={card} isIllegal={false} minify={false}/>
                 </HandDisplay>
             {/each}
         </div>
@@ -135,7 +135,7 @@
 <!-- Raise / Pass controls -->
 <div class="flex flex-col justify-center gap-2">
     <div class="flex flex-col gap-2 items-start w-[45%]">
-        <div class="flex gap-2 w-full">
+        <div class="flex gap-2 w-full mb-2">
             <div class="flex flex-1 items-center justify-center gap-2">
                 <Button
                     variant="outline"

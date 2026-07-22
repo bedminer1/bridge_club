@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { headerState } from "$lib/game/header-state.svelte";
+
     let entries: Array<{
         rank: number;
         username: string;
@@ -64,16 +66,16 @@
             <!-- Data rows -->
             {#each entries as entry (entry.rank)}
                 <div class="flex items-center px-4 py-3 border-b border-border/50 hover:bg-accent/5 transition-colors text-sm">
-                    <span class="w-10 text-center font-bold {entry.rank <= 3 ? 'text-accent' : 'text-muted-foreground'}">
+                    <span class="w-10 text-center font-bold {(headerState.loggedIn && entry.username.toLowerCase() === headerState.username.toLowerCase()) ? 'text-yellow-400' : entry.rank <= 3 ? 'text-accent' : 'text-muted-foreground'}">
                         {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : entry.rank}
                     </span>
-                    <span class="flex-1 text-foreground">{entry.username}</span>
-                    <span class="w-16 text-right text-muted-foreground">{entry.gamesPlayed}</span>
-                    <span class="w-16 text-right text-muted-foreground">{entry.gamesWon}</span>
-                    <span class="w-16 text-right {entry.winrate >= 0.6 ? 'text-green' : 'text-muted-foreground'}">
+                    <span class="flex-1 {(headerState.loggedIn && entry.username.toLowerCase() === headerState.username.toLowerCase()) ? 'text-yellow-400' : 'text-foreground'}">{entry.username}</span>
+                    <span class="w-16 text-right {(headerState.loggedIn && entry.username.toLowerCase() === headerState.username.toLowerCase()) ? 'text-yellow-400' : 'text-foreground'}">{entry.gamesPlayed}</span>
+                    <span class="w-16 text-right {(headerState.loggedIn && entry.username.toLowerCase() === headerState.username.toLowerCase()) ? 'text-yellow-400' : 'text-foreground'}">{entry.gamesWon}</span>
+                    <span class="w-16 text-right {(headerState.loggedIn && entry.username.toLowerCase() === headerState.username.toLowerCase()) ? 'text-yellow-400' : entry.winrate >= 0.6 ? 'text-green' : 'text-foreground'}">
                         {(entry.winrate * 100).toFixed(0)}%
                     </span>
-                    <span class="w-20 text-right font-bold text-accent">{entry.elo}</span>
+                    <span class="w-20 text-right font-bold {(headerState.loggedIn && entry.username.toLowerCase() === headerState.username.toLowerCase()) ? 'text-yellow-400' : 'text-accent'}">{entry.elo}</span>
                 </div>
             {/each}
         </div>
