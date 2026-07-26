@@ -27,21 +27,21 @@ pub fn card_beats(
     lead_suit: Option<Suit>,
 ) -> bool {
     // 1. Same suit — higher rank wins
-    if a.suit == b.suit {
-        return a.rank > b.rank;
+    if a.suit() == b.suit() {
+        return a.rank() > b.rank();
     }
     // 2. Trump beats non-trump
     if let Some(tr) = trump {
-        if a.suit == tr && b.suit != tr {
+        if a.suit() == tr && b.suit() != tr {
             return true;
         }
-        if a.suit != tr && b.suit == tr {
+        if a.suit() != tr && b.suit() == tr {
             return false;
         }
     }
     // 3. Led suit beats off-suit non-trump
     if let Some(ls) = lead_suit {
-        if a.suit == ls && b.suit != ls {
+        if a.suit() == ls && b.suit() != ls {
             return true;
         }
     }
@@ -51,15 +51,15 @@ pub fn card_beats(
 /// Card ordering within a trick context. Trump > led suit > off-suit.
 /// Within same suit, higher rank is stronger.
 fn card_strength(card: &Card, trump: Option<Suit>, lead_suit: Option<Suit>) -> u16 {
-    let suit_rank = if Some(card.suit) == trump {
+    let suit_rank = if Some(card.suit()) == trump {
         3u16
-    } else if Some(card.suit) == lead_suit {
+    } else if Some(card.suit()) == lead_suit {
         2u16
     } else {
         1u16
     };
     // Rank value: Two=2 ... Ace=14
-    let rank_val = card.rank as u16;
+    let rank_val = card.rank() as u16;
     (suit_rank << 8) | rank_val
 }
 
@@ -103,7 +103,7 @@ fn legal_plays(table: &Table) -> Vec<Card> {
         if let Some(ls) = table.lead_suit {
             let follow_suit_cards: Vec<Card> = hand
                 .iter()
-                .filter(|c| c.suit == ls)
+                .filter(|c| c.suit() == ls)
                 .copied()
                 .collect();
             if !follow_suit_cards.is_empty() {
@@ -119,7 +119,7 @@ fn legal_plays(table: &Table) -> Vec<Card> {
             if !table.trump_played {
                 let non_trump: Vec<Card> = hand
                     .iter()
-                    .filter(|c| c.suit != tr)
+                    .filter(|c| c.suit() != tr)
                     .copied()
                     .collect();
                 if !non_trump.is_empty() {
@@ -139,11 +139,11 @@ fn legal_plays(table: &Table) -> Vec<Card> {
 /// Compute a score for a suit based on card count and picture values.
 /// Used by the bot to decide what suit to bid.
 fn suit_score(hand: &[Card], suit: Suit) -> u8 {
-    let suit_cards: Vec<&Card> = hand.iter().filter(|c| c.suit == suit).collect();
+    let suit_cards: Vec<&Card> = hand.iter().filter(|c| c.suit() == suit).collect();
     let card_count = suit_cards.len() as u8;
     let picture_sum: u8 = suit_cards
         .iter()
-        .map(|c| match c.rank {
+        .map(|c| match c.rank() {
             Rank::Jack => 1,
             Rank::Queen => 2,
             Rank::King => 3,
@@ -221,8 +221,8 @@ fn decide_partner_card(table: &Table) -> Card {
         }
         for card in &player.hand {
             if let Some(tr) = trump {
-                if card.suit == tr {
-                    let r = card.rank as u8;
+                if card.suit() == tr {
+                    let r = card.rank() as u8;
                     if r > best_rank {
                         best_rank = r;
                         best_card = Some(*card);
@@ -230,7 +230,7 @@ fn decide_partner_card(table: &Table) -> Card {
                 }
             } else {
                 // No trump suit — pick highest rank card overall
-                let r = card.rank as u8;
+                let r = card.rank() as u8;
                 if r > best_rank {
                     best_rank = r;
                     best_card = Some(*card);
@@ -316,7 +316,7 @@ impl TeamModel {
 
                 // Only count feeding if the player followed suit
                 // (if they were void, they had no choice)
-                if card.suit != set.lead_suit {
+                if card.suit() != set.lead_suit {
                     continue;
                 }
 
@@ -340,7 +340,7 @@ impl TeamModel {
                     Some(highest_unplayed) => {
                         // If the strongest unplayed card is higher rank than the winner's card,
                         // someone COULD have beaten the winner → possible feeding
-                        if highest_unplayed.rank > winner_card.rank {
+                        if highest_unplayed.rank() > winner_card.rank() {
                             // The player chose not to play that stronger card → feeding
                             self.feed_counts[player][set.winner] =
                                 self.feed_counts[player][set.winner].saturating_add(1);
@@ -524,26 +524,26 @@ fn unplayed_strengths_by_suit(table: &Table) -> [u8; 4] {
     let mut per_suit = [14u8; 4]; // Ace=14 is highest
 
     for card in &played {
-        let suit_idx = match card.suit {
+        let suit_idx = match card.suit() {
             Suit::Clubs => 0,
             Suit::Diamonds => 1,
             Suit::Hearts => 2,
             Suit::Spades => 3,
         };
-        let rank_val = card.rank as u8;
+        let rank_val = card.rank() as u8;
         // Only update if this exact rank was the current max (a simplification:
         // we track the highest remaining by noting which ranks are gone)
         if rank_val == per_suit[suit_idx] {
             // Step down to find the next highest
             for r in (2..rank_val).rev() {
                 let still_available = !played.iter().any(|c| {
-                    let si = match c.suit {
+                    let si = match c.suit() {
                         Suit::Clubs => 0,
                         Suit::Diamonds => 1,
                         Suit::Hearts => 2,
                         Suit::Spades => 3,
                     };
-                    si == suit_idx && c.rank as u8 == r
+                    si == suit_idx && c.rank() as u8 == r
                 });
                 if still_available {
                     per_suit[suit_idx] = r;
@@ -670,13 +670,13 @@ fn decide_lead_medium(
         .iter()
         .enumerate()
         .map(|(i, c)| {
-            let suit_idx = match c.suit {
+            let suit_idx = match c.suit() {
                 Suit::Clubs => 0,
                 Suit::Diamonds => 1,
                 Suit::Hearts => 2,
                 Suit::Spades => 3,
             };
-            let is_top = (c.rank as u8) >= strengths[suit_idx];
+            let is_top = (c.rank() as u8) >= strengths[suit_idx];
             let bonus = if is_top { 100u16 } else { 0u16 };
             (i, bonus + card_strength(c, trump, None))
         })
@@ -698,8 +698,8 @@ fn compute_player_suits_played(table: &Table) -> [Vec<Suit>; 4] {
     for set in &table.completed_sets {
         for (i, card) in set.cards.iter().enumerate() {
             let player_idx = (leader + i) % 4;
-            if !suits[player_idx].contains(&card.suit) {
-                suits[player_idx].push(card.suit);
+            if !suits[player_idx].contains(&card.suit()) {
+                suits[player_idx].push(card.suit());
             }
         }
         // Next set is led by the winner of this set
@@ -714,8 +714,8 @@ fn compute_player_suits_played(table: &Table) -> [Vec<Suit>; 4] {
     };
     for (i, card) in table.current_set_cards.iter().enumerate() {
         let player_idx = (current_leader + i) % 4;
-        if !suits[player_idx].contains(&card.suit) {
-            suits[player_idx].push(card.suit);
+        if !suits[player_idx].contains(&card.suit()) {
+            suits[player_idx].push(card.suit());
         }
     }
 
@@ -745,7 +745,7 @@ fn find_partner_void_suit(
         }
         // This suit — partner hasn't played it, they might be void
         // Find our strongest card in this suit (from legal leads)
-        let suit_cards: Vec<&Card> = legal.iter().filter(|c| c.suit == suit).collect();
+        let suit_cards: Vec<&Card> = legal.iter().filter(|c| c.suit() == suit).collect();
         if !suit_cards.is_empty() {
             // Play our strongest card in this void suit
             let idx = strongest_card_index(&suit_cards, trump, None);
@@ -756,7 +756,7 @@ fn find_partner_void_suit(
     // Second pass: try trump suit partner is void in
     if let Some(tr) = trump {
         if !partner_played.contains(&tr) {
-            let suit_cards: Vec<&Card> = legal.iter().filter(|c| c.suit == tr).collect();
+            let suit_cards: Vec<&Card> = legal.iter().filter(|c| c.suit() == tr).collect();
             if !suit_cards.is_empty() {
                 // Play our weakest trump — partner can over-trump if needed
                 let idx = weakest_card_index(&suit_cards, trump, None);
@@ -796,11 +796,11 @@ fn strongest_unplayed_in_suit(
         let candidate = Card::new(suit, rank);
 
         // Skip if it's been played before this trick
-        if played_before.iter().any(|c| c.suit == suit && c.rank == rank) {
+        if played_before.iter().any(|c| c.suit() == suit && c.rank() == rank) {
             continue;
         }
         // Skip if it's in the current trick
-        if current_trick.iter().any(|c| c.suit == suit && c.rank == rank) {
+        if current_trick.iter().any(|c| c.suit() == suit && c.rank() == rank) {
             continue;
         }
         // Found the strongest unplayed card
@@ -917,8 +917,8 @@ mod tests {
 
         let legal = legal_plays(&table);
         assert_eq!(legal.len(), 1);
-        assert_eq!(legal[0].suit, Suit::Hearts);
-        assert_eq!(legal[0].rank, Rank::King);
+        assert_eq!(legal[0].suit(), Suit::Hearts);
+        assert_eq!(legal[0].rank(), Rank::King);
     }
 
     #[test]
@@ -952,7 +952,7 @@ mod tests {
 
         let legal = legal_plays(&table);
         assert_eq!(legal.len(), 1);
-        assert_eq!(legal[0].suit, Suit::Spades);
+        assert_eq!(legal[0].suit(), Suit::Spades);
     }
 
     #[test]

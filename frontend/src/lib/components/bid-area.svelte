@@ -26,6 +26,38 @@
     let betSize: number = $state(1)
     let bettedSuit: string = $state("Club")
 
+    // ── Default bet suggestions ──────────────────────────────────────
+
+    const SUITS = ["Club", "Diamond", "Heart", "Spades"]
+
+    /** Compute suit with highest total value (2=1pt, Ace=13pts) in player's hand. */
+    let bestSuit = $derived.by(() => {
+        const hand = game.Players?.[humanSeat]?.Cards ?? []
+        const totals: Record<string, number> = { Club: 0, Diamond: 0, Heart: 0, Spades: 0 }
+        for (const c of hand) { totals[c.Suit] = (totals[c.Suit] || 0) + (c.Value - 1) }
+        return SUITS.reduce((best, s) => totals[s] > totals[best] ? s : best, "Club")
+    })
+
+    /** Minimum bid level to beat the current highest bid. 1 when no bid exists. */
+    let minBet = $derived.by(() => {
+        const lastBid = [...(game.Moves ?? [])].reverse().find((m: any) => m.CardPlayed.Value > 0)
+        if (!lastBid) return 1
+        const bid = lastBid.CardPlayed
+        // Need higher level, or same level + higher suit
+        const suitRank = SUITS.indexOf(bid.Suit ?? "Club")
+        const ourRank = SUITS.indexOf(bettedSuit)
+        if (ourRank > suitRank) return bid.Value  // same level, higher suit
+        return Math.min(bid.Value + 1, 7)         // next level
+    })
+
+    // Auto-set defaults when it's our turn to bet
+    $effect(() => {
+        if (game.WhoseTurn === humanPlayerId && !disabled) {
+            bettedSuit = bestSuit
+            betSize = minBet
+        }
+    })
+
     function raiseBet() {
         if (!roomId || disabled) return
         const call = { Bid: { level: betSize, strain: FRONTEND_SUIT_TO_API[bettedSuit] ?? bettedSuit } }
