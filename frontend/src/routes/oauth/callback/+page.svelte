@@ -7,7 +7,7 @@
 
     onMount(() => {
         const token = page.url.searchParams.get("token");
-        const dest = page.url.searchParams.get("dest") || "/";
+        const isNew = page.url.searchParams.get("new") === "1";
         const err = page.url.searchParams.get("error");
 
         if (err) {
@@ -17,7 +17,8 @@
 
         if (token) {
             document.cookie = `session=${token}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
-            goto(dest);
+            // Small delay ensures the browser processes the cookie before navigation
+            setTimeout(() => goto(isNew ? "/user?new=1" : "/"), 50);
         } else {
             error = "No session token received";
         }

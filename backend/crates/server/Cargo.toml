@@ -24,6 +24,14 @@ base64 = "0.22"
 oauth2 = { version = "5", features = ["reqwest"] }
 reqwest = { version = "0.12", features = ["json"] }
 
+[[bin]]
+name = "bench"
+path = "src/bin/bench.rs"
+
+[[bin]]
+name = "verify"
+path = "src/bin/verify.rs"
+
 [dev-dependencies]
 tower = "0.5"
 tempfile = "3"

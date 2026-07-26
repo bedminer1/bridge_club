@@ -72,6 +72,9 @@
     let loadingMatchResult = $state(false)
     let isGuest = false  // guest login removed — OAuth only
 
+    // Snapshot full hands at game start for match history
+    let handSnapshots: (string | null)[] = $state([null, null, null, null])
+
     // user info
     let loggedIn: boolean = $derived(userID === 0 ? false : true)
 
@@ -289,7 +292,18 @@
             // Load the actual game state
             const gameState = await getRoomState(existingRoomId, onlineToken)
             fixupPlayerDisplay(gameState)
-            renderGame(gameState)
+            // Snapshot full hands for match history
+            snapshotHands(gameState)
+            playPhasePlaybackPrimed = false
+            if (isPlayingPhase(gameState)) {
+                primePlayPhasePlayback(gameState)
+            } else {
+                game = gameState
+                displayedPlayCount = extractPlayEvents(game).length
+                playbackQueue = []
+                isPlaybackRunning = false
+                playbackGenerationKey += 1
+            }
             // Play deal sound for initial load
             setTimeout(() => { for (let i = 0; i < 4; i++) setTimeout(() => playCardDeal(), i * 90) }, 100)
         } catch (e) {
@@ -331,6 +345,7 @@
         playPhasePlaybackPrimed = false
         isRestoringExistingRoom = false
         hiddenModeLocked = false
+        handSnapshots = [null, null, null, null]
         lobbyRoomId = ""
         lobbyPlayerId = ""
         lobbyMySeatIndex = 0
@@ -411,6 +426,18 @@
 
     function isPlayingPhase(g: Game | null): boolean {
         return !!g && !g.IsBettingPhase && !g.IsPartnerSelectionPhase
+    }
+
+    /** Snapshot each player's full hand (all 13 cards) before they get played out. */
+    function snapshotHands(g: Game): void {
+        const players = g.Players
+        if (!players) return
+        for (let i = 0; i < players.length; i++) {
+            const cards = players[i]?.Cards
+            if (cards && cards.length > 0) {
+                handSnapshots[i] = JSON.stringify(cards)
+            }
+        }
     }
 
     function primePlayPhasePlayback(sourceGame: Game): void {
@@ -562,6 +589,7 @@
                 const updatedGame = apiStateToGame(data.state, data.roomId, data.state.betWinner ?? undefined)
                 console.log(updatedGame)
                 fixupPlayerDisplay(updatedGame)
+                snapshotHands(updatedGame)
                 renderGame(updatedGame)
             }
         })
@@ -902,6 +930,7 @@
             team: (userIsTeam1 && (p.ID === game.BetWinner?.ID || p.ID === partnerId)) || (!userIsTeam1 && p.ID !== game.BetWinner?.ID && p.ID !== partnerId) ? 1 : 2,
             setsWon: p.Sets ?? 0,
             cardsPlayed: JSON.stringify(savePlayedCards[i] ?? []),
+            handPreview: handSnapshots[i],
         }))
 
         // Fix teams: Team 1 = bet winner + partner, Team 2 = everyone else

@@ -432,7 +432,7 @@
                                 {#if previewCards.length > 0}
                                     <div class="px-4 pb-2 flex flex-wrap gap-0.5">
                                         {#each previewCards as card, ci (ci)}
-                                            <PokerCard card={card} isIllegal={false} minify={true} />
+                                            <PokerCard card={card} isIllegal={false} minify={true} isHistory={true} />
                                         {/each}
                                     </div>
                                 {/if}
