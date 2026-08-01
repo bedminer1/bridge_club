@@ -129,7 +129,7 @@
             <ul class="text-sm text-muted-foreground mt-2 space-y-1 ml-4 list-disc">
                 <li><strong>Email address</strong> — from Google sign-in, used only for account identification.</li>
                 <li><strong>Username</strong> — your chosen display name.</li>
-                <li><strong>Password</strong> — if using email sign-up, stored as a SHA-256 hash, never in plaintext. Transmitted over HTTPS only.</li>
+                <li><strong>Password</strong> — if using username/password sign-up, stored as a SHA-256 hash, never in plaintext. Transmitted over HTTPS only.</li>
                 <li><strong>Game history</strong> — match results, cards played, Elo rating.</li>
             </ul>
             <p class="text-sm text-muted-foreground mt-3">
