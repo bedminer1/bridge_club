@@ -1035,8 +1035,10 @@
     </div>
     </div>
 
-    <!-- Chat sidebar (in-game) -->
+    <!-- Chat sidebar (in-game, multiplayer only) -->
+    {#if lobbyRoomId}
     <Chat {roomId} lobbyPlayerId={lobbyPlayerId} bind:chatMessages onSend={chatSend} />
+    {/if}
 
     </div>
     {/if}
