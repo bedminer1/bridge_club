@@ -126,5 +126,10 @@
                 </div>
           </Card.Footer>
         </div>
+        <p class="text-xs text-muted-foreground text-center mt-4">
+            By signing in, you agree to our
+            <a href="/about#terms" class="underline hover:text-foreground">Terms</a> and
+            <a href="/about#privacy" class="underline hover:text-foreground">Privacy Policy</a>
+        </p>
     </Card.Root>
 </div>

@@ -106,6 +106,38 @@
             </p>
         </div>
 
+        <!-- Terms of Use -->
+        <div id="terms" class="rounded-lg border border-border bg-card p-4">
+            <h2 class="text-lg font-semibold mb-2">Terms of Use</h2>
+            <p class="text-sm text-muted-foreground leading-relaxed">
+                Bridge Club is a recreational card game. By using this site you agree to:
+            </p>
+            <ul class="text-sm text-muted-foreground mt-2 space-y-1 ml-4 list-disc">
+                <li>Play fairly — no cheating, botting, or exploiting bugs.</li>
+                <li>No abusive or harassing behavior toward other players.</li>
+                <li>We reserve the right to suspend or ban accounts that violate these terms.</li>
+                <li>This service is provided as-is with no guarantees of uptime or data retention.</li>
+            </ul>
+        </div>
+
+        <!-- Privacy Policy -->
+        <div id="privacy" class="rounded-lg border border-border bg-card p-4">
+            <h2 class="text-lg font-semibold mb-2">Privacy Policy</h2>
+            <p class="text-sm text-muted-foreground leading-relaxed">
+                We collect only what's needed to run the game:
+            </p>
+            <ul class="text-sm text-muted-foreground mt-2 space-y-1 ml-4 list-disc">
+                <li><strong>Email address</strong> — from Google sign-in, used only for account identification.</li>
+                <li><strong>Username</strong> — your chosen display name.</li>
+                <li><strong>Password</strong> — if using email sign-up, stored as a SHA-256 hash, never in plaintext. Transmitted over HTTPS only.</li>
+                <li><strong>Game history</strong> — match results, cards played, Elo rating.</li>
+            </ul>
+            <p class="text-sm text-muted-foreground mt-3">
+                No data is sold, shared with third parties, or used for marketing.
+                You can request account deletion by contacting the developer.
+            </p>
+        </div>
+
         <!-- Links -->
         <div class="flex gap-4 justify-center mt-4 mb-10">
             <a href="/" class="flex items-center gap-2 text-sm text-accent hover:underline">
