@@ -998,7 +998,7 @@
         </div>
     {:else}
     <!-- Play area table -->
-    <div class="flex flex-col md:flex-row gap-4 w-full justify-center">
+    <div class="flex flex-col xl:flex-row gap-4 w-full justify-center">
     <div class="flex flex-col gap-4 flex-1 min-w-0 max-w-3xl {isPlaybackRunning ? 'pointer-events-none opacity-60' : ''}" aria-busy={isPlaybackRunning}>
         <!-- Game info strip -->
         <GameInfo {game} {humanSeat} {humanPlayerId} />

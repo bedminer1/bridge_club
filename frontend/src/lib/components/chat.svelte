@@ -38,7 +38,7 @@
     })
 </script>
 
-<div class="w-full md:w-80 flex flex-col">
+<div class="w-full xl:w-64 flex flex-col">
     <Card class="h-full flex flex-col">
         <CardContent class="flex flex-col gap-2 p-3 flex-1">
             <div class="text-xs font-medium text-muted-foreground">Chat</div>
